@@ -1,0 +1,37 @@
+{
+  "name": "@agentdrive/worker",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "generate": "node ../installer/build.mjs && node ../installer/build-version.mjs",
+    "prebuild": "pnpm run generate",
+    "build": "tsc --noEmit",
+    "pretypecheck": "pnpm run generate",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm run generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "predev": "pnpm run generate",
+    "predeploy": "pnpm run generate"
+  },
+  "dependencies": {
+    "@adrive/mcp-server": "workspace:*",
+    "@agentdrive/shared": "workspace:*",
+    "@cloudflare/sandbox": "^0.10.3",
+    "@cloudflare/workers-oauth-provider": "1.2.4",
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.13.19",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.6.16",
+    "@cloudflare/workers-types": "^5.20261116.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.163.0"
+  }
+}

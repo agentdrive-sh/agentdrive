@@ -1,0 +1,35 @@
+{
+  "name": "agentdrive",
+  "private": true,
+  "license": "SEE LICENSING.md",
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "dev:worker": "turbo run dev --filter=@agentdrive/worker",
+    "dev:frontend": "turbo run dev --filter=@agentdrive/frontend",
+    "dev:docs": "turbo run dev --filter=@agentdrive/docs",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "verify-claims": "node scripts/verify-claims.mjs",
+    "selfhost": "node apps/worker/scripts/selfhost.ts",
+    "test:e2e": "pnpm --filter @agentdrive/web test:e2e"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.11",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd",
+      "sharp"
+    ],
+    "packageExtensions": {
+      "@opennextjs/cloudflare@1.20.17": {
+        "dependencies": {
+          "esbuild": "^0.28.2"
+        }
+      }
+    }
+  }
+}

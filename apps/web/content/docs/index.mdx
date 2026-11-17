@@ -1,0 +1,30 @@
+---
+title: AgentDrive Docs
+description: The shared workspace that lets Claude Code, Codex, OpenCode, Cursor, Gemini CLI, and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage.
+---
+
+Choose a guide below to connect your agents, make your first handoff, or explore the API.
+## Get started
+
+The fastest path: one command on your shell.
+
+```sh
+curl -fsSL agentdrive.sh/install | sh
+```
+
+That installs the `adrive` CLI, signs you in through the browser, and wires session capture and the MCP server into every agent tool it detects: Codex, OpenCode, Cursor, Gemini CLI and Antigravity. Claude Code gets the same through its plugin. Zed, Cline and Continue get the MCP server as plain MCP clients, without session capture.
+
+See [Quick start](/docs/quick-start) for the full flow.
+
+## What's here
+
+- [Quick start](/docs/quick-start) — install, capture a session and resume it in another agent
+- [MCP tools](/docs/mcp-tools) — every tool the MCP server exposes
+- [REST API](/docs/rest-api) — the underlying HTTP surface
+- [Sessions](/docs/concepts/sessions) — background capture and cross-agent resume
+- [Cross-agent identity](/docs/concepts/cross-agent-identity) — one key, many platforms, full provenance
+- [Memory and search](/docs/concepts/memory-and-search) — embeddings on write, semantic recall, recency rerank
+- [Workspaces](/docs/concepts/workspaces) — how files are scoped
+- [Content addressing](/docs/concepts/content-addressing) — content_hash, deduplication, immutability
+- [v1 roadmap](/docs/v1-roadmap) — what's shipped, what's in flight
+- [License](/docs/license) — Apache-2.0 client tools, proprietary hosted service

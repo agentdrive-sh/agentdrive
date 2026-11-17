@@ -1,0 +1,178 @@
+---
+title: Quick start
+description: Install AgentDrive and make your first handoff between coding agents.
+---
+
+Connect two coding agents to the same workspace, capture a short task and resume it in the other agent.
+## 1. Install
+
+**Claude Code** — install the plugin from inside Claude Code:
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+Then run `/agentdrive:login` to sign in and wire your other agent tools, or skip
+sign-in and use [local mode](#local-mode-no-account).
+
+**Everything else** (Codex, OpenCode, Gemini CLI, Cursor, Antigravity, Zed, Cline, Continue) — one line:
+
+```bash
+curl -fsSL agentdrive.sh/install | sh
+```
+
+What it does:
+
+- Installs the `adrive` CLI and runs `adrive init`
+- Logs you in through the browser, where you enter the code it prints, unless you pick [local mode](#local-mode-no-account), and stores the API key in `~/.config/agentdrive/config.json` (never in agent configs)
+- Detects your agent tools and wires session capture hooks, the MCP server, and the resume/sessions commands into Codex, OpenCode, Gemini CLI, Cursor and Antigravity. Zed, Cline and Continue get the MCP server only; they have no session capture.
+
+Setup also approves the AgentDrive hooks in Codex for you. If Codex is too old to allow that, approve them once via `/hooks`.
+
+When it finishes you'll have `adrive` on your `PATH` and every detected client pointed at AgentDrive.
+
+## 2. Initialize a project
+
+In any working directory:
+
+```bash
+adrive init
+```
+
+This signs you in, saves capture preferences and confirms which clients are wired. Use `adrive ls` to inspect accessible workspaces. Agent tools in the same project can use `drive_write`, `drive_read`, `drive_list`, and the rest of the 22 MCP tools.
+
+## 3. Make your first handoff
+
+Restart your agents after installation so they load the new connection and hooks.
+In Claude Code, Codex, OpenCode, Cursor, Gemini CLI or Antigravity, work on a small
+task in your project. Leave a clear goal and next step, then end the session.
+
+Open a different supported agent in the **same project directory** and ask:
+
+> Resume my last AgentDrive session from the other agent. Check the files on disk before continuing.
+
+In Claude Code you can also run `/agentdrive:resume`. The resulting brief should
+include the source agent, the goal, files touched and recent turns. See the
+[per-agent guides](/integrations) for exact commands and setup details.
+
+If the session is missing, check that both agents use the same account and that
+transcript capture is on. Run these in your project directory:
+
+```bash
+adrive privacy --show
+adrive sync
+adrive resume --list
+```
+
+With Private Workspace enabled, run `adrive resume <session-id>` on the machine
+holding the encryption key to decrypt the brief locally. See [Security](/security)
+for the storage and search trade-offs.
+
+Cline, Zed and Continue provide workspace tools without session capture. To check
+their connection, ask the agent to write a file `hello.md` with the content
+"wired up", then read it back.
+
+## Local mode: no account
+
+You can resume one agent's session in another on the same machine without an
+account. In local mode, AgentDrive reads each agent's own transcript store on
+disk (Claude Code, Codex, OpenCode, Gemini CLI, Cursor and Antigravity), so
+nothing is uploaded and no network is needed.
+
+```bash
+adrive init --local     # wire your agent tools without signing in
+adrive resume --list    # this project's sessions from your other agents
+adrive resume           # handoff brief for the newest one
+adrive resume <id>      # handoff brief for one session from the list
+```
+
+When you run `adrive init` in a terminal, it also asks whether to sign in or use
+local mode.
+
+What needs setup depends on where each agent keeps its transcripts:
+
+- **No setup:** Claude Code, Codex and OpenCode. Gemini CLI also works without
+  setup when its session was opened in this directory or at the root of its git
+  repo.
+- **Needs the hooks from `adrive init --local`:** Cursor and Antigravity, plus
+  Gemini CLI sessions opened anywhere else. Their transcripts don't record the
+  project directory, so the hook records it on this machine when the session
+  starts. Sessions from before the hooks were installed can't be matched to a
+  project.
+
+- With no account, the MCP server's `drive_sessions` and `drive_resume` tools
+  read local transcripts too, so `/agentdrive:resume` and `/agentdrive:sessions`
+  work in Claude Code. The other MCP tools need an account.
+- Resume skips sessions from the agent you run it in, and applies the same
+  secret redaction that capture applies before upload.
+- If you are signed in, `adrive resume --local` reads local transcripts instead
+  of your workspace.
+- Local resumes are unlimited and do not count toward the Free plan's 10 cloud
+  resumes a month.
+
+Local mode stays on one machine. Sessions do not sync to your other machines,
+cannot be shared with teammates, are not available to hosted MCP in claude.ai or
+ChatGPT, and nothing is recorded in the provenance timeline. Run `adrive init`
+again to sign in when you want those.
+
+## Manual MCP config (fallback)
+
+If the installer can't run on your machine, or you just prefer hand-rolling configs, run `adrive auth login` once (the MCP server reads the key it saves) and drop this into the `mcpServers` block of any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "agentdrive": {
+      "command": "npx",
+      "args": ["-y", "@adrive/mcp-server"],
+      "env": {
+        "AGENTDRIVE_AGENT_PLATFORM": "my-agent"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+### Codex CLI, OpenCode, Gemini CLI, Cursor, Antigravity
+
+```bash
+curl -fsSL agentdrive.sh/install | sh
+```
+
+## Raw REST (build-your-own-client)
+
+For people writing their own client or a non-MCP integration, the REST API works the same way the CLI uses it:
+
+```bash
+curl -X POST https://app.agentdrive.sh/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{"org_name":"acme","agent_name":"my-first-agent"}'
+```
+
+Response:
+
+```json
+{
+  "org_id": "org_...",
+  "api_key": "agentdrive_live_...",
+  "agent_id": "agent_...",
+  "trial_ends_at": "..."
+}
+```
+
+Save `api_key`. The default API endpoint is `https://app.agentdrive.sh`. All `/v1/*` endpoints accept `Authorization: Bearer <api_key>`.
+
+## Next
+
+- [Sessions](/docs/concepts/sessions) — how capture and resume work, and the privacy controls
+- [MCP tools](/docs/mcp-tools) — every tool the MCP server exposes and what it does
+- [REST API](/docs/rest-api) — the underlying HTTP surface for non-MCP clients
+- [Cross-agent identity](/docs/concepts/cross-agent-identity) — one key, many agent platforms, full provenance

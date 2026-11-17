@@ -1,0 +1,85 @@
+---
+title: Self-hosting (community-supported)
+description: Run your own AgentDrive API on your own Cloudflare account with one command.
+---
+
+**Community-supported.** Self-hosting is for people who want to run AgentDrive on their own Cloudflare account. It gets help through GitHub issues and discussions, not support from AgentDrive, and it has no SLA. The hosted service at [agentdrive.sh](https://agentdrive.sh) is the supported product.
+
+`pnpm selfhost` deploys the AgentDrive API (the Cloudflare Worker in `apps/worker`) to your account, using your existing `wrangler login`. A self-hosted instance has one organization and is API-key only, with no dashboard and no email sign-in. It has no billing and no plan limits: no workspace, agent or seat caps, no monthly cross-agent resume limit, no usage warnings and no upgrade prompts. `/v1/org` reports every quota as `null`, which the MCP `drive_org` tool shows as unlimited.
+
+## Prerequisites
+
+- **Cloudflare Workers Paid** ($5/month). The worker binds a Durable Object (`FileCollab`) on the key-value storage backend, which only Workers Paid can create. Workers Free also caps CPU at 10 ms per request, which uploads, search and encryption go past. KV, R2, Vectorize and Workers AI bill against their own free allowances first.
+- **R2 enabled** on the account. Turn it on once in the Cloudflare dashboard.
+- **A workers.dev subdomain** for the account. The dashboard sets one up the first time you open Workers.
+- **Node.js 22.18 or later** (the script runs TypeScript directly) and **pnpm 10**.
+- **A logged-in Wrangler**: `pnpm --filter @agentdrive/worker exec wrangler login`. If your login can reach more than one account, set `CLOUDFLARE_ACCOUNT_ID` first.
+
+## Deploy
+
+```bash
+git clone https://github.com/agentdrive-sh/agentdrive.git
+cd agentdrive
+pnpm install --frozen-lockfile
+pnpm selfhost
+```
+
+The script:
+
+1. Creates, or reuses by name, two KV namespaces (`agentdrive-kv`, `agentdrive-oauth-kv`), an R2 bucket (`agentdrive-r2`) and a Vectorize index (`agentdrive-vectorize`, 768 dimensions, cosine, with metadata indexes on `org_id`, `ws_id`, `agent_id` and `agent_platform`).
+2. Writes `apps/worker/wrangler.selfhost.toml` from the production `wrangler.toml`. It swaps in your resource IDs, drops production routes, the `send_email` binding and `WORKERS_DEV_SUBDOMAIN` (so CORS allows only your own `SITE_URL` and `APP_URL`), points the `SELF` service binding at your own worker, sets `SELF_HOSTED = "true"`, and points `APP_URL`, `SITE_URL` and `MCP_URL` at your workers.dev URL. The file is gitignored.
+3. Builds and deploys the worker with registration closed. It refuses the names of the production AgentDrive workers, and it refuses any existing worker on your account that it didn't deploy itself (one whose live version lacks `SELF_HOSTED = "true"`). A first run deploys twice, because the workers.dev URL and the worker itself only exist after the first deploy.
+4. Generates `TOKEN_SIGNING_SECRET`, `BUCKET_KEK_ROOT` and `BUCKET_KEK_VERSION` and sets them with `wrangler secret put`, without printing them. Secrets that are already set are never replaced.
+5. Registers the instance's organization and an owner API key. It sets a random one-time `SELF_HOSTED_BOOTSTRAP_TOKEN` secret over stdin, sends it in the `X-Bootstrap-Token` header of `POST /v1/register`, and deletes the secret straight after, whether or not registration succeeded. The token is never printed. Registration is retried only while the token is still reaching Cloudflare's locations or the network fails. It runs only when the instance has no organization yet, or when you pass `--register`. Ctrl-C during this step still deletes the token. Then the script prints the API key once, along with the command that connects the CLI:
+
+```bash
+printf '%s' 'agentdrive_live_...' | npx @adrive/cli auth login --api-url https://agentdrive.<subdomain>.workers.dev --with-key
+adrive init
+```
+
+`--with-key` reads the key from stdin, so it never shows up in a process listing. The MCP server reads the same CLI config, so `adrive init` wires your agent tools to your instance. `auth login --with-key` ships in the first CLI release after 1.3.4. Until then, build the CLI from this checkout with `pnpm --filter @adrive/cli build` and run `node packages/cli/dist/index.js` in place of `npx @adrive/cli`.
+
+### Adding teammates
+
+Registration on a self-hosted instance is always closed, apart from the few seconds `pnpm selfhost` holds the bootstrap token. `POST /v1/register` without a valid `X-Bootstrap-Token` returns `403` with `code: "registration_closed"`. Email sign-in is off: `/v1/auth/send-code` and `/v1/auth/verify-code` return `501` with `code: "email_signin_disabled"`, so the instance never sends mail. Browser sign-in from the CLI is off as well: `POST /v1/auth/cli/start` returns `501` with `code: "cli_browser_signin_disabled"` and points to `auth login --with-key`. Invites are disabled too: `POST /v1/org/invite` returns `501` with `code: "invites_disabled"`. Nobody who finds your workers.dev URL can sign up or store data on your account. To give a teammate access, mint them their own key with yours:
+
+```bash
+curl -X POST https://agentdrive.<subdomain>.workers.dev/v1/keys \
+  -H "Authorization: Bearer $AGENTDRIVE_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"teammate"}'
+```
+
+The response holds the new key once. The teammate connects with the same `auth login --with-key` command.
+
+### Options
+
+| Flag | What it does |
+|---|---|
+| `--name <name>` | Worker and resource name prefix. Defaults to `agentdrive`. |
+| `--backup-secrets <file>` | Writes the secrets generated this run to a new file with mode 0600, and syncs it to disk before setting any secret. The script stops before deploying if the file already exists. Cloudflare never returns secret values, so this backup is your only copy. |
+| `--register` | Issues a new owner key in the instance's organization, even though one already exists. Use it if you lost your owner key or the first registration failed. The new key takes over as owner and can revoke the lost one with `DELETE /v1/keys/<key_id>`. It sets a fresh bootstrap token, registers, and deletes the token again. |
+| `--dry-run` | Writes the config with placeholder IDs and runs `wrangler deploy --dry-run`. It doesn't touch your account. |
+
+## What's not included
+
+- **The web dashboard.** You get the API only. Use the CLI, the MCP server and the SDK.
+- **OAuth sign-in for remote MCP clients.** The hosted MCP endpoint itself works: point a remote MCP client at `https://agentdrive.<subdomain>.workers.dev/mcp` with the header `Authorization: Bearer <API key>`. Connecting through OAuth doesn't work, because the consent page needs a browser session from the web dashboard. The stdio MCP server that `adrive init` wires works too.
+- **Email sign-in and invites.** Teammates get API keys from `/v1/keys`.
+- **Billing.** Every `/v1/billing/*` route and the Stripe webhook return `501` with `code: "billing_disabled"`, and Stripe is never called.
+- **Browser sign-in.** `adrive auth login` without `--with-key`, and Google or GitHub sign-in, finish on the web dashboard, which a self-hosted instance doesn't have.
+
+## Things to know
+
+- **Rate limit namespace IDs are account-wide.** The worker uses rate limit namespaces `41001` to `41004`. If another Worker on your account already uses those IDs, change them in `apps/worker/wrangler.toml` before deploying.
+- **Losing `TOKEN_SIGNING_SECRET`** invalidates every share link. Losing `BUCKET_KEK_ROOT` makes envelope-encrypted blobs unreadable. Keep the `--backup-secrets` file somewhere safe.
+
+## Upgrade
+
+```bash
+git pull
+pnpm install --frozen-lockfile
+pnpm selfhost
+```
+
+A re-run reuses your resources, keeps your secrets, and redeploys the current code. It registers nothing, because the instance already has an organization.

@@ -1,0 +1,76 @@
+---
+title: Roadmap
+description: What's already shipped and what's coming next for AgentDrive.
+---
+
+The substrate is live today. The current roadmap is about closing the gap between "shared filesystem for agents" and "cross-agent artifact workspace with provenance, semantic recall, and portable storage."
+
+This page is a stable summary. We update it when scope changes, not on every commit.
+
+## Shipped
+
+Semantic recall, cross-agent identity, and the new MCP tools are all live. Verifiable today on the API at `https://app.agentdrive.sh` and in `@adrive/mcp-server` on npm.
+
+### New MCP tools
+
+- `drive_search` — semantic search over workspace artifacts
+- `drive_recall` — query semantic search results (narrows to auto-extracted facts in a future release)
+- `drive_context` — top-N relevant artifacts for the current task, similarity plus recency rerank
+- `drive_log_run` — capture agent run metadata across platforms
+
+See [Memory and search](/docs/concepts/memory-and-search) for the model.
+
+### Cross-agent identity headers
+
+The MCP server supplies `X-Agent-Platform` and optional `X-Agent-Role`. Agent activity records carry platform; agent run records can carry both. The principal model itself is already live — these headers light up the per-session distinction. See [Cross-agent identity](/docs/concepts/cross-agent-identity).
+
+### Embedding on write
+
+The write path is hooked into a background embedding pass. The default embedding model is an industry-standard 768-dim model. Vector IDs include org, workspace, path, content hash and chunk index; repeated writes can run inference again. Embedding failures are logged and swallowed — write integrity over search integrity. See [Memory and search](/docs/concepts/memory-and-search).
+
+### Infrastructure hygiene
+
+- Apache-2.0 license for the MCP server, CLI, SDK, and Claude Code plugin
+- Test harness covering auth-critical paths (token sign/verify, API-key hashing, permission ladder, share revocation, magic-code expiry, registration)
+- CI gates every PR on typecheck + test + build
+- Cursor pagination on every list endpoint (default page size 50)
+
+## In flight
+
+The remaining deliverables. Order is approximate.
+
+### CLI — `adrive` binary
+
+The `adrive` binary on npm (`@adrive/cli`) and an installer: `curl -fsSL agentdrive.sh/install | sh`. Wires session capture and the MCP server into Codex, OpenCode, Cursor, Gemini CLI and Antigravity (Claude Code gets the same through its plugin), and the MCP server alone into Zed, Cline and Continue. Read and write workspace artifacts from any shell.
+
+### SDKs
+
+- `@adrive/sdk` — TypeScript, typed against the REST surface, retry- and pagination-aware (live)
+- `adrive-py` — Python, same shape, scoped to the same endpoints (coming next)
+
+### Claude Code skill file
+
+The Claude Code plugin ships an AgentDrive skill so Claude Code can call AgentDrive without explicit `drive_*` tool prompts.
+
+### Private beta + distribution
+
+Docs site repositioned (this page is part of that). Broad public launch is gated until private beta shows 10+ dogfood installs, 5+ real cross-agent workspaces, 3+ returning principals, 1+ paid Team-intent conversation, and consistent public pricing/positioning. MCP marketplace listings (Smithery, Glama, MCP.so) and Cursor / Cline / Continue / Zed submissions follow that gate.
+
+## What does NOT change
+
+- Content-addressed storage substrate
+- The default endpoint `https://app.agentdrive.sh`
+- The three-mode auth model
+- The MCP tools that shipped before v1 keep their names and signatures
+- The split-license model
+
+## Parked, not shipping near-term
+
+- Real-time collaborative editing on the frontend dashboard
+- WYSIWYG editing
+- Generic Stripe billing polish past the bare minimum
+- BYO-bucket UX polish / self-host (post-launch)
+- Python SDK (post-launch)
+- Auto-extracted facts (`drive_recall` narrows to facts in a future release; today it returns semantic search results)
+
+These are honest "later, not now" decisions, not "never."

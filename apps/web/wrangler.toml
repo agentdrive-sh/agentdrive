@@ -1,0 +1,29 @@
+name = "agentdrive-web"
+main = ".open-next/worker.js"
+compatibility_date = "2025-02-20"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+# next-themes serializes its initializer; preserved-name helpers break that script.
+keep_names = false
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+invocation_logs = false
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+run_worker_first = false
+
+[vars]
+NEXT_PUBLIC_API_URL = "https://app.agentdrive.sh"
+
+# Server components call the API through this binding: a fetch to app.agentdrive.sh/v1
+# from this worker stays on its own custom domain and never reaches the API route.
+[[services]]
+binding = "API"
+service = "agentdrive-worker"
