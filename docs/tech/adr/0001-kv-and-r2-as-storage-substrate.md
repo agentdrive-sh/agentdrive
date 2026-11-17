@@ -14,7 +14,7 @@ Use **Cloudflare KV for all metadata** and **Cloudflare R2 for all file content*
 
 KV keys are flat, prefix-namespaced strings (e.g. `file:<ws_id>:<path>`, `activity:<ws_id>:<ts>:<event_id>`). Lookups are point reads or `kv.list({ prefix })` with cursor pagination. R2 keys are content-addressed (`content/<sha256>`); the locator that points at them lives in the file's KV metadata.
 
-The decision is documented as a hard constraint in `CLAUDE.md` under "What NOT to do": *do not add Postgres / Neon / D1*.
+The decision is documented as a hard constraint in the house style in `CONTRIBUTING.md`: *storage is KV and R2 only; no Postgres, Neon or D1*.
 
 ## Consequences
 
@@ -45,5 +45,5 @@ The decision is documented as a hard constraint in `CLAUDE.md` under "What NOT t
 
 - `apps/worker/src/services/storage.ts` — every KV key shape in the system.
 - `apps/worker/wrangler.toml` — the `META` (KV) and `CONTENT` (R2) bindings.
-- `CLAUDE.md` — "Storage layout" section.
+- `docs/tech/architecture.md` — "Storage layout" section.
 - ADR-0008 — content-addressed storage, the partner decision.

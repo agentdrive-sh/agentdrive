@@ -87,7 +87,7 @@ describe('POST /v1/billing/checkout', () => {
     expect(session.get('success_url')).toMatch(/^http:\/\/localhost:3001\/billing\/success\?/);
     expect(session.get('cancel_url')).toBe('http://localhost:3001/billing/cancel');
     // Stripe rejects payment_method_types on Checkout; methods are set per account
-    // (bank debits stay disabled there, see docs/ops/runbook.md).
+    // (bank debits stay disabled there).
     expect([...session.keys()].some((k) => k.startsWith('payment_method_types'))).toBe(false);
     expect(await orgCustomerId(agent.org_id)).toBe('cus_1');
     const customerCall = calls.find((c) => c.url.endsWith('/v1/customers'))!;

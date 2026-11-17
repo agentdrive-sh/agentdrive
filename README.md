@@ -145,11 +145,10 @@ plugins/
 - [agentdrive.sh/docs](https://agentdrive.sh/docs): [quick start](https://go2.gg/agentdrive-docs), [sessions](https://agentdrive.sh/docs/concepts/sessions), [MCP tools](https://agentdrive.sh/docs/mcp-tools), [REST API](https://agentdrive.sh/docs/rest-api). Source in [`apps/web/content/docs/`](./apps/web/content/docs/).
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): dev setup, house style and where to start.
 - [`docs/tech/`](./docs/tech/): architecture and ADRs.
-- [`docs/ops/runbook.md`](./docs/ops/runbook.md): deploy, rollback and secret rotation.
 
 ## License
 
-The server (`apps/worker`, `apps/web`, `apps/frontend`) is licensed under the [GNU AGPL v3](./LICENSE). You can self-host and modify it freely; if you run a modified version as a network service, you must offer its source to your users.
+The server (`apps/worker`, `apps/web`) is licensed under the [GNU AGPL v3](./LICENSE). You can self-host and modify it freely; if you run a modified version as a network service, you must offer its source to your users.
 
 The clients (`packages/cli`, `packages/mcp-server`, `packages/sdk-ts`, `packages/shared`, `apps/installer`, the Claude Code plugin) are Apache-2.0. Talking to the server over the network does not make your code AGPL.
 

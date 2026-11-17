@@ -10,13 +10,11 @@ Copyright Roushan Inc.
 |---|---|---|---|
 | `apps/worker` | REST API and hosted MCP (Cloudflare Worker) | GNU AGPL v3 | `AGPL-3.0-only` |
 | `apps/web` | Next.js site and dashboard | GNU AGPL v3 | `AGPL-3.0-only` |
-| `apps/frontend` | Legacy React dashboard | GNU AGPL v3 | `AGPL-3.0-only` |
 | `packages/cli` | `@adrive/cli` (`adrive`) | Apache License 2.0 | `Apache-2.0` |
 | `packages/mcp-server` | `@adrive/mcp-server` | Apache License 2.0 | `Apache-2.0` |
 | `packages/sdk-ts` | `@adrive/sdk` | Apache License 2.0 | `Apache-2.0` |
 | `packages/shared` | `@agentdrive/shared` types and primitives | Apache License 2.0 | `Apache-2.0` |
 | `apps/installer` | One-line shell installer | Apache License 2.0 | `Apache-2.0` |
-| `apps/docs` | Legacy Astro docs site | Apache License 2.0 | `Apache-2.0` |
 | `plugins/agentdrive` | Claude Code plugin | Apache License 2.0 | `Apache-2.0` |
 
 Each path's own `LICENSE` file and `package.json` `license` field are authoritative. Anything not covered by a more specific `LICENSE` falls under the root `LICENSE` (AGPL-3.0).

@@ -29,7 +29,7 @@ For each write, the worker:
 
 For reads, the worker parses the header, looks up the KEK by `kek_version` in either the current root or the `PREVIOUS` map, re-derives the DEK, and decrypts.
 
-Rotation is a procedure documented in `apps/worker/src/env.ts` and `docs/ops/runbook.md`:
+Rotation is a procedure documented in `apps/worker/src/env.ts` and in the maintainers' operations runbook:
 
 1. `wrangler secret put BUCKET_KEK_VERSION` to the new version (e.g. 2).
 2. `wrangler secret put BUCKET_KEK_ROOT` to the new key.
@@ -64,5 +64,4 @@ Rotation is a procedure documented in `apps/worker/src/env.ts` and `docs/ops/run
 
 - `apps/worker/src/services/envelope-encryption.ts` — the HKDF + AES-GCM implementation.
 - `apps/worker/src/env.ts` — `BUCKET_KEK_*` secret declarations + rotation runbook.
-- `docs/ops/runbook.md` — operational rotation procedure.
 - ADR-0005 — driver layer that sits below this.

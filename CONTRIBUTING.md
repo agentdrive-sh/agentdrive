@@ -13,7 +13,7 @@ pnpm test
 pnpm dev:worker      # local API at http://localhost:8787
 ```
 
-`pnpm dev:frontend` and `pnpm dev:docs` start the other apps. See [`docs/tech/architecture.md`](./docs/tech/architecture.md) for how the pieces fit.
+`pnpm --filter @agentdrive/web dev` starts the website and dashboard at http://localhost:3001. See [`docs/tech/architecture.md`](./docs/tech/architecture.md) for how the pieces fit.
 
 Every change lands through a pull request against `main`, and CI (typecheck and tests) must be green before it merges. Keep pull requests small and focused; open an issue first if you plan a large change.
 
@@ -36,8 +36,9 @@ Before your first pull request can merge, you sign the [CLA](./CLA.md). A bot co
 - **Storage is KV and R2 only.** No Postgres, Neon or D1. Do not change KV key shapes without updating `apps/worker/src/services/storage.ts` and planning a backfill. List KV with cursor pagination, never a `limit` above 1000.
 - **Permissions** go through `hasPermission(actual, required)`; never compare role strings.
 - **Tests** use Vitest. Worker tests live in `apps/worker/test/`, CLI tests in `packages/cli/test/`, MCP server and transcript tests in `packages/mcp-server/test/`.
+- **Licenses follow the package.** A new file takes the license of the package it lands in (AGPL-3.0 for `apps/worker` and `apps/web`, Apache-2.0 for the clients), so put code in the right package.
 
-[`CLAUDE.md`](./CLAUDE.md) has the longer version, including storage layout and auth model. It doubles as the guide for AI coding agents working in this repo.
+[`docs/tech/architecture.md`](./docs/tech/architecture.md) covers the storage layout and auth model in full.
 
 ## Where to start
 

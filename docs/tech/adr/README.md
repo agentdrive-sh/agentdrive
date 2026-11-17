@@ -39,8 +39,8 @@ Add one when:
 
 Do **not** add one for:
 
-- Style preferences (those live in `CLAUDE.md`).
-- Roadmap items (those live in `docs/product/roadmap.md`).
+- Style preferences (those live in `CONTRIBUTING.md`).
+- Roadmap items.
 - Bug fixes or refactors that don't change a structural assumption.
 
 ## When to supersede

@@ -14,7 +14,7 @@ Use **Hono** as the HTTP router and request lifecycle layer, running on **Cloudf
 
 Routing is mounted from `apps/worker/src/index.ts` to per-domain route modules under `apps/worker/src/routes/` (files, workspaces, shares, comments, activity, orgs, auth, search, runs, context, bucket-config, sandbox, …). Validation is **Zod** on every request body. Tools that need to call out to MCP clients are wired through the **MCP TypeScript SDK** (`@modelcontextprotocol/sdk`) — separately, in `packages/mcp-server`.
 
-The decision is documented as a hard constraint in `CLAUDE.md`: *Hono for routing, Zod for validation, MCP SDK for tools — don't introduce Express/Fastify/io-ts/etc.*
+The decision is documented as a hard constraint in the house style in `CONTRIBUTING.md`: *Hono for routing, Zod for validation, MCP SDK for tools — don't introduce Express/Fastify/io-ts/etc.*
 
 ## Consequences
 
@@ -43,4 +43,4 @@ The decision is documented as a hard constraint in `CLAUDE.md`: *Hono for routin
 - `apps/worker/src/index.ts` — the wiring file.
 - `apps/worker/src/routes/` — per-domain mounts.
 - `apps/worker/wrangler.toml` — runtime config.
-- `CLAUDE.md` — house style rule 3.
+- `CONTRIBUTING.md` — house style.

@@ -1,6 +1,6 @@
 # AgentDrive Architecture
 
-This document is the single canonical system overview. It answers "what runs where, what talks to what, and what does each piece do." Read this before `CLAUDE.md` if you're new to the codebase; read `CLAUDE.md` after when you're about to make a change.
+This document is the single canonical system overview. It answers "what runs where, what talks to what, and what does each piece do." Read this before `CONTRIBUTING.md` if you're new to the codebase; read `CONTRIBUTING.md` after when you're about to make a change.
 
 The load-bearing decisions are documented separately as ADRs under [`docs/tech/adr/`](./adr/) — this doc links into them rather than repeating the reasoning.
 
@@ -233,11 +233,10 @@ Three pipeline endpoints work together:
 |---|---|---|---|
 | API + Worker | `app.agentdrive.sh` | Cloudflare Worker | Single deploy via `pnpm --filter @agentdrive/worker run deploy` |
 | Dashboard | `agentdrive.sh/*` | OpenNext Cloudflare Worker (apps/web) | Server API calls use the `API` service binding |
-| Legacy SPA | legacy application | React + Vite (apps/frontend) | Not the current public app |
-| Public docs | `agentdrive.sh/docs` | apps/web/content/docs | Served with the website Worker; apps/docs is legacy |
+| Public docs | `agentdrive.sh/docs` | apps/web/content/docs | Served with the website Worker |
 | Install script | `agentdrive.sh/install` | Generated string in the Worker | Built from `apps/installer/install.sh` via `apps/installer/build.mjs` |
 
-CI: GitHub Actions runs typecheck + test + build + verify-claims on every PR. No deploy from CI today — deploys are manual via `wrangler deploy` from a maintainer's machine. Deploy + rollback procedures are documented in `docs/ops/runbook.md`.
+CI: GitHub Actions runs typecheck + test + build + verify-claims on every PR. No deploy from CI today — deploys are manual via `wrangler deploy` from a maintainer's machine. Deploy and rollback procedures live in a maintainer runbook.
 
 Compatibility date `2025-02-20`. `nodejs_compat` flag enabled (for `Buffer`, `crypto` interop shims).
 
@@ -302,9 +301,8 @@ These are intentionally not v1 goals — naming them here prevents future contri
 
 ## What to read next
 
-- Style and contribution rules: `CLAUDE.md`.
+- Style and contribution rules: `CONTRIBUTING.md`.
 - Public docs (user-facing): `apps/web/content/docs/` (served at agentdrive.sh/docs).
-- Design tokens and component vocabulary: `DESIGN.md`.
 - All the load-bearing decisions in one place: [`docs/tech/adr/`](./adr/).
 
 ---

@@ -51,7 +51,7 @@ The name and logo are covered separately by `TRADEMARKS.md`: forks must rebrand.
 
 ## References
 
-- `LICENSE` (root) and `apps/worker/LICENSE`, `apps/web/LICENSE`, `apps/frontend/LICENSE` — AGPL-3.0 text.
+- `LICENSE` (root) and `apps/worker/LICENSE`, `apps/web/LICENSE` — AGPL-3.0 text.
 - `LICENSING.md` — user-facing explanation of the split.
 - `CLA.md`, `TRADEMARKS.md`, `CONTRIBUTING.md`.
 - ADR-0003 — the client surface that the Apache-2.0 grant covers.
