@@ -41,11 +41,12 @@ Before your first pull request can merge, you sign the [CLA](./CLA.md). A bot co
 
 The best first contributions are **harness adapters**: code that reads another agent's session transcripts from disk so `adrive sync` can capture them and `adrive resume` can hand them to a different agent.
 
-Adapters live in [`packages/cli/src/lib/transcripts/`](./packages/cli/src/lib/transcripts/):
+Adapters live in [`packages/mcp-server/src/transcripts/`](./packages/mcp-server/src/transcripts/), where both the CLI (capture) and the MCP server (local resume with no account) use them:
 
-- [`types.ts`](./packages/cli/src/lib/transcripts/types.ts) defines the `TranscriptSource` interface. An adapter does two things: `enumerate()` finds candidate sessions on disk, and `parseSession()` turns one into a `TranscriptDoc` (turns, cwd, title, files touched). Redaction, encryption and upload are handled centrally in `lib/sync.ts`, so adapters stay small.
-- [`claude.ts`](./packages/cli/src/lib/transcripts/claude.ts) is the reference adapter: Claude Code's JSONL transcripts under `~/.claude/projects/`, under 100 lines. `util.ts` has the shared helpers (`DocBuilder`, `jsonLines`, `mtimeOf`).
-- Register the adapter in the `SOURCES` map in `packages/cli/src/lib/sync.ts`, add the harness id to `SessionHarness` in `packages/mcp-server/src/session.ts`, and add fixture-based tests to `packages/cli/test/transcripts.test.ts` alongside the existing ones.
+- [`types.ts`](./packages/mcp-server/src/transcripts/types.ts) defines the `TranscriptSource` interface. An adapter does two things: `enumerate()` finds candidate sessions on disk, and `parseSession()` turns one into a `TranscriptDoc` (turns, cwd, title, files touched). Redaction, encryption and upload are handled centrally in `packages/cli/src/lib/sync.ts` (capture) and `packages/mcp-server/src/local.ts` (local resume), so adapters stay small.
+- [`claude.ts`](./packages/mcp-server/src/transcripts/claude.ts) is the reference adapter: Claude Code's JSONL transcripts under `~/.claude/projects/`, under 100 lines. [`util.ts`](./packages/mcp-server/src/transcripts/util.ts) has the shared helpers (`DocBuilder`, `jsonLines`, `mtimeOf`).
+- Register the adapter in `HARNESSES` and `SOURCES` in [`packages/mcp-server/src/local.ts`](./packages/mcp-server/src/local.ts), add the harness id to `SessionHarness` in `packages/mcp-server/src/session.ts`, and add fixture-based tests to `packages/mcp-server/test/transcripts.test.ts` alongside the existing ones.
+- If the harness's transcripts don't record the working directory, local mode can only match its sessions to a project through the cwd its hook records (`adrive hook` in `packages/cli/src/commands/hook.ts`), so wire a session-start hook for it too.
 
 **Good first issues:** capture adapters for **Cline**, **Zed** and **Continue**. All three already reach AgentDrive through MCP, but none has native session capture, so their sessions cannot be resumed elsewhere. To propose or claim one, open an issue with the [harness adapter template](./.github/ISSUE_TEMPLATE/harness-adapter.md) and include where the harness stores its transcripts and a redacted sample of the format.
 

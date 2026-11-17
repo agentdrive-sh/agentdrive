@@ -5,7 +5,7 @@ title: "Harness adapter: <harness name>"
 labels: harness-adapter, good first issue
 ---
 
-<!-- Adapters live in packages/cli/src/lib/transcripts/. See CONTRIBUTING.md, "Where to start". -->
+<!-- Adapters live in packages/mcp-server/src/transcripts/. See CONTRIBUTING.md, "Where to start". -->
 
 ## Harness
 
