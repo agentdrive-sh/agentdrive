@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.turbo/
+.wrangler/
+.dev.vars
+apps/worker/wrangler.selfhost.toml
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store

@@ -1,0 +1,513 @@
+export interface ApiClientConfig {
+  baseUrl: string;
+  apiKey: string;
+  agentPlatform?: string;
+  agentRole?: string;
+  // Project key for the caller's working directory (see project.ts); the
+  // hosted server has no cwd and leaves it unset.
+  project?: string;
+  // Override the fetch implementation. The hosted MCP server (in-worker) passes
+  // a self service-binding fetch here so its REST calls dispatch in-process
+  // instead of looping back through the edge (which 522s). Defaults to global fetch.
+  fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+export interface PagedResponse<T> {
+  items: T[];
+  cursor: string | null;
+}
+
+interface ListPageFetcher<T> {
+  (cursor: string | null): Promise<PagedResponse<T>>;
+}
+
+// MAX_PAGES caps total to prevent unbounded loops; pass cursor explicitly if more needed.
+export async function listAllPages<T>(
+  fetchPage: ListPageFetcher<T>,
+  maxPages = 10,
+): Promise<T[]> {
+  const all: T[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    const page = await fetchPage(cursor);
+    all.push(...page.items);
+    if (!page.cursor) return all;
+    cursor = page.cursor;
+  }
+  return all;
+}
+
+export interface SearchHit {
+  path: string;
+  ws_id: string;
+  content_hash: string;
+  score: number | null;
+  snippet?: string;
+  agent_id: string;
+  agent_platform: string;
+  created_at: number;
+}
+
+export interface SearchFilterInput {
+  agent_platform?: string;
+  agent_id?: string;
+  path_prefix?: string;
+  kind?: string;
+}
+
+export interface SearchRequestBody {
+  query: string;
+  workspace_id?: string;
+  top_k?: number;
+  filter?: SearchFilterInput;
+}
+
+export interface ContextRequestBody {
+  task: string;
+  workspace_id?: string;
+  limit?: number;
+}
+
+export interface ContextArtifact extends SearchHit {}
+
+export type RunStatus = 'success' | 'failure' | 'partial' | 'in_progress';
+
+export interface RunRequestBody {
+  task: string;
+  status: RunStatus;
+  run_id?: string;
+  artifacts_referenced?: string[];
+  artifacts_produced?: string[];
+  duration_ms?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentRunRecord {
+  run_id: string;
+  org_id: string;
+  workspace_id?: string;
+  agent_id: string;
+  agent_platform: string;
+  agent_role?: string;
+  task: string;
+  artifacts_referenced: string[];
+  artifacts_produced: string[];
+  duration_ms?: number;
+  status: RunStatus;
+  metadata: Record<string, unknown>;
+  created_at: number;
+  updated_at?: number;
+}
+
+export interface ListRunsQuery {
+  project: string;
+  platform?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface UsageWarning {
+  metric?: string;
+  level: string;
+  message: string;
+  upgrade_url: string;
+}
+
+interface Envelope<T> {
+  success: boolean;
+  data?: T;
+  cursor?: string | null;
+  error?: string;
+  code?: string;
+  upgrade_url?: string;
+  usage_warning?: UsageWarning;
+}
+
+// The plan is full: the message is written for the human and already says how to upgrade.
+export class PlanLimitError extends Error {
+  constructor(message: string, readonly upgradeUrl: string) {
+    super(message.includes(upgradeUrl) ? message : `${message} Upgrade: ${upgradeUrl}`);
+    this.name = 'PlanLimitError';
+  }
+}
+
+export class RateLimitError extends Error {
+  constructor(seconds: number) {
+    super(`AgentDrive is rate limiting this key; try again in ${seconds} seconds.`);
+    this.name = 'RateLimitError';
+  }
+}
+
+function retryAfterSeconds(res: Response): number {
+  const seconds = Number(res.headers.get('Retry-After'));
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 10;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+const warningKey = (w: UsageWarning) => `${w.metric ?? 'unknown'}:${w.level}`;
+
+function apiError(json: Envelope<unknown>, status: number): Error {
+  if (json.code === 'plan_limit' && json.upgrade_url) return new PlanLimitError(json.error ?? 'Plan limit reached.', json.upgrade_url);
+  return new Error(json.error || `API request failed: ${status}`);
+}
+
+export class ApiClient {
+  readonly project?: string;
+  readonly agentPlatform: string;
+  private baseUrl: string;
+  private apiKey: string;
+  private agentRole: string;
+  private fetchImpl: (input: string, init?: RequestInit) => Promise<Response>;
+  private shownWarnings = new Set<string>();
+  private pendingWarning?: UsageWarning;
+
+  constructor(config: ApiClientConfig) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.apiKey = config.apiKey;
+    this.agentPlatform = config.agentPlatform ?? 'claude-code';
+    this.agentRole = config.agentRole ?? '';
+    this.project = config.project;
+    this.fetchImpl = config.fetchImpl ?? ((input, init) => fetch(input, init));
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      'Authorization': `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+      'X-Agent-Platform': this.agentPlatform,
+      'X-Agent-Role': this.agentRole,
+    };
+  }
+
+  // No MCP request carries a deadline, so a 429 always gets its one retry after Retry-After.
+  async rawFetch(path: string, init: RequestInit): Promise<Response> {
+    const url = `${this.baseUrl}/v1${path}`;
+    const req = { ...init, headers: { ...this.headers(), ...(init.headers as Record<string, string> | undefined) } };
+    let res = await this.fetchImpl(url, req);
+    if (res.status === 429) {
+      await sleep(retryAfterSeconds(res) * 1000, init.signal ?? undefined);
+      res = await this.fetchImpl(url, req);
+    }
+    if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
+    return res;
+  }
+
+  private async send<T>(method: string, path: string, body?: unknown): Promise<Envelope<T>> {
+    const res = await this.rawFetch(path, {
+      method,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json() as Envelope<T>;
+    if (!res.ok || !json.success) throw apiError(json, res.status);
+    const warning = json.usage_warning;
+    if (warning && !this.shownWarnings.has(warningKey(warning))) this.pendingWarning = warning;
+    return json;
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return (await this.send<T>(method, path, body)).data as T;
+  }
+
+  private async requestPage<T>(method: string, path: string, body?: unknown): Promise<PagedResponse<T>> {
+    const json = await this.send<T[]>(method, path, body);
+    return { items: json.data ?? [], cursor: json.cursor ?? null };
+  }
+
+  // A usage warning not yet shown in this process, at most once per metric and level.
+  takeUsageWarning(): UsageWarning | undefined {
+    const warning = this.pendingWarning;
+    this.pendingWarning = undefined;
+    if (warning) this.shownWarnings.add(warningKey(warning));
+    return warning;
+  }
+
+  async createWorkspace(name: string) {
+    return this.request<{ id: string; name: string; created_at: string }>('POST', '/workspaces', { name });
+  }
+
+  async writeFile(workspaceId: string, path: string, content: string, message?: string) {
+    return this.request<{
+      id: string; workspace_id: string; path: string;
+      version: number; created_at: string; updated_at: string;
+    }>('POST', `/workspaces/${workspaceId}/files`, { path, content, message });
+  }
+
+  async readFile(workspaceId: string, fileId: string) {
+    return this.request<{
+      id: string; path: string; content: string;
+      version: number; updated_at: string;
+    }>('GET', `/workspaces/${workspaceId}/files/${fileId}?content=true`);
+  }
+
+  async readFileByPath(workspaceId: string, path: string) {
+    const page = await this.listFilesPage(workspaceId, path, null);
+    const match = page.items.find((f) => f.path === path);
+    if (!match) throw new Error(`File not found: ${path}`);
+    return this.readFile(workspaceId, match.id);
+  }
+
+  async listFilesPage(workspaceId: string, prefix: string | undefined, cursor: string | null) {
+    const params = new URLSearchParams();
+    if (prefix) params.set('prefix', prefix);
+    if (cursor) params.set('cursor', cursor);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.requestPage<{
+      id: string; path: string; version: number;
+      size: number; updated_at: string;
+    }>('GET', `/workspaces/${workspaceId}/files${query}`);
+  }
+
+  async listAllFiles(workspaceId: string, prefix?: string, maxPages = 10) {
+    return listAllPages((cursor) => this.listFilesPage(workspaceId, prefix, cursor), maxPages);
+  }
+
+  async deleteFile(workspaceId: string, fileId: string) {
+    return this.request<{ deleted: boolean }>('DELETE', `/workspaces/${workspaceId}/files/${fileId}`);
+  }
+
+  async getVersionsPage(workspaceId: string, fileId: string, cursor: string | null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.requestPage<{
+      version: number; actor_type: string; actor_id: string;
+      created_at: string; message?: string;
+    }>('GET', `/workspaces/${workspaceId}/files/${fileId}/versions${query}`);
+  }
+
+  async getAllVersions(workspaceId: string, fileId: string, maxPages = 10) {
+    return listAllPages((cursor) => this.getVersionsPage(workspaceId, fileId, cursor), maxPages);
+  }
+
+  async createShareLink(workspaceId: string, permission: 'view' | 'comment' | 'edit', fileId?: string, expiresIn?: number, maxUses?: number, email?: string) {
+    return this.request<{
+      token_id: string; url: string; permission: string;
+      email_gated: boolean; expires_at?: string;
+    }>('POST', `/workspaces/${workspaceId}/share`, {
+      permission,
+      file_id: fileId,
+      expires_in: expiresIn,
+      max_uses: maxUses,
+      email,
+    });
+  }
+
+  async addComment(workspaceId: string, fileId: string, body: string, authorName?: string, lineStart?: number, lineEnd?: number) {
+    return this.request<{
+      id: string; body: string; author_type: string;
+      created_at: string;
+    }>('POST', `/workspaces/${workspaceId}/files/${fileId}/comments`, {
+      body, author_name: authorName,
+      line_start: lineStart, line_end: lineEnd,
+    });
+  }
+
+  async getCommentsPage(workspaceId: string, fileId: string, cursor: string | null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.requestPage<{
+      id: string; body: string; author_type: string;
+      author_id: string; author_name?: string;
+      created_at: string; line_start?: number; line_end?: number;
+    }>('GET', `/workspaces/${workspaceId}/files/${fileId}/comments${query}`);
+  }
+
+  async getAllComments(workspaceId: string, fileId: string, maxPages = 10) {
+    return listAllPages((cursor) => this.getCommentsPage(workspaceId, fileId, cursor), maxPages);
+  }
+
+  async getActivityPage(workspaceId: string, cursor: string | null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.requestPage<{
+      id: string; action: string; actor_type: string;
+      actor_id: string; target_path?: string;
+      created_at: string;
+    }>('GET', `/workspaces/${workspaceId}/activity${query}`);
+  }
+
+  async getAllActivity(workspaceId: string, maxPages = 10) {
+    return listAllPages((cursor) => this.getActivityPage(workspaceId, cursor), maxPages);
+  }
+
+  async assignRole(workspaceId: string, email: string, permission: 'view' | 'comment' | 'edit') {
+    return this.request<{
+      workspace_id: string; email: string; permission: string;
+      assigned_at: string;
+    }>('POST', `/workspaces/${workspaceId}/roles`, { email, permission });
+  }
+
+  async getRolesPage(workspaceId: string, cursor: string | null) {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return this.requestPage<{
+      email: string; permission: string;
+      assigned_by: string; assigned_at: string;
+    }>('GET', `/workspaces/${workspaceId}/roles${query}`);
+  }
+
+  async getAllRoles(workspaceId: string, maxPages = 10) {
+    return listAllPages((cursor) => this.getRolesPage(workspaceId, cursor), maxPages);
+  }
+
+  async removeRole(workspaceId: string, email: string) {
+    return this.request<{ deleted: boolean }>('DELETE', `/workspaces/${workspaceId}/roles/${encodeURIComponent(email)}`);
+  }
+
+  async inviteMember(email: string, role: 'owner' | 'admin' | 'member' = 'member') {
+    return this.request<{
+      org_id: string; email: string; role: string; expires_at: string;
+    }>('POST', '/org/invite', { email, role });
+  }
+
+  async getOrg(maxPages = 10) {
+    // Org returns agents + members each with its own cursor; loop both to exhaustion.
+    const first = await this.fetchOrgPage(undefined, undefined);
+    const agents = [...first.agents];
+    const members = [...first.members];
+    let agentsCursor = first.agents_cursor ?? undefined;
+    let membersCursor = first.members_cursor ?? undefined;
+    for (let i = 1; i < maxPages && agentsCursor; i++) {
+      const page = await this.fetchOrgPage(agentsCursor, undefined);
+      agents.push(...page.agents);
+      agentsCursor = page.agents_cursor ?? undefined;
+    }
+    for (let i = 1; i < maxPages && membersCursor; i++) {
+      const page = await this.fetchOrgPage(undefined, membersCursor);
+      members.push(...page.members);
+      membersCursor = page.members_cursor ?? undefined;
+    }
+    return {
+      ...first.org,
+      agents,
+      members,
+      usage: first.usage,
+      quota: first.quota,
+    };
+  }
+
+  private async fetchOrgPage(agentsCursor: string | undefined, membersCursor: string | undefined): Promise<{
+    org: {
+      id: string; name: string; plan: string;
+    };
+    agents: Array<{ agent_id: string; agent_name?: string; agent_email?: string }>;
+    members: Array<{ email: string; role: string }>;
+    agents_cursor: string | null;
+    members_cursor: string | null;
+    usage: { storage_bytes: number; agent_count: number; workspace_count: number; member_count: number };
+    quota: { storage_bytes: number | null; max_agents: number | null; max_workspaces: number | null; max_human_seats: number | null };
+  }> {
+    const params = new URLSearchParams();
+    if (agentsCursor) params.set('agents_cursor', agentsCursor);
+    if (membersCursor) params.set('members_cursor', membersCursor);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await this.rawFetch(`/org${query}`, { method: 'GET' });
+    const json = await res.json() as {
+      success: boolean;
+      data?: {
+        id: string; name: string; plan: string;
+        agents: Array<{ agent_id: string; agent_name?: string; agent_email?: string }>;
+        members: Array<{ email: string; role: string }>;
+        usage: { storage_bytes: number; agent_count: number; workspace_count: number; member_count: number };
+        quota: { storage_bytes: number | null; max_agents: number | null; max_workspaces: number | null; max_human_seats: number | null };
+      };
+      agents_cursor?: string | null;
+      members_cursor?: string | null;
+      error?: string;
+    };
+    if (!res.ok || !json.success || !json.data) {
+      throw apiError(json, res.status);
+    }
+    const { agents, members, usage, quota, ...org } = json.data;
+    return {
+      org,
+      agents,
+      members,
+      usage,
+      quota,
+      agents_cursor: json.agents_cursor ?? null,
+      members_cursor: json.members_cursor ?? null,
+    };
+  }
+
+  async getBillingPlan() {
+    return this.request<{
+      plan: string;
+      trial_ends_at?: string;
+      usage: Record<string, number>;
+      quota: Record<string, number>;
+    }>('GET', '/billing/plan');
+  }
+
+  async search(body: SearchRequestBody): Promise<{ hits: SearchHit[]; total: number }> {
+    return this.request<{ hits: SearchHit[]; total: number }>('POST', '/search', body);
+  }
+
+  async context(body: ContextRequestBody): Promise<{ artifacts: ContextArtifact[]; retrieved_at: number; usage_warning?: UsageWarning }> {
+    const json = await this.send<{ artifacts: ContextArtifact[]; retrieved_at: number }>('POST', '/context', body);
+    return { ...json.data!, usage_warning: json.usage_warning };
+  }
+
+  async logRun(body: RunRequestBody): Promise<{ run_id: string; created_at: number }> {
+    return this.request<{ run_id: string; created_at: number }>('POST', '/runs', body);
+  }
+
+  async listRuns(query: ListRunsQuery): Promise<PagedResponse<AgentRunRecord>> {
+    const params = new URLSearchParams({ project: query.project });
+    if (query.platform) params.set('platform', query.platform);
+    if (query.limit) params.set('limit', String(query.limit));
+    if (query.cursor) params.set('cursor', query.cursor);
+    return this.requestPage<AgentRunRecord>('GET', `/runs?${params.toString()}`);
+  }
+
+  async getRun(runId: string): Promise<AgentRunRecord> {
+    return this.request<AgentRunRecord>('GET', `/runs/${encodeURIComponent(runId)}`);
+  }
+
+  // --- Sandbox (Wave 5 Stream D) ---
+  async sandboxClone(workspaceId: string, body: { url: string; branch?: string; depth?: number }) {
+    return this.request<{
+      workspace_id: string;
+      repo_url?: string;
+      branch?: string;
+      head_sha?: string;
+      last_active_at?: number;
+    }>('POST', `/workspaces/${workspaceId}/sandbox/clone`, body);
+  }
+
+  async sandboxExec(workspaceId: string, body: { cmd: string; cwd?: string; timeout_ms?: number }) {
+    return this.request<{
+      exit_code: number;
+      stdout: string;
+      stderr: string;
+      duration_ms: number;
+      truncated: boolean;
+    }>('POST', `/workspaces/${workspaceId}/sandbox/exec`, body);
+  }
+
+  async sandboxRead(workspaceId: string, path: string) {
+    const cleaned = path.startsWith('/') ? path : `/${path}`;
+    return this.request<{ content: string; size: number; truncated: boolean }>(
+      'GET',
+      `/workspaces/${workspaceId}/sandbox/files${cleaned}`,
+    );
+  }
+
+  async sandboxCommit(workspaceId: string, body: { message: string; author?: { name: string; email: string } }) {
+    return this.request<{
+      commit_sha: string;
+      branch: string;
+      files_changed: number;
+      artifact_path: string;
+    }>('POST', `/workspaces/${workspaceId}/sandbox/commit`, body);
+  }
+}

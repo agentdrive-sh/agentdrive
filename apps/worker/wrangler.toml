@@ -1,0 +1,98 @@
+name = "agentdrive-worker"
+main = "src/index.ts"
+compatibility_date = "2025-02-20"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+workers_dev = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+invocation_logs = false
+
+[vars]
+ENVIRONMENT = "production"
+APP_URL = "https://app.agentdrive.sh"
+SITE_URL = "https://agentdrive.sh"
+MCP_URL = "https://mcp.agentdrive.sh/mcp"
+# CORS allows the web app on workers.dev (https://agentdrive-web.comfyfw.workers.dev and its version/alias previews) and no other workers.dev origin.
+WORKERS_DEV_SUBDOMAIN = "comfyfw"
+# "true" refuses a Free org's 11th cross-agent resume of the month; otherwise it only warns. See RUNBOOK.
+RESUME_METER_ENFORCE = "false"
+
+# Self service binding: the hosted /mcp tools dispatch REST calls in-process via
+# env.SELF instead of a network subrequest. A worker fetching its own custom
+# domain loops back through the edge and 522s; a service binding to self runs
+# in the same isolate with no loopback.
+[[services]]
+binding = "SELF"
+service = "agentdrive-worker"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "83750b9bf65e4765959824ec37a2b382"
+
+# OAuth grants, tokens and DCR clients for the hosted MCP. The library requires this binding name.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "12d71248f0fe495490e091d9f056683e"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "agentdrive-content"
+
+[durable_objects]
+bindings = [
+  { name = "FILE_COLLAB", class_name = "FileCollab" },
+  # One per lowercased email: its sign-in code, wrong-guess count, lockout and send cap.
+  { name = "MAGIC_CODES", class_name = "MagicCodes" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["FileCollab"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["MagicCodes"]
+
+[ai]
+binding = "AI"
+
+# Create with: wrangler vectorize create agentdrive-content --dimensions=768 --metric=cosine
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "agentdrive-content"
+
+# Transactional email (magic codes + invites) via Cloudflare Email Sending.
+# Onboard the sender domain once: `wrangler email sending enable agentdrive.sh`
+# (sets SPF/DKIM/DMARC). Once onboarded, this binding delivers to arbitrary
+# recipients — no API key needed. EmailService uses the structured send() API.
+[[send_email]]
+name = "SEND_EMAIL"
+
+# Workers Rate Limiting (needs wrangler 4.36+). period must be 10 or 60 seconds;
+# counts are per Cloudflare location. namespace_id is account-wide, so these sit
+# in a 41xxx range clear of other Workers on the account. Mirrored in
+# vitest.config.ts and in LIMITERS (middleware/rate-limit.ts) for Retry-After.
+[[ratelimits]]
+name = "RL_PRINCIPAL"
+namespace_id = "41001"
+simple = { limit = 100, period = 10 }
+
+[[ratelimits]]
+name = "RL_SEARCH"
+namespace_id = "41002"
+simple = { limit = 20, period = 10 }
+
+[[ratelimits]]
+name = "RL_REGISTER"
+namespace_id = "41003"
+simple = { limit = 5, period = 60 }
+
+[[ratelimits]]
+name = "RL_MAGIC"
+namespace_id = "41004"
+simple = { limit = 10, period = 60 }

@@ -1,0 +1,85 @@
+---
+title: MCP tools
+description: Every tool the AgentDrive MCP server exposes today and what each one does.
+---
+
+The MCP server is the lead surface. It exposes 22 tools: 18 stable tools for sessions, files, search and provenance, plus 4 experimental sandbox tools.
+
+## Sessions
+
+| Tool | Purpose |
+|---|---|
+| `drive_sessions` | List recent agent sessions for this project across harnesses (Claude Code, Codex, OpenCode, Gemini CLI, Cursor, Antigravity), newest first. Use to find prior work to continue. Optional `platform` and `project` filters, `limit` up to 50. |
+| `drive_resume` | Load a compact handoff brief (goal, files touched, recent turns) from a prior session, by default the latest one from a different harness, so you can continue that work. Pass `session_id` from `drive_sessions` to pick one; `max_chars` sets the budget (default 12,000). |
+
+Sessions are captured by hooks, not by these tools. See [Sessions](/docs/concepts/sessions).
+
+## Files
+
+| Tool | Purpose |
+|---|---|
+| `drive_write` | Create or update a file in a workspace. Content-addressed, immutable per version, embedded on write. |
+| `drive_read` | Fetch the content and metadata of a file by ID or path. |
+| `drive_list` | List files in a workspace with paging. |
+| `drive_delete` | Remove current file metadata and retrieval access. Stored blobs and historical records are retained. |
+
+## Collaboration
+
+| Tool | Purpose |
+|---|---|
+| `drive_share` | Mint a share link (HMAC-signed token) with `view`, `comment`, or `edit` permission, optionally email-gated. |
+| `drive_comment` | Attach a comment to a file, optionally pinned to a line range. |
+| `drive_feedback` | Read the comments and feedback already attached to an artifact. |
+
+## Provenance
+
+| Tool | Purpose |
+|---|---|
+| `drive_versions` | Walk the full version history of a file with actor and message metadata. |
+| `drive_activity` | Stream workspace events: writes, deletes, comments, shares, role changes. |
+
+## Org and identity
+
+| Tool | Purpose |
+|---|---|
+| `drive_invite` | Invite a human into the org by email. They join after they sign in and accept. |
+| `drive_roles` | List or change role assignments. |
+| `drive_org` | Read org metadata, plan, usage, and quota. |
+
+## Memory and runs
+
+| Tool | Purpose |
+|---|---|
+| `drive_search` | Semantic search over your workspace artifacts. |
+| `drive_recall` | Search artifacts for facts and preferences, with keyword fallback when semantic retrieval returns no results. Narrowing to auto-extracted facts is planned. |
+| `drive_context` | Top-N relevant artifacts for the current task, ranked by similarity and recency. The "right context at the right time" tool. |
+| `drive_log_run` | Capture agent run metadata: platform, run ID, artifacts referenced, artifacts produced, duration, status. |
+
+## Sandbox (experimental)
+
+| Tool | Purpose |
+|---|---|
+| `drive_sandbox_clone` | Clone a repository into a per-workspace Linux sandbox. |
+| `drive_sandbox_exec` | Run a shell command in the sandbox and capture stdout, stderr, exit code and duration. |
+| `drive_sandbox_read` | Read a file from the sandbox filesystem, such as build output or logs. |
+| `drive_sandbox_commit` | Stage and commit the sandbox worktree; the commit surfaces as an artifact at `commits/<sha>.json`. |
+
+The sandbox tools need Cloudflare Containers on the AgentDrive worker and return a 503 ("sandbox not configured") where it isn't available. They are not generally available.
+
+See the [roadmap](/docs/v1-roadmap) for what's coming next.
+
+## Choosing between tools
+
+- **Continuing a session another agent started:** `drive_sessions`, then `drive_resume`.
+- **Reading existing work from another agent:** start with `drive_context`. Or use `drive_list` + `drive_read` if you already know the path.
+- **Writing artifacts another agent will consume:** `drive_write`. The content hash is the durable identifier.
+- **Auditing what an agent did in a session:** `drive_activity` for the timeline, `drive_versions` per file.
+
+## Configuration
+
+The MCP server reads these environment variables:
+
+- `AGENTDRIVE_API_KEY` — optional. Defaults to the key saved by `adrive auth login`.
+- `AGENTDRIVE_API_URL` — optional. Defaults to `https://app.agentdrive.sh`.
+
+Cross-agent identity headers (`X-Agent-Platform`, `X-Agent-Role`) come from `AGENTDRIVE_AGENT_PLATFORM` and `AGENTDRIVE_AGENT_ROLE`; defaults are `unknown` and empty. See [Cross-agent identity](/docs/concepts/cross-agent-identity) for the model.

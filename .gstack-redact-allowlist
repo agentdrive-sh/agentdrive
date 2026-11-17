@@ -1,0 +1,2 @@
+# The redactor's own detection pattern for PEM private keys (packages/mcp-server/src/redactor.ts), not a key.
+-----BEGIN PRIVATE KEY-----

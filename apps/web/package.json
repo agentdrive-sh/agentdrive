@@ -1,0 +1,43 @@
+{
+  "name": "@agentdrive/web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start",
+    "generate": "fumadocs-mdx",
+    "pretypecheck": "fumadocs-mdx",
+    "typecheck": "tsc --noEmit",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "predeploy": "pnpm --filter @agentdrive/shared run build",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@agentdrive/shared": "workspace:*",
+    "@types/mdx": "^2.0.14",
+    "fumadocs-core": "^16.19.3",
+    "fumadocs-mdx": "^15.6.3",
+    "fumadocs-ui": "^16.19.3",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "simple-icons": "^16.38.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.17",
+    "@playwright/test": "^1.65.1",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.163.0"
+  }
+}

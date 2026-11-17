@@ -1,0 +1,63 @@
+import { z } from 'zod';
+import type { ApiClient, ContextArtifact } from '../api-client.js';
+
+export const driveContextSchema = {
+  task: z.string().min(1).max(2000).describe('What you are about to do — used to rank prior artifacts by relevance'),
+  workspace_id: z.string().optional().describe('Scope to a single workspace; omit for org-wide context'),
+  limit: z.number().int().positive().max(20).optional().describe('Max artifacts to return (default 5, max 20)'),
+};
+
+export async function driveContext(client: ApiClient, args: {
+  task: string;
+  workspace_id?: string;
+  limit?: number;
+}) {
+  const { artifacts, usage_warning } = await client.context({
+    task: args.task,
+    workspace_id: args.workspace_id,
+    limit: args.limit ?? 5,
+  });
+  // Shown here every time, so the write-tool notice must not repeat it.
+  client.takeUsageWarning();
+
+  const now = Date.now();
+  const body = artifacts.length === 0
+    ? 'No prior context found.'
+    : artifacts.map((a) => formatArtifact(a, now)).join('\n\n---\n\n');
+  return {
+    content: [{
+      type: 'text' as const,
+      text: usage_warning ? `${body}\n\n${usage_warning.message}` : body,
+    }],
+  };
+}
+
+function formatArtifact(a: ContextArtifact, now: number): string {
+  const snippet = truncate(a.snippet ?? '', 500);
+  // Current servers emit milliseconds; older indexed records/servers used
+  // Unix seconds. Keep the formatter compatible while those records migrate.
+  const createdAt = a.created_at < 1e12 ? a.created_at * 1000 : a.created_at;
+  const rel = relativeTime(now - createdAt);
+  return `${a.path} (by ${a.agent_id}@${a.agent_platform}, ${rel})\n${snippet}`;
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1) + '...';
+}
+
+export function relativeTime(ms: number): string {
+  if (ms < 0) return 'just now';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  const yr = Math.floor(mo / 12);
+  return `${yr}y ago`;
+}

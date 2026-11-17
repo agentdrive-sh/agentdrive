@@ -1,0 +1,57 @@
+{
+  "name": "@adrive/cli",
+  "version": "1.4.0",
+  "description": "AgentDrive CLI: capture coding-agent sessions and resume them across Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "adrive": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "homepage": "https://agentdrive.sh",
+  "bugs": {
+    "url": "https://github.com/agentdrive-sh/agentdrive-mcp/issues"
+  },
+  "keywords": [
+    "agentdrive",
+    "agent",
+    "ai-agent",
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\" && tsc && node -e \"import('node:fs').then(fs => fs.chmodSync('dist/index.js', 0o755))\"",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@adrive/mcp-server": "workspace:^",
+    "chokidar": "^5.0.0",
+    "commander": "^12.1.0",
+    "kleur": "^4.1.5",
+    "open": "^10.2.0",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/prompts": "^2.4.9",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=22.15"
+  }
+}

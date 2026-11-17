@@ -1,0 +1,15 @@
+{
+  "title": "AgentDrive Docs",
+  "pages": [
+    "index",
+    "quick-start",
+    "mcp-tools",
+    "rest-api",
+    "concepts",
+    "---Reference---",
+    "v1-roadmap",
+    "data-residency",
+    "self-hosting",
+    "license"
+  ]
+}

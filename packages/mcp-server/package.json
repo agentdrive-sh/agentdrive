@@ -1,0 +1,61 @@
+{
+  "name": "@adrive/mcp-server",
+  "mcpName": "sh.agentdrive/agentdrive",
+  "version": "1.3.0",
+  "description": "MCP server for AgentDrive: capture coding-agent sessions and resume them in any other agent, in any direction.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "adrive-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./registry": "./dist/registry.js",
+    "./session": "./dist/session.js",
+    "./project": "./dist/project.js",
+    "./redactor": "./dist/redactor.js",
+    "./local": "./dist/local.js",
+    "./transcripts/*": "./dist/transcripts/*.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "homepage": "https://agentdrive.sh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentdrive-sh/agentdrive-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentdrive-sh/agentdrive-mcp/issues"
+  },
+  "keywords": [
+    "agentdrive",
+    "mcp",
+    "model-context-protocol",
+    "agent",
+    "ai-agent",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\" && tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

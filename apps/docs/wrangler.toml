@@ -1,0 +1,9 @@
+name = "agentdrive-docs"
+main = "redirect.ts"
+compatibility_date = "2025-02-20"
+
+# docs.agentdrive.sh exists only to 301-redirect to the canonical branded docs
+# at agentdrive.sh/docs. See redirect.ts.
+routes = [
+  { pattern = "docs.agentdrive.sh", custom_domain = true },
+]

@@ -1,0 +1,106 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@source "../../node_modules/fumadocs-ui/dist/**/*.js";
+@source "../../node_modules/fumadocs-mdx/dist/**/*.js";
+@source "../../mdx-components.tsx";
+@source "../../content/docs/**/*.{md,mdx}";
+
+/*
+  Map Fumadocs UI tokens to AgentDrive's brand palette:
+  signal-orange accent, near-black surfaces, Geist typography.
+  Variables mirror what apps/web/app/globals.css exposes for the rest of
+  the site so the docs section feels continuous with the marketing pages.
+*/
+
+@theme {
+  /* Light mode (default) */
+  --color-fd-background: #fbfbfa;
+  --color-fd-foreground: #0a0a0b;
+  --color-fd-muted: #f6f6f4;
+  --color-fd-muted-foreground: #565660;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #0a0a0b;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #1e1e21;
+  --color-fd-border: #e5e5e1;
+  --color-fd-primary: oklch(0.65 0.20 45);
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #efefec;
+  --color-fd-secondary-foreground: #0a0a0b;
+  --color-fd-accent: #f6f6f4;
+  --color-fd-accent-foreground: #0a0a0b;
+  --color-fd-ring: oklch(0.65 0.20 45 / 0.5);
+  --color-fd-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* Dark mode reads the site tokens from globals.css directly, so the docs and
+   the marketing pages cannot drift apart. */
+.dark {
+  --color-fd-background: var(--bg-0);
+  --color-fd-foreground: var(--text-0);
+  --color-fd-muted: var(--bg-2);
+  --color-fd-muted-foreground: var(--text-2);
+  --color-fd-popover: var(--bg-1);
+  --color-fd-popover-foreground: var(--text-0);
+  --color-fd-card: var(--bg-1);
+  --color-fd-card-foreground: var(--text-0);
+  --color-fd-border: var(--border);
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: var(--accent-fg);
+  --color-fd-secondary: var(--bg-3);
+  --color-fd-secondary-foreground: var(--text-1);
+  --color-fd-accent: var(--bg-3);
+  --color-fd-accent-foreground: var(--text-0);
+  --color-fd-ring: var(--accent-line);
+  --color-fd-overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* Inline code chips inside docs prose — match AgentDrive code style */
+.prose :where(code):not(:where([class~="not-prose"] *)) {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 0.88em;
+  font-weight: 500;
+}
+
+/* Brand type on docs headings: same weight and tracking as the site. */
+.prose :where(h1, h2, h3):not(:where([class~="not-prose"] *)) {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.prose :where(a):not(:where([class~="not-prose"] *)) {
+  text-decoration-color: var(--color-fd-ring);
+  text-underline-offset: 3px;
+}
+.prose :where(a):not(:where([class~="not-prose"] *)):hover {
+  text-decoration-color: var(--color-fd-primary);
+}
+
+/* Sidebar active state — use signal-orange tint */
+[data-active="true"] {
+  color: var(--color-fd-primary) !important;
+}
+
+/* Fumadocs mobile header icons need independent, comfortably sized targets. */
+#nd-subnav button, #nd-subnav a[aria-label], #nd-sidebar button[aria-label] {
+  min-width: 44px;
+  min-height: 44px;
+}
+#nd-subnav { gap: 8px; }
+
+#nd-docs-layout button[aria-label="Open Search"],
+#nd-docs-layout button[aria-label="Open Sidebar"],
+#nd-docs-layout button[aria-label="Collapse Sidebar"],
+#nd-page button[aria-label="Copy Text"] { min-width: 44px; min-height: 44px; }
+
+/* Keep a larger copy target above the code, never over its last characters. */
+#nd-page figure.shiki > div:has(> button[aria-label="Copy Text"]) {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  padding-inline: 8px;
+  border-bottom: 1px solid var(--color-fd-border);
+  border-radius: 0;
+  backdrop-filter: none;
+}

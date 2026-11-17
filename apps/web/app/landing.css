@@ -1,0 +1,567 @@
+/* Landing page only. Composes the shared .m-* system from globals.css and
+   adds landing-scoped .l-* pieces; shared token names only, no new globals. */
+
+.landing {
+  --l-grid: color-mix(in oklab, var(--text-0) 4%, transparent);
+  --l-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.l-accent { color: var(--accent); }
+
+/* Grid backdrop, hero only. */
+.l-backdrop {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(var(--l-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--l-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center top;
+  mask-image: radial-gradient(ellipse 60% 70% at 72% 32%, #000 20%, transparent 72%);
+}
+@keyframes l-rise { from { opacity: 0; transform: translateY(12px); } }
+@keyframes l-drop { from { opacity: 0; translate: 0 -10px; } }
+@keyframes l-draw-y { from { transform: scaleY(0); } }
+@keyframes l-draw-x { from { transform: scaleX(0); } }
+@keyframes l-blink { 50% { opacity: 0; } }
+
+/* Section heads: heading left, lede right on wide screens. */
+@media (min-width: 900px) {
+  .landing .l-head-split {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px 64px; align-items: end;
+  }
+  .landing .l-head-split .m-h2 { margin: 0; }
+}
+
+/* Tinted bands alternate with plain sections to give the page a rhythm. */
+.landing .l-band { background: var(--bg-1); }
+.landing .l-band .l-boundary { background: var(--bg-0); }
+
+/* Hero */
+.l-hero { position: relative; isolation: isolate; overflow: hidden; padding-top: 88px; }
+.l-hero-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  gap: 48px; align-items: center;
+}
+.l-hero-pill { margin: 0 0 24px; font-size: 12px; }
+.l-hero-ver {
+  margin-left: 2px; padding-left: 8px;
+  border-left: 1px solid var(--l-ring);
+  font-family: var(--font-mono);
+}
+.l-hero .l-h1 { font-size: clamp(40px, 4.2vw, 56px); line-height: 1.04; }
+.l-hero .m-lede { margin-bottom: 28px; }
+.l-hero-copy > .m-actions { margin-top: 24px; }
+.landing .l-harnesses { margin-top: 80px; }
+
+/* Entrance runs once on load. The H1 and lede stay put: they are the LCP. */
+.l-hero-copy > .m-code-block { animation: l-rise 520ms 120ms var(--ease-out) both; }
+.l-hero-copy > .m-actions { animation: l-rise 520ms 220ms var(--ease-out) both; }
+
+/* Hero relay. One registered number, --t, runs 0 -> 1 per loop and every piece
+   derives its state from it with clamp(), so the sequence is a single keyframe
+   and pausing is one animation-play-state. Where the loop does not run, --t
+   rests at 0.9: the finished frame. */
+@property --t { syntax: '<number>'; inherits: true; initial-value: 0.9; }
+@keyframes l-tick { from { --t: 0; } to { --t: 1; } }
+
+.l-relay {
+  /* The pieces read --u, which finishes the sequence three quarters of the way
+     through the loop, so the finished frame holds for about four seconds. */
+  --u: calc(var(--t) * 4 / 3);
+  --out: clamp(0, (var(--t) - 0.94) * 20, 1);
+  position: relative; margin: 0; min-width: 0;
+  display: flex; flex-direction: column;
+  animation: l-rise 600ms 150ms var(--ease-out) both, l-tick 12s 600ms linear infinite both;
+}
+/* Stopping drops only the loop: --t falls back to 0.9, the finished frame,
+   while the entrance still completes. */
+.l-relay.stopped { animation-name: l-rise, none; }
+.l-relay.stopped *, .l-relay.offscreen, .l-relay.offscreen * { animation-play-state: paused; }
+.l-relay.stopped .l-caret { animation: none; }
+.l-relay .l-ln {
+  --on: clamp(0, (var(--u) - var(--s)) * 25, 1);
+  opacity: calc(var(--on) * (1 - var(--out)));
+  translate: 0 calc((1 - var(--on)) * 4px);
+}
+
+.l-win {
+  background: var(--bg-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.l-win.from {
+  --d: calc(clamp(0, (var(--u) - 0.25) * 12, 1) * (1 - var(--out)));
+  width: 86%;
+  opacity: calc(1 - var(--d) * 0.45);
+  scale: calc(1 - var(--d) * 0.03);
+  transform-origin: top left;
+}
+.l-win.to {
+  --a: calc(clamp(0, (var(--u) - 0.5) * 12, 1) * (1 - var(--out)));
+  width: 90%; align-self: flex-end;
+  opacity: calc(0.5 + var(--a) * 0.5);
+  border-color: color-mix(in oklab, var(--accent) calc(var(--a) * 55%), var(--border-strong));
+  box-shadow: var(--shadow-3), 0 30px 80px -40px color-mix(in oklab, var(--accent) calc(var(--a) * 70%), transparent);
+}
+.l-win-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  font-size: 12.5px; font-weight: 500; color: var(--text-0);
+}
+.l-win-tag {
+  margin-left: auto;
+  padding: 1px 8px; border-radius: var(--r-full);
+  background: var(--bg-3); color: var(--text-2);
+  font: 500 12px/18px var(--font-mono);
+}
+.l-win-tag.live { background: var(--accent-soft); color: var(--accent); }
+.l-win-body {
+  display: flex; flex-direction: column; gap: 4px;
+  min-height: 104px; padding: 12px 14px 14px;
+  font: 12.5px/1.6 var(--font-mono); color: var(--text-1);
+}
+.l-win-body .user { color: var(--text-0); }
+.l-win-body .dim { color: var(--text-3); }
+.l-win-body .err { color: var(--danger); }
+/* Skeleton lines hold the waiting Codex window until the brief arrives. */
+.l-win.to .l-win-body { position: relative; }
+.l-win.to .l-win-body::before {
+  content: ''; position: absolute; left: 14px; right: 14px; top: 18px; height: 54px;
+  background:
+    linear-gradient(var(--bg-3) 0 0) 0 0 / 68% 6px no-repeat,
+    linear-gradient(var(--bg-3) 0 0) 0 24px / 42% 6px no-repeat,
+    linear-gradient(var(--bg-3) 0 0) 0 48px / 56% 6px no-repeat;
+  opacity: calc(1 - var(--a));
+}
+.l-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-block: 2px; }
+.l-chips i {
+  font-style: normal; font-size: 12px;
+  padding: 0 8px; border-radius: var(--r-full);
+  border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent);
+}
+.l-caret {
+  display: inline-block; width: 7px; height: 1.05em; margin-left: 4px;
+  vertical-align: -0.15em; background: var(--accent);
+  animation: l-blink 1s steps(1) infinite;
+}
+
+.l-hub { position: relative; height: 88px; }
+.l-hub-art { position: absolute; inset: 0; }
+.l-hub-path {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--l-ring) 0 4px, transparent 4px 9px);
+  animation: l-march 900ms linear infinite;
+}
+@keyframes l-march { to { background-position: 0 9px; } }
+.l-hub-node {
+  --np: min(clamp(0, (var(--u) - 0.33) * 14, 1), clamp(0, (0.45 - var(--u)) * 14, 1));
+  position: absolute; z-index: 2; left: 50%; top: 50%; translate: -50% -50%;
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 12px;
+  background: var(--bg-1); border: 1px solid var(--accent-line); color: var(--accent);
+  box-shadow: 0 0 0 calc(var(--np) * 10px) var(--accent-soft), var(--shadow-1);
+}
+.l-hub-label {
+  position: absolute; left: calc(50% + 32px); top: 50%; margin-top: -9px;
+  font: 500 12px/18px var(--font-mono); color: var(--text-2);
+}
+.l-packet {
+  --pp: clamp(0, (var(--u) - 0.26) / 0.24, 1);
+  position: absolute; z-index: 1; left: 50%; top: calc(var(--pp) * 100%);
+  translate: -50% -50%;
+  opacity: calc(clamp(0, (var(--u) - 0.25) * 25, 1) * clamp(0, (0.52 - var(--u)) * 25, 1));
+  padding: 0 9px; border-radius: var(--r-full);
+  background: var(--accent); color: var(--accent-fg);
+  font: 600 12px/22px var(--font-mono);
+  box-shadow: 0 0 0 4px var(--bg-0), 0 6px 20px -6px var(--accent);
+}
+.l-relay-toggle {
+  position: absolute; left: -8px; top: 50%; translate: 0 -50%;
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; background: none; color: var(--text-2); cursor: pointer;
+}
+.l-relay-toggle::before {
+  content: ''; position: absolute; inset: 8px; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--bg-1);
+  transition: border-color var(--dur-1) var(--ease-out);
+}
+.l-relay-toggle:hover { color: var(--text-0); }
+.l-relay-toggle:hover::before { border-color: var(--text-3); }
+.marketing .l-relay-toggle:focus-visible { outline: none; }
+.l-relay-toggle:focus-visible::before { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.l-relay-toggle span { position: relative; width: 10px; height: 10px; }
+.l-relay-toggle .stop { width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+.l-relay-toggle .play { background: currentColor; clip-path: polygon(15% 0, 100% 50%, 15% 100%); }
+
+/* Harness strip: hairline cells, alternate cells a shade lighter, each a link to its guide. */
+.landing .l-harnesses { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; }
+.landing .m-harness-group h2 {
+  margin: 0 0 12px;
+  font: 500 12px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.landing .m-harness-group ul {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px;
+  background: var(--border); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+}
+.landing .m-harness-group.secondary ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.landing .m-harness-group li { display: grid; background: var(--bg-0); }
+.landing .m-harness-group li:nth-child(even) { background: color-mix(in oklab, var(--text-0) 2%, var(--bg-0)); }
+.landing .m-harness-group li > a {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  min-height: 92px; padding: 12px 8px;
+  font-size: 13px; text-align: center; color: inherit; text-decoration: none;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.landing .m-harness-group li > a:hover { background: var(--bg-2); color: var(--text-0); }
+.landing .m-harness-group li > a:focus-visible { outline-offset: -2px; }
+
+/* How it works: mono step pills sit on the rule, which draws in on scroll. */
+.l-steps {
+  list-style: none; margin: 0; padding: 0; position: relative;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 32px;
+}
+.l-steps::before, .l-steps::after {
+  content: ''; position: absolute; top: 12px; left: 0; right: 0; height: 1px;
+}
+.l-steps::before { background: var(--border-strong); }
+.l-steps::after {
+  background: linear-gradient(90deg, var(--accent), var(--l-ring) 55%, transparent);
+  transform-origin: left;
+}
+.l-steps li { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.l-step-n {
+  position: relative; z-index: 1;
+  height: 24px; padding: 0 10px; margin-bottom: 20px;
+  display: inline-grid; place-items: center;
+  border-radius: var(--r-full);
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-0));
+  border: 1px solid var(--l-ring);
+  box-shadow: 0 0 0 6px var(--bg-0);
+  font: 500 12px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--accent);
+}
+.l-steps .m-h3 { margin-bottom: 16px; }
+.l-snippet {
+  align-self: stretch; flex: 1;
+  margin: 0; padding: 14px 16px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--text-0) 4%, transparent);
+  font-family: var(--font-mono); font-size: var(--t-sm); line-height: 1.75;
+  color: var(--text-0);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  view-timeline-name: --snip;
+}
+.l-snippet > span { display: block; }
+.l-snippet .dim { color: var(--text-3); }
+.l-snippet .ok { font-weight: 400; color: var(--success); }
+.l-snippet .h { color: var(--accent); }
+.l-capture { display: flex; flex-direction: column; gap: 8px; white-space: normal; }
+.l-capture .l-cap-head { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
+.l-live { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.l-capture .l-turn { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text-1); }
+.l-turn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l-turn .user { color: var(--text-0); }
+.l-turn .err { color: var(--danger); }
+.l-turn svg { flex-shrink: 0; margin-left: auto; color: var(--accent); }
+
+/* Outcomes: joined hairline cells, each led by a small product graphic. The
+   link stretches over its cell, so the whole cell is the target. */
+.l-outcomes {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px;
+  background: var(--border); border: 1px solid var(--border);
+  /* clip, not hidden: hidden would become the scroller the --art timelines track, freezing them. */
+  border-radius: var(--r-xl); overflow: clip;
+}
+.l-outcomes article {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 28px 28px 16px;
+  background: var(--bg-0);
+  transition: background var(--dur-2) var(--ease-out);
+}
+.l-outcomes article:hover { background: var(--bg-1); }
+.l-outcomes .m-h3 { margin: 0; }
+.l-outcomes .m-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 4px; }
+.l-outcomes .m-link::after { content: ''; position: absolute; inset: 0; }
+.l-outcomes .m-link svg { color: var(--accent); transition: transform var(--dur-2) var(--ease-out); }
+.l-outcomes article:hover .m-link svg, .l-outcomes .m-link:focus-visible svg { transform: translateX(3px); }
+
+.l-art {
+  align-self: stretch; height: 132px; margin: 0 0 24px; padding: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  width: 100%; max-width: 280px; margin-inline: auto;
+  view-timeline-name: --art;
+}
+
+.l-url, .l-ttl, .l-hit, .l-art-versions li {
+  display: grid; align-items: center; gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-1);
+  font: 500 12px var(--font-mono); color: var(--text-2);
+}
+.l-url, .l-q {
+  height: 34px;
+  border-color: var(--border-strong);
+  background: var(--bg-0);
+}
+.l-url { grid-template-columns: 12px minmax(0, 1fr) 12px; color: var(--text-0); }
+.l-url svg { color: var(--text-3); }
+.l-url svg:first-child { color: var(--accent); }
+.l-url span, .l-art-versions .msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l-scopes { display: flex; gap: 6px; }
+.l-scopes i {
+  padding: 0 8px; border-radius: var(--r-full);
+  border: 1px solid var(--border); background: var(--bg-1); color: var(--text-2);
+  font: 500 12px/24px var(--font-mono);
+}
+.l-scopes i.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+.l-ttl { grid-template-columns: 12px minmax(0, 1fr) auto; height: 30px; }
+.l-ttl svg, .l-hit svg { color: var(--text-3); }
+.l-ttl-bar, .l-score { position: relative; height: 4px; border-radius: 2px; background: var(--bg-3); overflow: hidden; }
+.l-ttl-bar::after, .l-score::after {
+  content: ''; position: absolute; inset: 0; width: var(--w, 64%);
+  border-radius: inherit; background: var(--accent); transform-origin: left;
+}
+@keyframes l-drain { from { width: 100%; } }
+
+.l-art-versions { list-style: none; gap: 6px; }
+.l-art-versions li { grid-template-columns: 16px 20px minmax(0, 1fr) auto; gap: 10px; height: 32px; padding: 0 10px; }
+.l-art-versions li:first-child {
+  border-color: var(--accent-line);
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-1));
+  color: var(--text-0);
+}
+.l-art-versions .when { color: var(--text-3); }
+
+.l-q {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  color: var(--text-3);
+  font: 12px var(--font-mono);
+}
+.l-q-text {
+  width: 17ch; overflow: hidden; white-space: nowrap;
+  padding-right: 2px; border-right: 2px solid var(--accent);
+  color: var(--text-0);
+}
+.l-hit { grid-template-columns: 12px minmax(0, 1fr) 64px; height: 30px; color: var(--text-1); }
+
+/* Privacy: the dashed rule is the edge of your machine. Captured items cross
+   it; the rest stop short of it. */
+.l-boundary { border: 1px solid var(--border); border-radius: var(--r-xl); overflow: clip; }
+.l-flow {
+  position: relative;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-block: 28px 32px;
+  container-type: inline-size;
+  view-timeline-name: --flow;
+}
+.l-flow::before {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  border-left: 1px dashed var(--border-strong);
+}
+.l-flow-head {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding-inline: 28px;
+  font: 500 12px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-2);
+}
+.l-flow-head:first-child { justify-content: flex-end; }
+.l-flow-head svg { color: var(--text-3); }
+.l-flow-head + .l-flow-head svg { color: var(--accent); }
+.l-lanes {
+  grid-column: 1 / -1;
+  list-style: none; margin: 24px 0 0; padding: 0;
+  display: grid; gap: 10px;
+}
+.l-lanes li { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.l-chip {
+  --gap: 20px;
+  display: inline-flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 2 * var(--gap));
+  padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-1);
+  font-size: var(--t-sm); line-height: 1.4; color: var(--text-2);
+}
+.l-chip svg { flex-shrink: 0; color: var(--text-3); }
+.l-chip > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.l-lanes .kept .l-chip { grid-column: 1; justify-self: end; margin-right: var(--gap); }
+.l-lanes .sent .l-chip {
+  grid-column: 2; justify-self: start; margin-left: var(--gap);
+  border-color: var(--accent-line); background: var(--accent-soft); color: var(--text-0);
+}
+.l-lanes .sent .l-chip svg { color: var(--accent); }
+.l-encrypt {
+  list-style: none; margin: 0; padding: 18px 28px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklab, var(--text-0) 2%, transparent);
+  display: flex; flex-wrap: wrap; gap: 12px 40px;
+}
+.l-encrypt li { display: flex; align-items: baseline; gap: 10px; font-size: var(--t-md); line-height: 1.55; color: var(--text-2); }
+.l-encrypt li > svg { color: var(--accent); position: relative; top: 2px; }
+.l-encrypt strong { color: var(--text-0); font-weight: 500; }
+
+/* Pricing cards are shared with /pricing, so the joined layout stays on the
+   landing page, and only where the plans sit side by side. */
+@media (min-width: 900px) {
+  .landing .m-plans { gap: 0; border: 1px solid var(--border); border-radius: var(--r-xl); }
+  .landing .m-plan { border: 0; border-radius: 0; background: transparent; }
+  .landing .m-plan + .m-plan { border-left: 1px solid var(--border); }
+  .landing .m-plan.highlight {
+    z-index: 1; margin-block: -14px; padding-block: 38px;
+    border: 1px solid var(--accent-line); border-radius: var(--r-xl);
+    background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 8%, var(--bg-1)), var(--bg-1) 55%);
+    box-shadow: var(--shadow-3);
+  }
+  .landing .m-plan.highlight + .m-plan { border-left: 0; }
+  .landing .m-enterprise { margin-top: 32px; }
+}
+
+/* Closing CTA: a frame whose rules run past its corners. */
+.l-final {
+  /* clip, not hidden: clips the full-bleed rules without becoming a scroll container. */
+  overflow: clip;
+  padding-block: 112px;
+  text-align: center;
+}
+.l-final-inner {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 80px 32px;
+  border: 1px solid var(--border);
+}
+.l-final-inner::before, .l-final-inner::after { content: ''; position: absolute; pointer-events: none; }
+.l-final-inner::before { inset: -1px -100vw; border-block: 1px solid var(--border); }
+.l-final-inner::after {
+  inset: -56px -1px; border-inline: 1px solid var(--border);
+  mask-image: linear-gradient(transparent, #000 56px, #000 calc(100% - 56px), transparent);
+}
+.landing .l-final-title { font-size: clamp(32px, 5vw, 56px); margin-bottom: 32px; }
+.l-final .m-code-block { width: 100%; text-align: left; }
+.l-final .m-actions { justify-content: center; margin-top: 24px; }
+
+@media (max-width: 1023px) {
+  .l-hero-grid { grid-template-columns: minmax(0, 1fr); gap: 56px; }
+  .l-hero .l-h1 { font-size: clamp(32px, 7.2vw, 46px); }
+  .l-relay { max-width: 560px; }
+}
+@media (max-width: 899px) {
+  .landing .l-harnesses { grid-template-columns: minmax(0, 1fr); }
+  .landing .m-harness-group ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .landing .m-plans { max-width: none; }
+  .l-outcomes { grid-template-columns: minmax(0, 1fr); }
+  .l-steps { grid-template-columns: minmax(0, 1fr); }
+  .l-steps::before, .l-steps::after { top: 12px; bottom: 12px; left: 18px; right: auto; width: 1px; height: auto; }
+  .l-steps::after {
+    background: linear-gradient(180deg, var(--accent), var(--l-ring) 55%, transparent);
+    transform-origin: top;
+  }
+  .l-steps li { position: relative; padding-left: 60px; }
+  .l-step-n { position: absolute; left: 0; top: 0; margin: 0; }
+}
+@media (max-width: 599px) {
+  .l-hero { padding-top: 40px; }
+  .l-hero-grid { gap: 32px; }
+  .landing .l-harnesses { margin-top: 32px; padding-block: 28px; gap: 24px; }
+  .landing .m-harness-group li > a { min-height: 80px; }
+  .landing .m-section { padding-block: 48px; }
+  .landing .m-head { margin-bottom: 28px; }
+  .l-outcomes article { padding: 24px 22px 12px; }
+  /* Phones drop the rail so the snippets get the full width. */
+  .l-steps { gap: 28px; }
+  .l-steps::before, .l-steps::after { display: none; }
+  .l-steps li { padding-left: 0; }
+  .l-step-n { position: relative; margin-bottom: 12px; }
+  /* Commands scroll rather than wrap, so a line never strands its tail. */
+  .landing .m-code-row pre, pre.l-snippet { white-space: pre; overflow-wrap: normal; overflow-x: auto; scrollbar-width: thin; }
+  .l-flow { padding-block: 22px 24px; }
+  .l-flow-head { padding-inline: 12px; }
+  .l-chip { --gap: 8px; gap: 6px; padding: 4px 8px; }
+  .l-encrypt { padding: 16px 22px; }
+  .l-final { padding-block: 64px; }
+  .l-final-inner { padding: 48px 12px; }
+  .l-win.from, .l-win.to { width: 94%; }
+  .l-win-body { font-size: 12px; }
+}
+@media (max-width: 359px) {
+  .l-win.from, .l-win.to { width: 100%; }
+  .l-win-body { padding-inline: 12px; font-size: 11.5px; }
+}
+
+/* Scroll-driven motion: the steps and outcomes reveal, rails draw and the small
+   graphics play as they scroll in. Without support (Firefox today) everything
+   renders in its finished state; nothing waits on JS. No keyframe sets a `to`
+   frame, so the static styles above are always the end state. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .l-steps, .l-outcomes {
+      animation: l-rise auto linear both;
+      animation-timeline: view();
+      /* A fixed 160px, not a percentage: tall grids on phones would otherwise sit half-faded mid-screen. */
+      animation-range: entry 0% entry 160px;
+    }
+    .l-steps::after {
+      animation: l-draw-x auto linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 45%;
+    }
+
+    .l-snippet > span { animation: l-rise auto linear both; animation-timeline: --snip; }
+    .l-snippet > span:nth-child(1) { animation-range: cover 4% cover 12%; }
+    .l-snippet > span:nth-child(2) { animation-range: cover 9% cover 17%; }
+    .l-snippet > span:nth-child(3) { animation-range: cover 14% cover 22%; }
+    .l-snippet > span:nth-child(4) { animation-range: cover 19% cover 27%; }
+    .l-turn svg { animation: l-rise auto linear both; animation-timeline: --snip; }
+    .l-turn:nth-child(2) svg { animation-range: cover 15% cover 23%; }
+    .l-turn:nth-child(3) svg { animation-range: cover 20% cover 28%; }
+    .l-turn:nth-child(4) svg { animation-range: cover 25% cover 33%; }
+
+    .l-url { animation: l-rise auto linear both; animation-timeline: --art; animation-range: cover 14% cover 26%; }
+    .l-scopes i { animation: l-drop auto linear both; animation-timeline: --art; }
+    .l-scopes i:nth-child(1) { animation-range: cover 22% cover 30%; }
+    .l-scopes i:nth-child(2) { animation-range: cover 26% cover 34%; }
+    .l-scopes i:nth-child(3) { animation-range: cover 30% cover 38%; }
+    .l-ttl-bar::after { animation: l-drain auto linear both; animation-timeline: --art; animation-range: cover 28% cover 46%; }
+
+    .l-art-versions li { animation: l-drop auto linear both; animation-timeline: --art; }
+    .l-art-versions li:nth-child(3) { animation-range: cover 14% cover 24%; }
+    .l-art-versions li:nth-child(2) { animation-range: cover 22% cover 32%; }
+    .l-art-versions li:nth-child(1) { animation-range: cover 30% cover 42%; }
+
+    .l-q-text { animation: l-type auto steps(17, end) both; animation-timeline: --art; animation-range: cover 14% cover 32%; }
+    .l-hit { animation: l-rise auto linear both; animation-timeline: --art; }
+    .l-hit:nth-child(2) { animation-range: cover 30% cover 38%; }
+    .l-hit:nth-child(3) { animation-range: cover 34% cover 42%; }
+    .l-score::after { animation: l-draw-x auto linear both; animation-timeline: --art; animation-range: cover 36% cover 50%; }
+
+    .l-lanes .sent .l-chip { animation: l-cross auto linear both; animation-timeline: --flow; }
+    .l-lanes .kept .l-chip { animation: l-stop auto linear both; animation-timeline: --flow; }
+    .l-lanes li:nth-child(1) .l-chip { animation-range: cover 16% cover 34%; }
+    .l-lanes li:nth-child(2) .l-chip { animation-range: cover 20% cover 34%; }
+    .l-lanes li:nth-child(3) .l-chip { animation-range: cover 24% cover 42%; }
+    .l-lanes li:nth-child(4) .l-chip { animation-range: cover 28% cover 42%; }
+    .l-lanes li:nth-child(5) .l-chip { animation-range: cover 32% cover 46%; }
+  }
+  @media (prefers-reduced-motion: no-preference) and (max-width: 899px) {
+    .l-steps::after { animation-name: l-draw-y; }
+  }
+}
+@keyframes l-type { from { width: 0; } }
+/* -50cqw is one column of .l-flow: a captured chip starts on your machine's side. */
+@keyframes l-cross { from { translate: -50cqw 0; opacity: 0; } 30% { opacity: 1; } }
+@keyframes l-stop { from { translate: -20cqw 0; opacity: 0; } 30% { opacity: 1; } 75% { translate: 10px 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .l-hero-copy > .m-code-block, .l-hero-copy > .m-actions,
+  .l-relay, .l-hub-path, .l-caret { animation: none; }
+  .l-relay-toggle { display: none; }
+}

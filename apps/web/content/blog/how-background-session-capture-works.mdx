@@ -1,0 +1,112 @@
+---
+title: How background session capture works
+description: Hooks in six agent tools, a detached sync, client-side redaction and ignore rules, the storage layout, and how a handoff brief is built for the next agent.
+date: 2026-11-10
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive lets one coding agent resume a session another one started. To make that work without asking you to save anything, it has to capture sessions in the background, safely, and without slowing the agent down. This post walks through how that works in the `adrive` CLI and the MCP server. All of the code described here is in the Apache-2.0 client packages.
+
+## 1. A hook in every harness
+
+Each supported agent CLI has a lifecycle hook system, and AgentDrive registers the same command in each one:
+
+```bash
+command -v adrive >/dev/null 2>&1 && adrive hook <harness> || npx -y @adrive/cli hook <harness>
+```
+
+The `npx` fallback exists because agents launched from a GUI often don't have the global npm bin directory on their `PATH`.
+
+| Harness | Where the hook lives | Events |
+|---|---|---|
+| Claude Code | the AgentDrive plugin | `SessionStart`, `Stop`, `SessionEnd`, `PreCompact` |
+| Codex | `~/.codex/hooks.json` | `SessionStart`, `Stop`, `SessionEnd`, `PreCompact` |
+| Gemini CLI | `~/.gemini/settings.json` | `SessionStart`, `AfterAgent`, `SessionEnd`, `PreCompress` |
+| Cursor | `~/.cursor/hooks.json` | `sessionStart`, `stop`, `sessionEnd`, `preCompact` |
+| Antigravity | `~/.gemini/config/hooks.json` | `SessionStart`, `Stop` |
+| OpenCode | a plugin in `~/.config/opencode/plugins/` | `session.created`, `session.idle` |
+
+`adrive init` merges these entries into the existing config files. It keeps any hooks you already have, in their original order, and re-running it produces identical output. Codex only runs hooks it trusts, so setup also records that approval for you; on an older Codex you approve them once via `/hooks`.
+
+## 2. The hook returns fast, and sync runs detached
+
+Hooks run inline with the agent. Codex caps hook timeouts at 3 seconds, so `adrive hook` does almost nothing itself. It reads the event payload (session id, working directory, transcript path), records which directory the session belongs to, starts a detached `adrive sync` process and exits 0. A hook failure is swallowed, so it can't block or break your session.
+
+On a session-start event, if auto-context is on, the hook also asks AgentDrive for this project's recent sessions. It puts the newest session from each other harness first and returns up to three as extra context for the agent, with a hint to call `drive_resume`. OpenCode's plugin API has no way to inject context, so OpenCode skips this step.
+
+The detached sync then does the real work:
+
+- **Locking.** One sync runs at a time, coordinated through a lock file in `~/.config/agentdrive/`. A sync started by a burst of hook events waits up to 30 seconds for the lock instead of giving up.
+- **Debounce.** A turn-end event (`Stop`, `stop`, `AfterAgent`) re-syncs a session at most every two minutes. Session-end and compaction events skip the debounce, so the final state always lands.
+- **Sweep.** Each sync also checks every harness for sessions that changed since the last sweep. The first sweep looks back 14 days and handles at most 50 sessions per run. A session that was killed before its end event gets finalized once it has been idle for 30 minutes.
+- **Reading transcripts.** Each harness stores sessions differently. Claude Code keeps JSONL under `~/.claude/projects`, Codex keeps rollout files under `$CODEX_HOME/sessions`, Gemini CLI stores sessions under `~/.gemini/tmp`, Cursor under `~/.cursor/projects`, Antigravity under `~/.gemini/<app>/brain`, and OpenCode exposes them through `opencode session list` and `opencode export`. A parser for each one normalizes the session into turns, tool calls and touched paths.
+
+## 3. Redaction and ignore rules
+
+Two layers run on your machine before anything is uploaded.
+
+**Path rules decide which files can be uploaded at all.** Artifact capture only looks at files the agent touched in that session. A file is skipped unless every check below passes:
+
+- It is inside your home directory or the session's project.
+- It doesn't match the built-in deny list. That list covers `.env` and `.env.*`, `.dev.vars`, `.ssh/`, `.aws/`, `.kube/`, `.npmrc`, `.netrc`, `*.pem`, `*.key`, `credentials.json`, `auth.json`, shell history, SQLite databases, `node_modules/`, `dist/` and more. The deny list is a hard gate: a project's `.adriveignore` can't override it.
+- It doesn't match the project's `.adriveignore`. This file uses a subset of gitignore syntax: comments, `!` negation, `/` anchoring, `*` and `**`.
+- It is untracked and not ignored by git, or it sits outside any repository. Tracked files are already in git, and gitignored files are where secrets tend to live. If `git status` fails for any other reason, the file is skipped.
+- It is no larger than 1 MB and doesn't look binary (no NUL byte in the first 8 KB).
+
+**Content redaction scrubs what does get uploaded.** The transcript and every captured file go through a pattern-based redactor. It replaces AWS access keys and secrets, GCP service-account private keys, Stripe, GitHub, Anthropic, OpenAI, Slack and AgentDrive tokens, JWTs, PEM private-key blocks, and `SOMETHING_KEY=...`-style assignments with markers like `[redacted:github-token]`. The version message records which kinds were redacted, never the values.
+
+The redactor is best-effort, and it is **not a security boundary**. Pattern matching will miss secrets that don't look like secrets. That's why the path rules come first, and why Private Workspace exists.
+
+## 4. Storage layout
+
+Each session is rendered as plain markdown: a header with the project, working directory, title and turn count, a "Files touched" list, then one `## user` or `## assistant` section per turn with `> tool:` lines for tool calls. The sync writes it to:
+
+```
+sessions/<project>/<harness>/<session-id>.md
+sessions/<project>/files/<path relative to the project>
+```
+
+The project key is derived from where you work, so every harness files the same repo under the same key:
+
+- With a git remote, it's the normalized remote URL, such as `github.com__acme__api`.
+- With a local repo and no remote, it's the repo folder name plus a short hash of its path.
+- Outside a repo, it's `local__<folder>-<hash>`.
+- Sessions from Claude Code worktrees file under their parent repo.
+
+Workspace files are versioned and content-addressed, so re-uploading an unchanged file costs nothing. Each session is also recorded as a run with the id `<harness>:<session-id>`. The run carries the session title, its status (`in_progress` or `success`), the ids of the files it uploaded, the transcript path, the paths it touched and the time of the last turn. Every request is stamped with the harness as its agent platform, which is where provenance comes from: the timeline shows that Codex wrote this file and Claude Code read it.
+
+## 5. Building the handoff brief
+
+When an agent calls `drive_resume` with no arguments, AgentDrive picks the latest session in this project from a **different** harness. Resuming in Codex therefore gives you the Claude Code session, not Codex's own last run. You can also pass a specific id from `drive_sessions`.
+
+The full transcript would usually be too large to load, so the brief is built to a character budget (12,000 by default, up to 50,000):
+
+1. A one-line intro naming the source harness and session, with an instruction to check file state on disk before relying on it.
+2. The session metadata.
+3. **Goal:** the first user message, capped at 1,500 characters.
+4. **Files touched**, plus the workspace ids of the uploaded copies, so an agent on another machine can fetch them with `drive_read`.
+5. **Recent turns**, newest first, added until the budget runs out, with a marker for how many earlier turns were left out.
+
+If the head is too large, the file lists shrink first, so even a small budget carries the latest turns. Resume works the same way through `/agentdrive:resume` in Claude Code and `adrive resume` in a shell.
+
+## 6. Private Workspace
+
+Turn it on with `adrive privacy --private-workspace on`, and the sync changes in four ways:
+
+- Transcripts and captured files are encrypted on your machine with AES-256-GCM before upload. The data key is generated locally and stored wrapped in your AgentDrive config directory. The server only ever sees ciphertext.
+- The project key is replaced with a hash (`p-` plus 16 hex characters), and captured files are stored under hashed names, so repo names and file paths don't appear in storage paths.
+- Run metadata, which the server has to read, leaves out the working directory, the title and the touched paths. The session appears as "Private session".
+- The MCP server can't decrypt, so `drive_resume` tells the agent to run `adrive resume <id>` in a shell. That command decrypts locally and prints the brief.
+
+The trade-off is that server-side features can't read encrypted content. That's the point.
+
+## Try it
+
+```bash
+curl -fsSL agentdrive.sh/install | sh
+adrive sync --dry-run    # parse local sessions and report, upload nothing
+adrive privacy --show    # see what's on
+```
+
+The [sessions docs](/docs/concepts/sessions) cover the same ground in reference form.
