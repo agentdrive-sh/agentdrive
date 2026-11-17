@@ -1,36 +1,57 @@
 # AgentDrive
 
-**Start in any agent. Finish in any other.**
+**Hit your usage limit in one coding agent. Keep going in another, with the same context.**
 
-![Replay of real CLI output from a synthetic transcript](./.github/assets/demo.gif)
+[![License: AGPL-3.0 server, Apache-2.0 clients](https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue)](./LICENSING.md)
+[![npm @adrive/cli](https://img.shields.io/npm/v/@adrive/cli?label=%40adrive%2Fcli)](https://www.npmjs.com/package/@adrive/cli)
+[![npm @adrive/mcp-server](https://img.shields.io/npm/v/@adrive/mcp-server?label=%40adrive%2Fmcp-server)](https://www.npmjs.com/package/@adrive/mcp-server)
 
-<sub>Replay of real CLI output from a synthetic transcript.</sub>
+[![A Codex session stops at its usage limit. In Claude Code, /agentdrive:resume loads a handoff brief from Codex with the same goal, files touched and recent turns.](./.github/assets/resume-in-another-agent.png)](https://go2.gg/agentdrive-film)
 
-AgentDrive syncs your coding-agent sessions and turns them into a handoff brief any other agent can pick up: the goal, the files touched and the recent turns. Work in Codex, then resume the same task in Claude Code, Cursor or Antigravity without re-explaining it. Artifacts your agents write land in a shared workspace with provenance for every agent, semantic search and storage you can point at your own bucket.
+[Watch the 30-second film](https://go2.gg/agentdrive-film) · [Website](https://go2.gg/agentdrive) · [Quick start](https://go2.gg/agentdrive-docs)
 
-In the demo, `adrive sync` syncs a Codex-format session and `adrive resume` returns its goal and files touched to a different agent platform.
-
----
+AgentDrive syncs your sessions across Claude Code, Codex, OpenCode, Cursor and Antigravity. When you switch agents, the next one gets a handoff brief with the goal, the files touched and the recent turns, so you do not have to explain the task again.
 
 ## Quick start
 
-There are three ways to run AgentDrive.
-
-### 1. Local mode, no account
-
-Resume works on one machine without signing up: AgentDrive reads each agent's own transcripts on disk. Install the CLI (Node.js 22.15 or later):
+Install the CLI and connect every agent it finds (Node.js 22.15 or later):
 
 ```bash
-npm install -g @adrive/cli
+curl -fsSL agentdrive.sh/install | sh
 ```
 
-Without a login, `adrive resume` reads your agents' transcripts straight from disk. In your project directory:
+The script installs `@adrive/cli` and runs `adrive init`, which signs you in through the browser and wires session sync hooks, the MCP server and the resume commands into Codex, OpenCode, Cursor and Antigravity. If the `claude` command is on your PATH, it also installs the Claude Code plugin. Read it first with `curl -fsSL agentdrive.sh/install | less`; the source is [`apps/installer/install.sh`](./apps/installer/install.sh).
+
+To set up Claude Code on its own, install the plugin from inside it, then run `/agentdrive:login`:
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+Work in one agent. When you switch, open the next agent in the same project directory and run `/agentdrive:resume` in Claude Code, or `adrive resume` in a terminal. You can also ask the agent to resume your last AgentDrive session.
+
+Video walkthroughs: [Install AgentDrive and connect your coding agents](https://youtu.be/sm9-RbE8oUw) and [Resume a Codex session in Claude Code](https://youtu.be/nj7esMsJiwA). More on the [YouTube channel](https://go2.gg/agentdrive-youtube).
+
+## Three ways to run it
+
+| Mode | What you get | Setup |
+|---|---|---|
+| Local, no account | Resume between agents on one machine | `npm install -g @adrive/cli` |
+| Hosted ([plans](https://go2.gg/agentdrive)) | Sync across machines, shared workspace, search and sharing | `curl -fsSL agentdrive.sh/install \| sh` |
+| Self-hosted | The same server on your own Cloudflare account, API-key only | `pnpm selfhost` |
+
+### Local mode
+
+Without a login, the CLI reads each agent's own transcripts on disk. Nothing is uploaded. In your project directory:
 
 ```bash
 adrive resume --list     # recent sessions for this project, across agents
 adrive resume            # handoff brief for the latest one
 adrive resume --local    # force local mode even when you are logged in
 ```
+
+Claude Code, Codex and OpenCode sessions need no setup. Cursor and Antigravity record no project directory in their transcripts, so their sessions show up once `adrive init --local` has wired the agents' hooks.
 
 The MCP server's `drive_sessions` and `drive_resume` tools also work without an API key, so an agent can list and resume local sessions on its own:
 
@@ -45,32 +66,9 @@ The MCP server's `drive_sessions` and `drive_resume` tools also work without an 
 }
 ```
 
-Claude Code, Codex and OpenCode sessions need no setup. Cursor and Antigravity record no project directory in their transcripts, so their sessions are found once `adrive init --local` has wired the agents' hooks.
+### Self-hosted on Cloudflare
 
-Local mode reads transcripts from disk only. Cross-machine resume, the shared workspace, search and sharing need the hosted service or a self-hosted server.
-
-### 2. Hosted service
-
-One line installs the CLI, signs you in, and wires every agent it finds:
-
-```bash
-curl -fsSL agentdrive.sh/install | sh
-```
-
-It installs `@adrive/cli`, runs `adrive init` to log in through the browser, and wires session sync hooks, the MCP server and the resume commands into Codex, OpenCode, Cursor and Antigravity. Zed, Cline and Continue get the MCP server only. Read the script first with `curl -fsSL agentdrive.sh/install | less`; its source is [`apps/installer/install.sh`](./apps/installer/install.sh).
-
-In Claude Code, install the plugin instead:
-
-```
-/plugin marketplace add agentdrive-sh/agentdrive-mcp
-/plugin install agentdrive@agentdrive
-```
-
-Then run `/agentdrive:login`. The hosted API lives at [app.agentdrive.sh](https://app.agentdrive.sh); plans and limits are on [agentdrive.sh](https://agentdrive.sh).
-
-### 3. Self-host on Cloudflare
-
-The server is a Cloudflare Worker backed by KV, R2, Vectorize and Workers AI. To run it on your own Cloudflare account:
+The server is a Cloudflare Worker backed by KV, R2, Vectorize and Workers AI:
 
 ```bash
 git clone https://github.com/agentdrive-sh/agentdrive.git
@@ -80,8 +78,6 @@ pnpm selfhost
 ```
 
 Self-hosting is community-supported and needs the Workers Paid plan. A self-hosted instance is API-key only: the script registers your owner key and prints the `adrive auth login --with-key` command that connects the CLI to your deployment. See the [self-hosting guide](https://agentdrive.sh/docs/self-hosting).
-
----
 
 ## Supported agents
 
@@ -112,7 +108,7 @@ Sync adapters for Cline, Zed and Continue are good first contributions; see [`CO
 ```
                     +-------------------+
   Claude Code  -->  |                   |
-  Codex CLI    -->  |  MCP / REST / CLI |  -->  Cloudflare Worker (Hono)
+  Codex        -->  |  MCP / REST / CLI |  -->  Cloudflare Worker (Hono)
   Cursor       -->  |                   |               |
   LangGraph    -->  +-------------------+               v
                                               +-------------------+
@@ -146,7 +142,7 @@ plugins/
 
 ## Documentation
 
-- [agentdrive.sh/docs](https://agentdrive.sh/docs): [quick start](https://agentdrive.sh/docs/quick-start), [sessions](https://agentdrive.sh/docs/concepts/sessions), [MCP tools](https://agentdrive.sh/docs/mcp-tools), [REST API](https://agentdrive.sh/docs/rest-api). Source in [`apps/web/content/docs/`](./apps/web/content/docs/).
+- [agentdrive.sh/docs](https://agentdrive.sh/docs): [quick start](https://go2.gg/agentdrive-docs), [sessions](https://agentdrive.sh/docs/concepts/sessions), [MCP tools](https://agentdrive.sh/docs/mcp-tools), [REST API](https://agentdrive.sh/docs/rest-api). Source in [`apps/web/content/docs/`](./apps/web/content/docs/).
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): dev setup, house style and where to start.
 - [`docs/tech/`](./docs/tech/): architecture and ADRs.
 - [`docs/ops/runbook.md`](./docs/ops/runbook.md): deploy, rollback and secret rotation.

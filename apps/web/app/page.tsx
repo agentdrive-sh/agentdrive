@@ -92,7 +92,7 @@ export default function MarketingHome() {
 
           <div className="m-wrap">
             <div className="m-harnesses l-harnesses">
-              <HarnessGroup title="Capture and resume" ids={CAPTURE_HARNESSES} />
+              <HarnessGroup title="Sync and resume" ids={CAPTURE_HARNESSES} />
               <HarnessGroup title="MCP tools" ids={MCP_CLIENTS} secondary />
             </div>
           </div>
