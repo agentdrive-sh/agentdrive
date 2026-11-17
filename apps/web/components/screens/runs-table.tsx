@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { PLATFORMS, PlatformChip, type PlatformId } from '../platform-glyph';
+import { PLATFORMS, PlatformChip, displayPlatform, type PlatformId } from '../platform-glyph';
 import { StatusPill } from '../shared';
 import { Icon } from '../icon';
 import { humanTime } from '../../lib/time';
@@ -27,7 +27,7 @@ const STATUS_MAP: Record<RunRecord['status'], 'success' | 'partial' | 'failed' |
 export function RunsTable({ runs }: RunsTableProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [platform, setPlatform] = useState('all');
-  const platforms = useMemo(() => [...new Set(runs.map(platformOf))].sort(), [runs]);
+  const platforms = useMemo(() => [...new Set(runs.map((r) => displayPlatform(platformOf(r))))].sort(), [runs]);
 
   const counts = useMemo(() => {
     return {
@@ -39,7 +39,7 @@ export function RunsTable({ runs }: RunsTableProps) {
   }, [runs]);
 
   const filtered = useMemo(() => {
-    const onPlatform = platform === 'all' ? runs : runs.filter((r) => platformOf(r) === platform);
+    const onPlatform = platform === 'all' ? runs : runs.filter((r) => displayPlatform(platformOf(r)) === platform);
     if (filter === 'all') return onPlatform;
     if (filter === 'failed') return onPlatform.filter((r) => r.status === 'failure');
     return onPlatform.filter((r) => r.status === filter);

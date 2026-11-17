@@ -27,10 +27,6 @@ const PROFILES: Record<string, Profile> = {
     capture: 'Hooks in ~/.cursor/hooks.json fire on sessionStart, stop, sessionEnd and preCompact, and hand the session to a background sync.',
     command: '/agentdrive-resume',
   },
-  'gemini-cli': {
-    capture: 'Hooks in ~/.gemini/settings.json fire on SessionStart, AfterAgent, SessionEnd and PreCompress. The sync reads the session from ~/.gemini/tmp.',
-    command: '/agentdrive:resume',
-  },
   antigravity: {
     capture: 'A hook in ~/.gemini/config/hooks.json fires on SessionStart and Stop. Antigravity has no session-end event, so a session counts as finished after 30 minutes idle.',
   },
@@ -54,7 +50,7 @@ function notesFor(from: PlatformId, to: PlatformId): Note[] {
   }
   if (from === 'codex') {
     notes.push({
-      text: `Codex imports sessions from other agents but has no export command, so ${label(to)} cannot read Codex sessions natively. AgentDrive captures them through Codex's own hooks instead.`,
+      text: `Codex imports sessions from other agents but has no export command, so ${label(to)} cannot read Codex sessions natively. AgentDrive syncs them through Codex's own hooks instead.`,
       source: CODEX_IMPORT,
     });
   }
@@ -62,14 +58,6 @@ function notesFor(from: PlatformId, to: PlatformId): Note[] {
     notes.push({
       text: 'Claude Code deletes local transcripts after 30 days by default (the cleanupPeriodDays setting), so the copy AgentDrive keeps is also your long-term record.',
       source: 'https://code.claude.com/docs/en/settings-reference#cleanupperioddays',
-    });
-  }
-  if (from === 'gemini-cli' || to === 'gemini-cli') {
-    notes.push({
-      text: from === 'gemini-cli' && to === 'antigravity'
-        ? 'Google retired Gemini CLI for personal accounts on June 18, 2026 and moved them to Antigravity CLI. AgentDrive carries your Gemini CLI session history across, so Antigravity can continue where Gemini CLI stopped.'
-        : 'Google retired Gemini CLI for personal accounts on June 18, 2026 in favor of Antigravity CLI. This handoff still works wherever Gemini CLI runs.',
-      source: 'https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/',
     });
   }
   return notes;

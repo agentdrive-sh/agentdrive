@@ -32,8 +32,8 @@ export function HandoffDemo() {
       aria-labelledby="handoff-caption"
     >
       <figcaption id="handoff-caption" className="m-sr">
-        A Codex session hits its usage limit on a failing test. AgentDrive captures its goal, files
-        and recent turns, and Claude Code resumes from that brief.
+        A Codex session hits its usage limit on a failing test. AgentDrive has synced the session, and
+        Claude Code resumes from a brief of its goal, files and recent turns.
       </figcaption>
       <div className="l-win from" aria-hidden="true">
         <div className="l-win-bar">
@@ -51,7 +51,7 @@ export function HandoffDemo() {
         <span className="l-hub-art" aria-hidden="true">
           <span className="l-hub-path" />
           <span className="l-hub-node"><AgentDriveLogo size={18} /></span>
-          <span className="l-hub-label l-ln" style={at(0.36)}>captured</span>
+          <span className="l-hub-label l-ln" style={at(0.36)}>synced</span>
           <span className="l-packet">brief</span>
         </span>
         {hydrated && (

@@ -5,10 +5,11 @@ import { DEFAULT_PREFERENCES, type CliConfig } from './config.js';
 
 function notice(on: boolean): string {
   return `
-${kleur.bold(`AgentDrive capture is ${on ? 'on' : 'off'}`)}
-  - ${on ? 'Captured' : 'When on, captures'}: your agent session transcripts, and files your agents write that git doesn't track.
+${kleur.bold(`AgentDrive session sync is ${on ? 'on' : 'off'}`)}
+  - ${on ? 'Uploads' : 'When on, uploads'} to your AgentDrive workspace: your agent session transcripts, and files your agents write that git doesn't track.
+  - If you run ${kleur.bold('adrive watch')}, it uploads every file under that folder, existing ones included, except .gitignore and .adriveignore matches.
   - Secrets are redacted on this device before anything is uploaded.
-  - Turn on "Private workspace" to encrypt everything end-to-end on your device.
+  - Turn on Private Workspace to encrypt synced content on your device before upload.
   - Agent tools you install later are connected automatically at their next session.
   - ${on ? 'Change or turn it off anytime' : 'Turn it on'}: ${kleur.bold('adrive privacy')}
 `;
@@ -62,7 +63,7 @@ async function pickDefaultWorkspace(
     const res = (await prompts({
       type: 'select',
       name: 'ws',
-      message: 'Default workspace for captured sessions',
+      message: 'Default workspace for synced sessions',
       choices: workspaces.map((w) => ({ title: `${w.name} (${w.id})`, value: w.id })),
     })) as { ws?: string };
     if (res.ws) return res.ws;

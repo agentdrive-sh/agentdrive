@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 
 const TITLE = 'AgentDrive — start in any agent, finish in any other';
 const DESCRIPTION =
-  "The shared workspace that lets Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage on R2, S3 or your own bucket.";
+  "The shared workspace that lets Claude Code, Codex, OpenCode, Cursor and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage on R2, S3 or your own bucket.";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://agentdrive.sh'),
@@ -37,7 +37,6 @@ export const metadata: Metadata = {
     'Codex',
     'OpenCode',
     'Cursor',
-    'Gemini CLI',
     'Antigravity',
     'bring your own bucket',
   ],

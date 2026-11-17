@@ -11,7 +11,7 @@ import { MarketingFooter } from '@/components/marketing/footer';
 import cli from '../../../packages/cli/package.json';
 import './landing.css';
 
-const CAPTURE_HARNESSES: PlatformId[] = ['claude-code', 'codex', 'opencode', 'cursor', 'gemini-cli', 'antigravity'];
+const CAPTURE_HARNESSES: PlatformId[] = ['claude-code', 'codex', 'opencode', 'cursor', 'antigravity'];
 const MCP_CLIENTS: PlatformId[] = ['cline', 'zed', 'continue'];
 const VERSIONS: [PlatformId, string, string, string][] = [
   ['codex', 'v3', 'fix window reset', 'now'],
@@ -26,7 +26,7 @@ const TURNS: [string, string][] = [
 const LANES: [boolean, ReactNode][] = [
   [true, 'Prompts and replies'],
   [false, <><code>.env</code>, keys, <code>.ssh</code></>],
-  [true, 'Untracked files the agent wrote'],
+  [true, 'Untracked files the agent wrote, and folders you watch'],
   [false, <><code>.adriveignore</code> paths</>],
   [false, 'Recognized secrets, redacted'],
 ];
@@ -74,8 +74,8 @@ export default function MarketingHome() {
                 <span className="l-accent">Finish in any other.</span>
               </h1>
               <p className="m-lede">
-                Hit a usage limit in one coding agent? Keep going in another. AgentDrive captures every
-                session and resumes it in any direction.
+                Hit a usage limit in one coding agent? Keep going in another. AgentDrive syncs each
+                session to your workspace, and any of your other agents can resume it.
               </p>
               <InstallBlock />
               <div className="m-actions">
@@ -122,7 +122,7 @@ export default function MarketingHome() {
                 <div className="l-snippet l-capture" role="img" aria-label="Each turn of the session uploads in the background">
                   <span className="l-cap-head">
                     <i className="l-live" />
-                    capturing
+                    syncing
                     <PlatformGlyph platform="claude-code" size={12} />
                   </span>
                   {TURNS.map(([tone, text]) => (
@@ -151,7 +151,7 @@ export default function MarketingHome() {
           <div className="m-wrap">
             <div className="m-head">
               <h2 id="l-pillars-title" className="m-h2">
-                One workspace under every harness
+                One workspace for every agent
               </h2>
             </div>
             <div className="l-outcomes">
@@ -221,14 +221,14 @@ export default function MarketingHome() {
                 </h3>
                 <h3 className="l-flow-head">
                   <Icon name="upload" size={12} />
-                  Captured
+                  Synced
                 </h3>
                 <ul className="l-lanes">
                   {LANES.map(([sent, item], i) => (
                     <li key={i} className={sent ? 'sent' : 'kept'}>
                       <span className="l-chip">
                         <Icon name={sent ? 'check' : 'x'} size={12} />
-                        <span className="m-sr">{sent ? 'Captured: ' : 'Stays local: '}</span>
+                        <span className="m-sr">{sent ? 'Synced: ' : 'Stays local: '}</span>
                         <span>{item}</span>
                       </span>
                     </li>

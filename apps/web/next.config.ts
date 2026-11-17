@@ -4,6 +4,18 @@ import { createMDX } from 'fumadocs-mdx/next';
 // shortcut: ignores q-values, upgrade to a negotiator if a client sends text/markdown;q=0
 const acceptsMarkdown = [{ type: 'header' as const, key: 'accept', value: '(.*)text/markdown(.*)' }];
 
+// Gemini CLI pages were folded into Antigravity; keep their indexed URLs working.
+const GEMINI_PAIR_PEERS = ['claude-code', 'codex', 'opencode', 'cursor'];
+const geminiRedirects = [
+  { source: '/integrations/gemini-cli', destination: '/integrations/antigravity', permanent: true },
+  { source: '/resume/gemini-cli-to-antigravity', destination: '/integrations/antigravity', permanent: true },
+  { source: '/resume/antigravity-to-gemini-cli', destination: '/integrations/antigravity', permanent: true },
+  ...GEMINI_PAIR_PEERS.flatMap((peer) => [
+    { source: `/resume/gemini-cli-to-${peer}`, destination: `/resume/antigravity-to-${peer}`, permanent: true },
+    { source: `/resume/${peer}-to-gemini-cli`, destination: `/resume/${peer}-to-antigravity`, permanent: true },
+  ]),
+];
+
 const config: NextConfig = {
   reactStrictMode: true,
   images: {
@@ -43,6 +55,7 @@ const config: NextConfig = {
         destination: 'https://agentdrive.sh/:path*',
         permanent: false,
       },
+      ...geminiRedirects,
     ];
   },
   async rewrites() {

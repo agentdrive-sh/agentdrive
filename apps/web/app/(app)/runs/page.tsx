@@ -30,7 +30,7 @@ export default async function RunsPage() {
         sub={
           <>
             Every <span className="mono fg-0">drive_log_run()</span> call
-            captures task, artifacts touched, and cross-platform provenance.
+            logs the task, artifacts touched, and cross-platform provenance.
           </>
         }
       />

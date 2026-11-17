@@ -19,11 +19,11 @@ export interface PrivacyOptions {
 }
 
 function display(p: CliPreferences): void {
-  process.stdout.write(`\n${kleur.bold('AgentDrive privacy + memory preferences')}\n\n`);
+  process.stdout.write(`\n${kleur.bold('AgentDrive privacy and sync preferences')}\n\n`);
   process.stdout.write(`  Always-on context        ${p.auto_context ? kleur.green('on') : kleur.dim('off')}\n`);
-  process.stdout.write(`  Capture artifacts        ${p.capture_artifacts ? kleur.green('on') : kleur.dim('off')}\n`);
-  process.stdout.write(`  Remember conversations   ${p.capture_transcripts ? kleur.green('on') : kleur.dim('off')}\n`);
-  process.stdout.write(`  Private workspace (E2E)  ${p.private_workspace ? kleur.green('on') : kleur.dim('off')}\n`);
+  process.stdout.write(`  Sync artifacts           ${p.capture_artifacts ? kleur.green('on') : kleur.dim('off')}\n`);
+  process.stdout.write(`  Sync transcripts         ${p.capture_transcripts ? kleur.green('on') : kleur.dim('off')}\n`);
+  process.stdout.write(`  Private Workspace (E2E)  ${p.private_workspace ? kleur.green('on') : kleur.dim('off')}\n`);
   process.stdout.write(`  Connect new agent tools  ${p.auto_wire ? kleur.green('on') : kleur.dim('off')}\n`);
   process.stdout.write(`\n${kleur.dim('Change with `adrive privacy --capture-artifacts on` etc., or run it bare to step through.')}\n`);
 }
@@ -69,7 +69,7 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
       {
         type: 'toggle',
         name: 'capture_artifacts',
-        message: 'Capture artifacts',
+        message: 'Sync artifacts (untracked files your agents write; also allows adrive watch to upload a folder)',
         initial: current.capture_artifacts,
         active: 'on',
         inactive: 'off',
@@ -77,7 +77,7 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
       {
         type: 'toggle',
         name: 'capture_transcripts',
-        message: 'Remember conversations',
+        message: 'Sync session transcripts',
         initial: current.capture_transcripts,
         active: 'on',
         inactive: 'off',
@@ -85,7 +85,7 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
       {
         type: 'toggle',
         name: 'private_workspace',
-        message: 'Private workspace (E2E encrypted)',
+        message: 'Private Workspace (E2E encrypted)',
         initial: current.private_workspace,
         active: 'on',
         inactive: 'off',

@@ -22,7 +22,7 @@ export function IntegrationLayout({ platform, label, lede, children }: Integrati
         </p>
         <div className="m-int-badge">
           <PlatformGlyph platform={platform} size={26} />
-          <span className="pill success">Capture + resume</span>
+          <span className="pill success">Sync + resume</span>
         </div>
         <h1 className="m-h1 page">AgentDrive for {label}</h1>
         <p className="m-lede">{lede}</p>
@@ -38,7 +38,7 @@ export function IntegrationLayout({ platform, label, lede, children }: Integrati
       <ProseSection>
         <nav className="m-toc" aria-label="On this page">
           <strong>Your first handoff</strong>
-          <a href="#install">1. Install</a><a href="#capture">2. Capture</a><a href="#resume">3. Resume</a><a href="#troubleshooting">Troubleshooting</a>
+          <a href="#install">1. Install</a><a href="#capture">2. Sync</a><a href="#resume">3. Resume</a><a href="#troubleshooting">Troubleshooting</a>
         </nav>
         {children}
         <IntegrationSection id="handoffs" title={`Hand off from ${label}`}>
@@ -52,9 +52,9 @@ export function IntegrationLayout({ platform, label, lede, children }: Integrati
         </IntegrationSection>
         <IntegrationSection id="troubleshooting" title="If the session does not appear">
           <p>Restart {label} after setup so it loads the MCP connection and hooks. Use the same project directory and AgentDrive account in both agents.</p>
-          <p>In a terminal, check your capture settings, sync, then list the uploaded sessions:</p>
+          <p>In a terminal, check your sync settings, run a sync, then list the uploaded sessions:</p>
           <Snippet>{'adrive privacy --show\nadrive sync\nadrive resume --list'}</Snippet>
-          <p>If transcript capture is off, a handoff brief is unavailable. For an encrypted session, run <code>adrive resume &lt;session-id&gt;</code> on the machine holding its encryption key.</p>
+          <p>If transcript sync is off, a handoff brief is unavailable. For an encrypted session, run <code>adrive resume &lt;session-id&gt;</code> on the machine holding its encryption key.</p>
           <p>Still stuck? See the <a href="/docs/concepts/sessions">session reference</a> or <a href="mailto:hello@agentdrive.sh">contact us</a>.</p>
         </IntegrationSection>
       </ProseSection>

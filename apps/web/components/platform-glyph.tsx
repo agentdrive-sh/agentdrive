@@ -37,6 +37,11 @@ export interface PlatformMeta {
   bg: string;
 }
 
+// Users know Google's gemini-cli sessions as Antigravity, so both ids render, filter and count as one.
+const ANTIGRAVITY: PlatformMeta = { label: 'Antigravity', short: 'AY', color: '#3186ff', bg: '#122338' };
+
+export const displayPlatform = (id: string): string => (id === 'gemini-cli' ? 'antigravity' : id);
+
 export const PLATFORMS: Record<PlatformId, PlatformMeta> = {
   'claude-code': {
     label: 'Claude Code',
@@ -47,8 +52,8 @@ export const PLATFORMS: Record<PlatformId, PlatformMeta> = {
   codex: { label: 'Codex', short: 'CX', color: '#f4f4f5', bg: '#1f1f23' },
   cursor: { label: 'Cursor', short: 'CR', color: '#e5e5e5', bg: '#27272a' },
   opencode: { label: 'OpenCode', short: 'OP', color: '#f1ecec', bg: '#1f1f23' },
-  'gemini-cli': { label: 'Gemini CLI', short: 'GM', color: '#1186fc', bg: '#1e1e2e' },
-  antigravity: { label: 'Antigravity', short: 'AY', color: '#3186ff', bg: '#122338' },
+  'gemini-cli': ANTIGRAVITY,
+  antigravity: ANTIGRAVITY,
   langgraph: {
     label: 'LangGraph',
     short: 'LG',
@@ -114,18 +119,6 @@ const MARKS: Partial<Record<PlatformId, Mark>> = {
       { d: 'M180 60H60V240H180V60ZM240 300H0V0H240V300Z' },
     ],
   },
-  // No vector is published; geometry measured from the official 1645px icon at
-  // geminicli.com/icon.png (rounded-square frame + prompt chevron), drawn in its base blue.
-  'gemini-cli': {
-    viewBox: '0 0 1645 1645',
-    paths: [
-      {
-        fillRule: 'evenodd',
-        d: 'M300 0H1345A300 300 0 0 1 1645 300V1345A300 300 0 0 1 1345 1645H300A300 300 0 0 1 0 1345V300A300 300 0 0 1 300 0ZM300 97A203 203 0 0 0 97 300V1345A203 203 0 0 0 300 1548H1345A203 203 0 0 0 1548 1345V300A203 203 0 0 0 1345 97Z',
-      },
-      { d: 'M494 398L1152 715V970L494 1286V1097L1023 842L494 588Z' },
-    ],
-  },
   // antigravity.google/favicon.svg, arch shape in its base #3186FF (the gradient mesh is dropped).
   antigravity: {
     viewBox: '11 12 90 90',
@@ -172,7 +165,7 @@ interface GlyphSVGProps {
 
 export function GlyphSVG({ platform, size = 14 }: GlyphSVGProps) {
   const p = PLATFORMS[platform as PlatformId] ?? PLATFORMS.unknown;
-  const mark = MARKS[platform as PlatformId];
+  const mark = MARKS[displayPlatform(platform) as PlatformId];
 
   if (!mark) {
     return (

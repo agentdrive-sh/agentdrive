@@ -281,7 +281,7 @@ function quotaFeatures(q: PlanQuota, seats = plural(q.max_human_seats, 'principa
 }
 
 export const ALL_PLANS_INCLUDE: string[] = [
-  'Session capture and resume across Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity',
+  'Session sync and resume across Claude Code, Codex, OpenCode, Cursor and Antigravity',
   'Versioned, content-addressed workspace',
   "Semantic search across every agent's work",
   'Provenance timeline: which agent did what, on which artifact',

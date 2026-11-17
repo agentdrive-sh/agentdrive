@@ -28,7 +28,7 @@ export async function driveShare(client: ApiClient, args: {
   );
 
   const emailNote = share.email_gated
-    ? `\nEmail-gated: only ${args.email} can access (they'll verify via magic code)`
+    ? `\nEmail-gated: only ${args.email} can access (they'll verify with a code sent to that address)`
     : '\nPublic: anyone with the link can access';
 
   return {

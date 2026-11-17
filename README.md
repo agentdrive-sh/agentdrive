@@ -6,9 +6,9 @@
 
 <sub>Replay of real CLI output from a synthetic transcript.</sub>
 
-AgentDrive captures your coding-agent sessions and turns them into a handoff brief any other agent can pick up: the goal, the files touched and the recent turns. Work in Codex, then resume the same task in Claude Code, Cursor or Gemini CLI without re-explaining it. Artifacts your agents write land in a shared workspace with provenance for every agent, semantic search and storage you can point at your own bucket.
+AgentDrive syncs your coding-agent sessions and turns them into a handoff brief any other agent can pick up: the goal, the files touched and the recent turns. Work in Codex, then resume the same task in Claude Code, Cursor or Antigravity without re-explaining it. Artifacts your agents write land in a shared workspace with provenance for every agent, semantic search and storage you can point at your own bucket.
 
-In the demo, `adrive sync` captures a Codex-format session and `adrive resume` returns its goal and files touched to a different agent platform.
+In the demo, `adrive sync` syncs a Codex-format session and `adrive resume` returns its goal and files touched to a different agent platform.
 
 ---
 
@@ -45,7 +45,7 @@ The MCP server's `drive_sessions` and `drive_resume` tools also work without an 
 }
 ```
 
-Claude Code, Codex and OpenCode sessions need no setup. Cursor and Antigravity record no project directory in their transcripts, so their sessions are found once `adrive init --local` has wired the agents' hooks; the same goes for Gemini CLI sessions opened outside the project root.
+Claude Code, Codex and OpenCode sessions need no setup. Cursor and Antigravity record no project directory in their transcripts, so their sessions are found once `adrive init --local` has wired the agents' hooks.
 
 Local mode reads transcripts from disk only. Cross-machine resume, the shared workspace, search and sharing need the hosted service or a self-hosted server.
 
@@ -57,7 +57,7 @@ One line installs the CLI, signs you in, and wires every agent it finds:
 curl -fsSL agentdrive.sh/install | sh
 ```
 
-It installs `@adrive/cli`, runs `adrive init` to log in through the browser, and wires session capture hooks, the MCP server and the resume commands into Codex, OpenCode, Gemini CLI, Cursor and Antigravity. Zed, Cline and Continue get the MCP server only. Read the script first with `curl -fsSL agentdrive.sh/install | less`; its source is [`apps/installer/install.sh`](./apps/installer/install.sh).
+It installs `@adrive/cli`, runs `adrive init` to log in through the browser, and wires session sync hooks, the MCP server and the resume commands into Codex, OpenCode, Cursor and Antigravity. Zed, Cline and Continue get the MCP server only. Read the script first with `curl -fsSL agentdrive.sh/install | less`; its source is [`apps/installer/install.sh`](./apps/installer/install.sh).
 
 In Claude Code, install the plugin instead:
 
@@ -85,26 +85,25 @@ Self-hosting is community-supported and needs the Workers Paid plan. A self-host
 
 ## Supported agents
 
-| Agent | Session capture and resume | MCP tools |
+| Agent | Session sync and resume | MCP tools |
 |---|---|---|
 | Claude Code | Yes (plugin or installer) | Yes |
 | Codex | Yes | Yes |
 | OpenCode | Yes | Yes |
 | Cursor | Yes | Yes |
-| Gemini CLI | Yes | Yes |
 | Antigravity | Yes | Yes |
 | Cline | Not yet | Yes |
 | Zed | Not yet | Yes |
 | Continue | Not yet | Yes |
 
-Capture adapters for Cline, Zed and Continue are good first contributions; see [`CONTRIBUTING.md`](./CONTRIBUTING.md#where-to-start).
+Sync adapters for Cline, Zed and Continue are good first contributions; see [`CONTRIBUTING.md`](./CONTRIBUTING.md#where-to-start).
 
 ## What you get
 
 - **Cross-agent resume.** `adrive resume`, `/agentdrive:resume` in Claude Code, or the `drive_sessions` and `drive_resume` MCP tools.
 - **22 MCP tools** for files, versions, comments, shares, activity, semantic search, run logs and session resume ([reference](https://agentdrive.sh/docs/mcp-tools)).
-- **Provenance.** One API key is a principal; each agent identifies its platform and role per request, so every write records which agent made it.
-- **Private Workspace.** CLI-captured content can be encrypted client-side (AES-256-GCM) before upload.
+- **Provenance.** One API key is a principal; each agent identifies its platform and role per request, so every write keeps the name of the agent that made it.
+- **Private Workspace.** Content the CLI syncs can be encrypted client-side (AES-256-GCM) before upload.
 - **Bring your own bucket.** Point a workspace at your own R2 or any S3-compatible bucket.
 - **REST API and TypeScript SDK** (`@adrive/sdk`) for agents that do not speak MCP.
 

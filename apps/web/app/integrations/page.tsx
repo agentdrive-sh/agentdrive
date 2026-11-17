@@ -8,7 +8,7 @@ import { CAPTURE_HARNESSES, MCP_CLIENTS } from './data';
 export const metadata: Metadata = {
   title: 'Integrations',
   description:
-    'Session capture and resume for Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity. Workspace tools for Cline, Zed, Continue and any MCP client.',
+    'Session sync and resume for Claude Code, Codex, OpenCode, Cursor and Antigravity. Workspace tools for Cline, Zed, Continue and any MCP client.',
   alternates: { canonical: '/integrations' },
 };
 
@@ -18,7 +18,7 @@ export default function IntegrationsIndex() {
       <PageHero
         width="wide"
         title="Start in any agent. Finish in any other."
-        lede="Six agent tools capture their sessions into your shared workspace and can resume each other's work. Any other MCP client gets the workspace tools. One API key covers all of them; provenance records which agent did what."
+        lede="Five agents sync their sessions into your shared workspace and can resume each other's work. Any other MCP client gets the workspace tools. One API key covers all of them; provenance shows which agent did what."
         actions={<InstallBlock />}
       />
 
@@ -26,7 +26,7 @@ export default function IntegrationsIndex() {
         <div className="m-wrap">
           <div className="m-head">
             <h2 id="capture" className="m-h2">
-              Session capture and resume
+              Session sync and resume
             </h2>
             <p className="m-lede">
               Hooks upload each session in the background. Any of these can resume a session another one started.
@@ -39,7 +39,7 @@ export default function IntegrationsIndex() {
                   <span className="m-tile-head">
                     <PlatformGlyph platform={i.platform} size={20} />
                     <span className="m-tile-title">{i.label}</span>
-                    <span className="pill success">Capture + resume</span>
+                    <span className="pill success">Sync + resume</span>
                   </span>
                   <span className="m-tile-body">{i.body}</span>
                 </Link>
@@ -57,7 +57,7 @@ export default function IntegrationsIndex() {
             </h2>
             <p className="m-lede">
               These get the workspace tools: files, versions, semantic search, run logs and session handoff through{' '}
-              <code>drive_resume</code>. They have no hooks, so their own sessions are not captured. Anything else
+              <code>drive_resume</code>. They have no hooks, so their own sessions are not synced. Anything else
               that speaks MCP can use the{' '}
               <Link className="m-link" href="/docs/quick-start#manual-mcp-config-fallback">
                 manual config

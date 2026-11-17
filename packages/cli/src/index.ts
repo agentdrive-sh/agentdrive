@@ -56,7 +56,7 @@ const program = new Command();
 
 program
   .name('adrive')
-  .description('AgentDrive — the persistent workspace your agents share across Claude Code, Codex, Cursor, and LangGraph.')
+  .description('AgentDrive — sync coding-agent sessions and resume them in Claude Code, Codex, OpenCode, Cursor or Antigravity.')
   .version(VERSION, '-v, --version');
 
 program
@@ -101,7 +101,7 @@ program
   .option('-r, --remote-path <path>', 'Remote path (default: basename of local-path)')
   .option('-m, --message <msg>', 'Commit-style message stored on the version')
   .option('--encrypt', 'Force end-to-end encryption for this upload')
-  .option('--plaintext', 'Force plaintext upload, even if private workspace is on')
+  .option('--plaintext', 'Force plaintext upload, even if Private Workspace is on')
   .action(wrap((localPath, opts) => cmdPush(localPath, opts)));
 
 program
@@ -169,10 +169,10 @@ program
 
 program
   .command('watch [path]')
-  .description('Capture files your agents write under the given path (default: cwd)')
+  .description('Upload every file under the path (default: cwd), existing ones first, then each change; skips .gitignore and .adriveignore matches')
   .option('-w, --workspace <id>', 'Workspace id (default: only workspace)')
   .option('--dry-run', 'Print what would be uploaded; never write')
-  .option('--no-encrypt', 'Skip end-to-end encryption even when private workspace is on')
+  .option('--no-encrypt', 'Skip end-to-end encryption even when Private Workspace is on')
   .option('--debounce <ms>', 'Coalesce changes within this window', (v) => Number(v))
   .action(wrap((path, opts) =>
     cmdWatch(path, {
@@ -213,11 +213,11 @@ program
 
 program
   .command('privacy')
-  .description('Show or change your privacy + memory preferences')
+  .description('Show or change your privacy and sync preferences')
   .option('--show', 'Just print current preferences')
   .option('--auto-context <on|off>', 'Always-on context for new sessions')
-  .option('--capture-artifacts <on|off>', 'Auto-save files your agents write')
-  .option('--capture-transcripts <on|off>', 'Auto-save chat history')
+  .option('--capture-artifacts <on|off>', 'Sync untracked files your agents write, and allow `adrive watch` to upload a folder')
+  .option('--capture-transcripts <on|off>', 'Sync session transcripts to your workspace')
   .option('--private-workspace <on|off>', 'End-to-end encrypt your workspace')
   .option('--auto-wire <on|off>', 'Connect agent tools you install later')
   .action(wrap((opts) =>

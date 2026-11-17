@@ -16,7 +16,7 @@ Semantic recall, cross-agent identity, and the new MCP tools are all live. Verif
 - `drive_search` — semantic search over workspace artifacts
 - `drive_recall` — query semantic search results (narrows to auto-extracted facts in a future release)
 - `drive_context` — top-N relevant artifacts for the current task, similarity plus recency rerank
-- `drive_log_run` — capture agent run metadata across platforms
+- `drive_log_run` — log agent run metadata across platforms
 
 See [Memory and search](/docs/concepts/memory-and-search) for the model.
 
@@ -41,7 +41,7 @@ The remaining deliverables. Order is approximate.
 
 ### CLI — `adrive` binary
 
-The `adrive` binary on npm (`@adrive/cli`) and an installer: `curl -fsSL agentdrive.sh/install | sh`. Wires session capture and the MCP server into Codex, OpenCode, Cursor, Gemini CLI and Antigravity (Claude Code gets the same through its plugin), and the MCP server alone into Zed, Cline and Continue. Read and write workspace artifacts from any shell.
+The `adrive` binary on npm (`@adrive/cli`) and an installer: `curl -fsSL agentdrive.sh/install | sh`. Wires session sync and the MCP server into Codex, OpenCode, Cursor and Antigravity (Claude Code gets the same through its plugin), and the MCP server alone into Zed, Cline and Continue. Read and write workspace artifacts from any shell.
 
 ### SDKs
 

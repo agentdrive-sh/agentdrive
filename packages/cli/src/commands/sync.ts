@@ -25,7 +25,7 @@ export async function cmdSync(opts: SyncCommandOptions = {}): Promise<void> {
   if (result.skipped) {
     const hint: Record<NonNullable<typeof result.skipped>, string> = {
       'not-logged-in': 'not logged in; run `adrive auth login`',
-      'capture-off': 'capture is off; enable with `adrive privacy --capture-transcripts on` or `--capture-artifacts on`',
+      'capture-off': 'sync is off; enable with `adrive privacy --capture-transcripts on` or `--capture-artifacts on`',
       locked: 'another sync is running',
       'no-workspace': 'several workspaces and no default_workspace in your config',
     };

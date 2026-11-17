@@ -11,7 +11,7 @@ import { INSTALL_COMMAND } from '../data';
 export const metadata: Metadata = {
   title: 'Codex integration',
   description:
-    'Capture Codex sessions in the background and resume them in Claude Code, OpenCode, Cursor, Gemini CLI or Antigravity, or the other way round.',
+    'Sync Codex sessions in the background and resume them in Claude Code, OpenCode, Cursor or Antigravity, or the other way round.',
   alternates: { canonical: '/integrations/codex' },
 };
 
@@ -20,11 +20,11 @@ export default function CodexIntegration() {
     <IntegrationLayout
       platform="codex"
       label="Codex"
-      lede="Plan in Claude Code, implement in Codex, and stop pasting context between them. AgentDrive captures Codex sessions in the background and lets Codex resume sessions other agents started."
+      lede="Plan in Claude Code, implement in Codex, and stop pasting context between them. AgentDrive syncs Codex sessions in the background and lets Codex resume sessions other agents started."
     >
       <IntegrationSection id="install" title="1. Install">
         <p>
-          The installer signs you in, then wires session capture hooks into <code>~/.codex/hooks.json</code>, the
+          The installer signs you in, then wires session sync hooks into <code>~/.codex/hooks.json</code>, the
           MCP server into <code>~/.codex/config.toml</code>, and the <code>agentdrive-resume</code> and{' '}
           <code>agentdrive-sessions</code> prompts into Codex.
         </p>
@@ -35,16 +35,16 @@ export default function CodexIntegration() {
         </p>
       </IntegrationSection>
 
-      <IntegrationSection id="capture" title="2. Capture a session">
+      <IntegrationSection id="capture" title="2. Sync a session">
         <p>For this walkthrough, first connect Claude Code using its <a href="/integrations/claude-code">setup guide</a>. Work on a small task there, leave a clear goal and next step, then end the session. AgentDrive syncs it in the background. Open Codex in the same project to receive the handoff below.</p>
         <details className="m-reference">
-          <summary>How capture works in this agent</summary>
+          <summary>How sync works in this agent</summary>
           <p>
             The hooks fire on <code>SessionStart</code>, <code>Stop</code>, <code>SessionEnd</code> and{' '}
             <code>PreCompact</code>. Codex caps hook time at 3 seconds, so the hook only starts a detached{' '}
             <code>adrive sync</code> and returns. The sync uploads the redacted transcript, plus files Codex wrote
             that git doesn&apos;t track, to <code>sessions/&lt;project&gt;/codex/&lt;session&gt;.md</code>. Control
-            what is captured with <code>adrive privacy</code>; details are in{' '}
+            what is synced with <code>adrive privacy</code>; details are in{' '}
             <a href="/docs/concepts/sessions">Sessions</a>.
           </p>
         </details>

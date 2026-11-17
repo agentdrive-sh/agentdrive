@@ -12,7 +12,7 @@ export const CAPTURE_HARNESSES: Integration[] = [
   {
     platform: 'claude-code',
     label: 'Claude Code',
-    body: 'Plugin from the agentdrive-sh/agentdrive-mcp marketplace. Captures sessions; resume with /agentdrive:resume.',
+    body: 'Plugin from the agentdrive-sh/agentdrive-mcp marketplace. Syncs sessions; resume with /agentdrive:resume.',
   },
   {
     platform: 'codex',
@@ -30,11 +30,6 @@ export const CAPTURE_HARNESSES: Integration[] = [
     body: 'Hooks in ~/.cursor/hooks.json and the MCP server in ~/.cursor/mcp.json. Resume with /agentdrive-resume.',
   },
   {
-    platform: 'gemini-cli',
-    label: 'Gemini CLI',
-    body: 'Hooks and the MCP server in ~/.gemini/settings.json. Resume with /agentdrive:resume.',
-  },
-  {
     platform: 'antigravity',
     label: 'Antigravity',
     body: 'Hooks, the MCP server and skills in ~/.gemini/config, shared by the agy CLI, the app and the IDE. Ask it to resume.',
@@ -42,7 +37,7 @@ export const CAPTURE_HARNESSES: Integration[] = [
 ];
 
 export const MCP_CLIENTS: Integration[] = [
-  { platform: 'cline', label: 'Cline', body: 'Wired into the Cline MCP settings by adrive init. Workspace tools only, no session capture.' },
-  { platform: 'zed', label: 'Zed', body: 'Added to context_servers in Zed settings by adrive init. Workspace tools only, no session capture.' },
-  { platform: 'continue', label: 'Continue', body: 'Added to ~/.continue/config.json by adrive init. Workspace tools only, no session capture.' },
+  { platform: 'cline', label: 'Cline', body: 'Wired into the Cline MCP settings by adrive init. Workspace tools only, no session sync.' },
+  { platform: 'zed', label: 'Zed', body: 'Added to context_servers in Zed settings by adrive init. Workspace tools only, no session sync.' },
+  { platform: 'continue', label: 'Continue', body: 'Added to ~/.continue/config.json by adrive init. Workspace tools only, no session sync.' },
 ];

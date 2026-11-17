@@ -11,7 +11,7 @@ const ARGS = '{{ARGS}}';
 
 const TEMPLATES: Record<CommandName, CommandTemplate> = {
   resume: {
-    description: 'Resume an AgentDrive session from any agent harness',
+    description: 'Resume an AgentDrive session from any of your agents',
     argumentHint: '[session-id]',
     body: `Resume earlier agent work from AgentDrive.
 
@@ -24,9 +24,9 @@ If the \`drive_resume\` tool is not available, run \`adrive resume\` in the shel
 `,
   },
   sessions: {
-    description: 'List recent AgentDrive sessions across agent harnesses',
+    description: 'List recent AgentDrive sessions across your agents',
     argumentHint: '[platform or project]',
-    body: `List recent agent sessions captured by AgentDrive.
+    body: `List recent agent sessions synced by AgentDrive.
 
 Call the \`drive_sessions\` MCP tool. If a filter was given (${ARGS}), pass a harness name (claude-code, codex, opencode, gemini-cli, cursor, antigravity) as \`platform\` and anything else as \`project\`.
 
@@ -36,10 +36,10 @@ If the \`drive_sessions\` tool is not available, run \`adrive resume --list\` in
 `,
   },
   login: {
-    description: 'Log in to AgentDrive and connect your other agent harnesses',
+    description: 'Log in to AgentDrive and connect your other agents',
     body: `Log the user in to AgentDrive and connect their other agent tools.
 
-1. Run \`npx -y @adrive/cli init --yes\` in the shell, in the background so you can read its output while it waits. It prints a sign-in URL and a code and opens the browser. Show the user both right away: they type the code on that page to finish signing in. Init then connects every installed agent tool: Codex, OpenCode, Gemini CLI, Cursor, Antigravity and MCP clients.
+1. Run \`npx -y @adrive/cli init --yes\` in the shell, in the background so you can read its output while it waits. It prints a sign-in URL and a code and opens the browser. Show the user both right away: they type the code on that page to finish signing in. Init then connects every installed agent tool: Codex, OpenCode, Cursor, Antigravity and MCP clients.
 2. When it exits, relay init's summary to the user, including any manual step it lists.
 `,
   },

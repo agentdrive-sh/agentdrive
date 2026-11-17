@@ -5,7 +5,7 @@ import { ApiClient } from '@/lib/api-client';
 import { useSession } from '../session-provider';
 import { workspaceFileHref } from '@/lib/workspace-selection';
 import { Icon } from '../icon';
-import { PLATFORMS, type PlatformId, GlyphSVG } from '../platform-glyph';
+import { PLATFORMS, displayPlatform, type PlatformId, GlyphSVG } from '../platform-glyph';
 import { FileRow, type FileRowData } from './file-row';
 
 interface FilesTableProps {
@@ -19,7 +19,6 @@ const PLATFORM_FILTERS: PlatformId[] = [
   'codex',
   'cursor',
   'opencode',
-  'gemini-cli',
   'antigravity',
 ];
 
@@ -48,7 +47,7 @@ export function FilesTable({ initialFiles, workspaceId, initialCursor }: FilesTa
   const filtered = useMemo(() => {
     return files.filter((f) => {
       if (q && ![f.path, f.content_hash ?? ''].some((value) => value.toLowerCase().includes(q.toLowerCase().replace(/^#/, '')))) return false;
-      if (filter !== 'all' && (f.agent_platform ?? 'mcp') !== filter)
+      if (filter !== 'all' && displayPlatform(f.agent_platform ?? 'mcp') !== filter)
         return false;
       return true;
     });
@@ -57,7 +56,7 @@ export function FilesTable({ initialFiles, workspaceId, initialCursor }: FilesTa
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const f of files) {
-      const p = f.agent_platform ?? 'mcp';
+      const p = displayPlatform(f.agent_platform ?? 'mcp');
       m[p] = (m[p] ?? 0) + 1;
     }
     return m;

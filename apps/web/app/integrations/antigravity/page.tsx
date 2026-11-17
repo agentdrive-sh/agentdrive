@@ -11,7 +11,7 @@ import { INSTALL_COMMAND } from '../data';
 export const metadata: Metadata = {
   title: 'Antigravity integration',
   description:
-    'Capture Antigravity CLI, app and IDE sessions in the background and resume them in Claude Code, Codex, OpenCode, Cursor or Gemini CLI, or the other way round.',
+    'Sync Antigravity CLI, app and IDE sessions in the background and resume them in Claude Code, Codex, OpenCode or Cursor, or the other way round.',
   alternates: { canonical: '/integrations/antigravity' },
 };
 
@@ -20,17 +20,17 @@ export default function AntigravityIntegration() {
     <IntegrationLayout
       platform="antigravity"
       label="Antigravity"
-      lede="Hand work between Antigravity and your other agents without re-explaining it. AgentDrive captures Antigravity sessions in the background and lets Antigravity resume sessions other agents started."
+      lede="Hand work between Antigravity and your other agents without re-explaining it. AgentDrive syncs Antigravity sessions in the background and lets Antigravity resume sessions other agents started."
     >
       <IntegrationSection title="Which Antigravity">
         <p>
           Google&apos;s Antigravity CLI (<code>agy</code>), the Antigravity app and the Antigravity IDE all read
-          their configuration from <code>~/.gemini/config</code>, so one setup covers all three. Since June 18,
-          2026, Google points free and Google AI Pro / Ultra personal accounts here instead of Gemini CLI.
+          their configuration from <code>~/.gemini/config</code>, so one setup covers all three.
         </p>
         <p>
-          If you use the open-source <code>gemini</code> CLI with a Code Assist license, an API key or Vertex AI,
-          see <a href="/integrations/gemini-cli">Gemini CLI</a>. AgentDrive wires both when both are installed.
+          Setup also creates or updates <code>~/.gemini/settings.json</code> with the AgentDrive hooks and MCP
+          server, adds commands under <code>~/.gemini/commands/agentdrive</code>, and syncs the sessions kept under{' '}
+          <code>~/.gemini/tmp</code>.
         </p>
       </IntegrationSection>
 
@@ -46,10 +46,10 @@ export default function AntigravityIntegration() {
         <Snippet>{INSTALL_COMMAND}</Snippet>
       </IntegrationSection>
 
-      <IntegrationSection id="capture" title="2. Capture a session">
+      <IntegrationSection id="capture" title="2. Sync a session">
         <p>For this walkthrough, first connect Claude Code using its <a href="/integrations/claude-code">setup guide</a>. Work on a small task there, leave a clear goal and next step, then end the session. AgentDrive syncs it in the background. Open Antigravity in the same project to receive the handoff below.</p>
         <details className="m-reference">
-          <summary>How capture works in this agent</summary>
+          <summary>How sync works in this agent</summary>
           <p>
             The hook fires on <code>SessionStart</code> and <code>Stop</code> and hands the session to a detached{' '}
             <code>adrive sync</code>. It reads the transcript from{' '}

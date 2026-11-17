@@ -6,3 +6,8 @@ onlyBuiltDependencies:
   - esbuild
   - workerd
   - sharp
+
+auditConfig:
+  ignoreGhsas:
+    # picomatch ReDoS: no patched release exists. Reached only via fumadocs-core > tinyglobby with our own static globs, so no attacker-controlled patterns. Remove once picomatch ships a fix.
+    - GHSA-fc5q-39xc-vjpf

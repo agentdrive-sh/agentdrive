@@ -6,7 +6,7 @@ import { useSession } from '../session-provider';
 import { Icon } from '../icon';
 import { CopyableCode, PageHead } from '../shared';
 import { SearchHit } from './search-hit';
-import { PLATFORMS, type PlatformId } from '../platform-glyph';
+import { PLATFORMS, displayPlatform, type PlatformId } from '../platform-glyph';
 import type { SearchHit as SearchHitType } from '../../lib/api-client';
 
 interface MemorySearchProps {
@@ -33,8 +33,8 @@ export function MemorySearch({ workspaceId }: MemorySearchProps) {
   const [platform, setPlatform] = useState('all');
 
   const client = ApiClient.fromSession(session);
-  const platforms = [...new Set(hits.map((h) => h.agent_platform))];
-  const shown = platform === 'all' ? hits : hits.filter((h) => h.agent_platform === platform);
+  const platforms = [...new Set(hits.map((h) => displayPlatform(h.agent_platform)))];
+  const shown = platform === 'all' ? hits : hits.filter((h) => displayPlatform(h.agent_platform) === platform);
 
   const runSearch = (text: string) => {
     setError(null);

@@ -4,7 +4,7 @@
 
 ## Context
 
-Phase 4 of the v1 roadmap required customers to be able to route their workspace's file content to their own bucket — Cloudflare R2 in a different account, AWS S3, Backblaze B2, MinIO, anything S3-compat. This unlocks the Team and Enterprise tiers, where data-residency or egress-control is a buying criterion.
+Phase 4 of the v1 roadmap required customers to be able to route their workspace's file content to their own bucket — Cloudflare R2 in a different account, AWS S3, Backblaze B2, MinIO, anything S3-compat. This opens the Team and Enterprise tiers, where data-residency or egress-control is a buying criterion.
 
 The naïve implementation would inline an S3 client in `storage.ts` and branch on provider per call site. That couples every read/write path to every supported provider, makes new providers a sweeping diff, and forces the worker to know the credential format of every S3-compat dialect.
 
@@ -29,7 +29,7 @@ A `/v1/bucket-config/:id/verify` endpoint runs an actual write→read→compare�
 - New providers cost ~150 LOC and a test file; no other change to the worker.
 - Reads honor the stored locator forever. Switching a workspace's bucket *prospectively* doesn't migrate the past — old files keep working through the old driver.
 - Verify + auto-degrade gives the customer a recovery loop that doesn't require us in the chain.
-- BYO-bucket on Team unlocks a $149/mo tier that was previously stuck on data-residency objections.
+- BYO-bucket on Team opens a $149/mo tier that was previously stuck on data-residency objections.
 
 **Harder:**
 

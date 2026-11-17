@@ -12,7 +12,7 @@ export function GET() {
       protocolVersion: '2025-06-18',
       serverInfo: { name: 'agentdrive', title: 'AgentDrive', version: mcpServerPackage.version },
       description:
-        'Shared workspace for coding agents: resume sessions across harnesses, versioned files with provenance, semantic search.',
+        'Shared workspace for coding agents: resume sessions across agents, versioned files with provenance, semantic search.',
       documentationUrl: 'https://agentdrive.sh/docs/mcp-tools',
       transport: { type: 'streamable-http', endpoint: 'https://mcp.agentdrive.sh/mcp' },
       capabilities: { tools: { listChanged: false } },

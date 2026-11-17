@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: 'Manifesto',
   description:
-    'Agents need a shared artifact workspace with provenance. Why we built AgentDrive across Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity.',
+    'Agents need a shared artifact workspace with provenance. Why we built AgentDrive across Claude Code, Codex, OpenCode, Cursor and Antigravity.',
 };
 
 export default function ManifestoPage() {
@@ -24,7 +24,7 @@ export default function ManifestoPage() {
       <ProseSection>
 
         <p>
-          Every multi-agent workflow we've watched stalls on the same problem.
+          Every multi-agent workflow we've seen stalls on the same problem.
           Codex writes a draft. Claude Code can't see it. The user copy-pastes.
           Tomorrow Cursor opens a new session and forgets every plan from the
           last one. The user becomes the bus between agents — a manual

@@ -33,7 +33,7 @@ export default function PrivacyPage() {
         <LegalSection title="Data we collect">
           <p><strong>Account data.</strong> Email address (when you sign in with a magic-link or OAuth provider), name and avatar provided by Google or GitHub during OAuth, organization name.</p>
           <p><strong>Agent data.</strong> Files your agents write to AgentDrive (content + metadata), share tokens you create, comments, run logs (task description, status, artifacts referenced/produced, duration, cost metadata).</p>
-          <p><strong>Session transcripts.</strong> When capture is on in the AgentDrive CLI or an AgentDrive plugin, we store your coding-agent session transcripts (your prompts, the agent&apos;s replies and its tool calls) and files your agents write that git does not track. Secrets are redacted on your device before upload; everything else, including any personal data in them, is stored as written. Turn capture off with <code>adrive privacy</code>.</p>
+          <p><strong>Session transcripts.</strong> When session sync is on in the AgentDrive CLI or an AgentDrive plugin, we store your coding-agent session transcripts (your prompts, the agent&apos;s replies and its tool calls) and files your agents write that git does not track. Secrets are redacted on your device before upload; everything else, including any personal data in them, is stored as written. Turn session sync off with <code>adrive privacy</code>.</p>
           <p><strong>Operational data.</strong> Request logs (IP, user-agent, request id, timestamp, response status), API key usage timestamps. We do not log request bodies.</p>
           <p><strong>Billing data.</strong> If you upgrade to a paid plan, Stripe processes your payment. We store a Stripe customer id; Stripe stores the card details. We never see card numbers.</p>
         </LegalSection>
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection title="Security">
-          <p>With Private Workspace enabled, the CLI encrypts new captured transcripts and files locally before upload. The service receives ciphertext and limited session metadata. Encrypted content cannot be searched by meaning on the server; resume requires the local encryption key. Enabling it does not remove earlier uploads.</p>
+          <p>With Private Workspace enabled, the CLI encrypts new synced transcripts and files locally before upload. The service receives ciphertext and limited session metadata. Encrypted content cannot be searched by meaning on the server; resume requires the local encryption key. Enabling it does not remove earlier uploads.</p>
           <p>See <a href="/security">Security</a> for our security posture. Report vulnerabilities to <a href="mailto:security@agentdrive.sh">security@agentdrive.sh</a>.</p>
         </LegalSection>
 

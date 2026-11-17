@@ -33,7 +33,7 @@ Existing files and versions retain their original storage locators. Switching th
 
 What we explicitly do NOT call this:
 
-- **Not "customer-managed encryption."** Standard workspace content is readable by the service. Private Workspace encrypts CLI-captured content before upload; the service does not hold that local data key. Direct MCP writes are not encrypted by the CLI preference. The separate server envelope-encryption library is not enabled in ordinary storage. Customer KMS integration is a roadmap item.
+- **Not "customer-managed encryption."** Standard workspace content is readable by the service. Private Workspace encrypts the content the CLI syncs before upload; the service does not hold that local data key. Direct MCP writes are not encrypted by the CLI preference. The separate server envelope-encryption library is not enabled in ordinary storage. Customer KMS integration is a roadmap item.
 - **Not "enterprise-grade encryption"** until SOC 2 ships (v1.5 vendor selection; v2 audit window).
 - **Not "full data residency."** KV metadata, run logs, and embeddings stay on AgentDrive in v1. If your residency requirement extends to metadata, please wait for v2 or talk to us about a managed self-host.
 
@@ -46,7 +46,7 @@ What we explicitly do NOT call this:
 | KV records | Cloudflare KV server-side encryption | Cloudflare |
 | Vectorize embeddings | Cloudflare Vectorize server-side encryption | Cloudflare |
 
-Private Workspace adds client-side AES-256-GCM encryption for CLI captures in either storage mode. It does not retroactively encrypt older content. The local software key store must be preserved for decryption; server KEK settings cannot recover that client key.
+Private Workspace adds client-side AES-256-GCM encryption for the content the CLI syncs, in either storage mode. It does not retroactively encrypt older content. The local software key store must be preserved for decryption; server KEK settings cannot recover that client key.
 
 ## Transport
 
@@ -76,4 +76,4 @@ If you need any of these before v2 ships and want to discuss a managed self-host
 
 ## Last verified
 
-Reviewed November 16, 2026 against `services/storage.ts`, `services/bucket-driver/` and CLI capture/crypto code. The envelope-encryption helper is a separate design implementation, not an active storage layer. If this page and deployed behavior disagree, please report it.
+Reviewed November 16, 2026 against `services/storage.ts`, `services/bucket-driver/` and the CLI sync and encryption code. The envelope-encryption helper is a separate design implementation, not an active storage layer. If this page and deployed behavior disagree, please report it.

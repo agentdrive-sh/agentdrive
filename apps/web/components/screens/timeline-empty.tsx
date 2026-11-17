@@ -5,7 +5,7 @@ import { GlyphSVG, PLATFORMS } from '../platform-glyph';
 // with a faded row of platform glyphs that teaches the cross-agent value
 // on the first impression at zero cost.
 
-const FADED_PLATFORMS = ['claude-code', 'codex', 'opencode', 'cursor', 'gemini-cli', 'antigravity'] as const;
+const FADED_PLATFORMS = ['claude-code', 'codex', 'opencode', 'cursor', 'antigravity'] as const;
 
 interface TimelineEmptyProps {
   filtered?: boolean;
@@ -53,7 +53,7 @@ export function TimelineEmpty({ filtered = false }: TimelineEmptyProps) {
           <h3 style={{ marginBottom: 6 }}>The narrative starts here</h3>
           <p className="t-sm muted" style={{ maxWidth: 420, margin: '0 auto 18px' }}>
             Wire your first agent and every read, write, and handoff between
-            Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity shows up here.
+            Claude Code, Codex, OpenCode, Cursor and Antigravity shows up here.
           </p>
           <Link href="/onboarding" className="btn primary">
             Wire your first agent

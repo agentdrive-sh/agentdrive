@@ -11,7 +11,7 @@ import { INSTALL_COMMAND } from '../data';
 export const metadata: Metadata = {
   title: 'Cursor integration',
   description:
-    'Capture Cursor agent sessions in the background and resume them in Claude Code, Codex, OpenCode, Gemini CLI or Antigravity, or the other way round.',
+    'Sync Cursor agent sessions in the background and resume them in Claude Code, Codex, OpenCode or Antigravity, or the other way round.',
   alternates: { canonical: '/integrations/cursor' },
 };
 
@@ -20,11 +20,11 @@ export default function CursorIntegration() {
     <IntegrationLayout
       platform="cursor"
       label="Cursor"
-      lede="Pick up a Claude Code or Codex session inside Cursor, or hand a Cursor session to a terminal agent. AgentDrive captures Cursor sessions in the background."
+      lede="Pick up a Claude Code or Codex session inside Cursor, or hand a Cursor session to a terminal agent. AgentDrive syncs Cursor sessions in the background."
     >
       <IntegrationSection id="install" title="1. Install">
         <p>
-          The installer signs you in, then merges session capture hooks into <code>~/.cursor/hooks.json</code> and
+          The installer signs you in, then merges session sync hooks into <code>~/.cursor/hooks.json</code> and
           the AgentDrive server into <code>~/.cursor/mcp.json</code>, keeping anything you already have configured.
           It also adds the <code>/agentdrive-resume</code> and <code>/agentdrive-sessions</code> commands.
         </p>
@@ -32,10 +32,10 @@ export default function CursorIntegration() {
         <p>Reload Cursor (Cmd-Shift-P, then &quot;Developer: Reload Window&quot;) to pick up the changes.</p>
       </IntegrationSection>
 
-      <IntegrationSection id="capture" title="2. Capture a session">
+      <IntegrationSection id="capture" title="2. Sync a session">
         <p>For this walkthrough, first connect Codex using its <a href="/integrations/codex">setup guide</a>. Work on a small task there, leave a clear goal and next step, then end the session. AgentDrive syncs it in the background. Open Cursor in the same project to receive the handoff below.</p>
         <details className="m-reference">
-          <summary>How capture works in this agent</summary>
+          <summary>How sync works in this agent</summary>
           <p>
             The hooks fire on <code>sessionStart</code>, <code>stop</code>, <code>sessionEnd</code> and{' '}
             <code>preCompact</code>, and hand the session to a detached <code>adrive sync</code>. It uploads the

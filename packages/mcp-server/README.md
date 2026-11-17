@@ -1,6 +1,6 @@
 # @adrive/mcp-server
 
-MCP server for **[AgentDrive](https://agentdrive.sh)**: shared workspace for coding agents. Capture sessions from Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity, resume them in any of the others, and search everything they wrote. Provenance on every artifact; portable storage on R2, S3 or your own bucket.
+MCP server for **[AgentDrive](https://agentdrive.sh)**: shared workspace for coding agents. Capture sessions from Claude Code, Codex, OpenCode, Cursor and Antigravity, resume them in any of the others, and search everything they wrote. Provenance on every artifact; portable storage on R2, S3 or your own bucket.
 
 Hit a usage limit in one agent? Call `drive_resume` in another and it loads the handoff: the goal, the files touched and the latest turns. Also hosted at `https://mcp.agentdrive.sh/mcp` (streamable HTTP, `Authorization: Bearer <AgentDrive API key>`). Free plan, no credit card: [agentdrive.sh/pricing](https://agentdrive.sh/pricing).
 
@@ -72,7 +72,7 @@ AGENTDRIVE_AGENT_PLATFORM = "codex"
 - `drive_versions` — file version history
 
 **Sessions**
-- `drive_sessions` — recent sessions in this project from every harness
+- `drive_sessions` — recent sessions in this project from every agent
 - `drive_resume` — load a prior session's handoff (defaults to the latest from another harness)
 
 **Search and memory**

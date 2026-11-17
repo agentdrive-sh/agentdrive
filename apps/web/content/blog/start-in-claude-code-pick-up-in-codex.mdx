@@ -1,26 +1,26 @@
 ---
 title: Start in Claude Code, pick up in Codex
-description: AgentDrive captures your coding-agent sessions in the background and lets any of six agent tools resume where another left off, with provenance on every artifact and storage you can move.
+description: AgentDrive syncs your coding-agent sessions in the background and lets any of five agents resume where another left off, with provenance on every artifact and storage you can move.
 date: 2026-11-02
 author: Rakesh Roushan
 draft: false
 ---
 
-I use Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity. Most days I use at least three of them. Each one is good at something the others aren't, and every time I switch I end up doing the same chore: copying the plan out of one session, pasting it into the next, explaining what was already tried, and pointing at the files that changed.
+I use Claude Code, Codex, OpenCode, Cursor and Antigravity. Most days I use at least three of them. Each one is good at something the others aren't, and every time I switch I end up doing the same chore: copying the plan out of one session, pasting it into the next, explaining what was already tried, and pointing at the files that changed.
 
 So I was the copy-paste bus between my agents. AgentDrive is what I built so I could stop doing that.
 
 ## What it does
 
-AgentDrive is a shared workspace that lets Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage.
+AgentDrive is a shared workspace that lets Claude Code, Codex, OpenCode, Cursor and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage.
 
 In practice:
 
-1. **Capture runs in the background.** A hook in each agent CLI hands the session to the `adrive` CLI, which uploads a redacted transcript, plus any files the agent wrote that git doesn't track, to your workspace. You don't change how you work.
+1. **Sync runs in the background.** A hook in each agent CLI hands the session to the `adrive` CLI, which uploads a redacted transcript, plus any files the agent wrote that git doesn't track, to your workspace. You don't change how you work.
 2. **Any agent can resume.** Open a different agent in the same project and ask it to continue. It calls `drive_sessions` to see recent sessions from every harness and `drive_resume` to load a compact handoff brief: the goal, the files touched and the most recent turns. In Claude Code that's `/agentdrive:resume`. From a shell it's `adrive resume`.
-3. **Every artifact has provenance.** Each upload and each session run records which agent CLI produced it, so the workspace timeline shows which agent did what, and when.
+3. **Every artifact has provenance.** Each upload and each session run keeps which agent CLI produced it, so the workspace timeline shows which agent did what, and when.
 
-Session capture is the part you notice first. Underneath it is the same workspace any MCP client can use: 22 MCP tools (18 stable, 4 experimental sandbox tools) for versioned files, semantic search, run logs and share links.
+Session sync is the part you notice first. Underneath it is the same workspace any MCP client can use: 22 MCP tools (18 stable, 4 experimental sandbox tools) for versioned files, semantic search, run logs and share links.
 
 ## Install
 
@@ -30,7 +30,7 @@ One line on macOS or Linux:
 curl -fsSL agentdrive.sh/install | sh
 ```
 
-It installs the `adrive` CLI, signs you in through the browser, and wires session capture, the MCP server and the resume and sessions commands into each agent it finds. In Claude Code, AgentDrive is a plugin:
+It installs the `adrive` CLI, signs you in through the browser, and wires session sync, the MCP server and the resume and sessions commands into each agent it finds. In Claude Code, AgentDrive is a plugin:
 
 ```
 /plugin marketplace add agentdrive-sh/agentdrive-mcp
@@ -39,18 +39,18 @@ It installs the `adrive` CLI, signs you in through the browser, and wires sessio
 
 Setup also approves the AgentDrive hooks in Codex for you; on an older Codex, approve them once via `/hooks`.
 
-Cline, Zed and Continue get the workspace tools as plain MCP clients. They don't have session capture.
+Cline, Zed and Continue get the workspace tools as plain MCP clients. They don't have session sync.
 
 ## Privacy
 
-Capturing transcripts means uploading what you and your agents said, so you control all of it with `adrive privacy`:
+Syncing transcripts means uploading what you and your agents said, so you control all of it with `adrive privacy`:
 
 - **Auto-context:** at session start, list recent sessions from your other agents in this project.
-- **Artifact capture:** upload files your agents wrote that git doesn't track.
-- **Transcript capture:** upload session transcripts.
-- **Private Workspace:** encrypt transcripts and files on your machine before upload. Captured project and file storage paths are hashed too. Account and session metadata remain managed; direct MCP writes are not encrypted by this CLI setting.
+- **Artifact sync:** upload files your agents wrote that git doesn't track, and allow `adrive watch` to upload a whole folder (except `.gitignore` and `.adriveignore` matches).
+- **Transcript sync:** upload session transcripts.
+- **Private Workspace:** encrypt transcripts and files on your machine before upload. Synced project and file storage paths are hashed too. Account and session metadata remain managed; direct MCP writes are not encrypted by this CLI setting.
 
-Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when captured content must not leave your machine in readable form. If it must not be uploaded at all, turn capture off for that session.
+Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when synced content must not leave your machine in readable form. If it must not be uploaded at all, turn sync off for that session.
 
 ## Pricing
 
@@ -61,10 +61,10 @@ Before anything is uploaded, a redactor scrubs common secret shapes such as clou
 
 Every plan keeps all of your session history. Workspace, seat and agent limits are enforced. Storage is a soft limit: warnings start at 80%, and new files and sessions keep syncing past it. Local resumes on one machine are unlimited and need no account; Free includes 10 cloud resumes a month. Check usage with `adrive plan` and upgrade with `adrive upgrade`.
 
-Every plan includes session capture and resume across all six harnesses, Private Workspace, and $0 egress. Encrypted content cannot be searched by meaning on the server, and resume decrypts locally with your key. Details are on the [pricing page](/pricing).
+Every plan includes session sync and resume across all five agents, Private Workspace, and $0 egress. Encrypted content cannot be searched by meaning on the server, and resume decrypts locally with your key. Details are on the [pricing page](/pricing).
 
 ## What's next
 
-These are not shipped, so I won't pretend they are: SSO, audit-log export, customer-managed keys, and GCS and Azure buckets. The sandbox tools are experimental. If there's an agent CLI you want captured, or a handoff that didn't carry enough context, tell me. That feedback decides what I build next.
+These are not shipped, so I won't pretend they are: SSO, audit-log export, customer-managed keys, and GCS and Azure buckets. The sandbox tools are experimental. If there's an agent CLI you want synced, or a handoff that didn't carry enough context, tell me. That feedback decides what I build next.
 
-[Get started](/docs/quick-start), or read [how session capture works](/docs/concepts/sessions).
+[Get started](/docs/quick-start), or read [how session sync works](/docs/concepts/sessions).

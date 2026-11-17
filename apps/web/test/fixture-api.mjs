@@ -8,7 +8,7 @@ let healthState = 'healthy';
 const files = (workspace) => Array.from({ length: workspace === 'ws_beta' ? 1 : 51 }, (_, i) => ({
   id: workspace === 'ws_beta' ? 'f_beta' : `f_${i + 1}`,
   path: workspace === 'ws_beta' ? 'beta-plan.md' : `artifact-${String(i + 1).padStart(2, '0')}.md`,
-  version: 51, size: 120, updated_at: now, content_hash: `hash-${i + 1}`, agent_platform: 'codex',
+  version: 51, size: 120, updated_at: now, content_hash: `hash-${i + 1}`, agent_platform: workspace === 'ws_beta' ? 'gemini-cli' : 'codex',
 }));
 function reply(res, data, status = 200, cursor = null) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'http://localhost:3101', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Session-Token,X-Agent-Platform,X-Agent-Role', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Vary': 'Origin' });

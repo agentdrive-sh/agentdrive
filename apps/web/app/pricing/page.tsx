@@ -9,28 +9,30 @@ import { EnterprisePlan, PlanCard, PlanGuide } from '@/components/marketing/plan
 export const metadata: Metadata = {
   title: 'Pricing',
   description:
-    'Free, Pro, Team and Enterprise plans for AgentDrive, the shared workspace that lets Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity resume each other’s sessions.',
+    'Free, Pro, Team and Enterprise plans for AgentDrive, the shared workspace that lets Claude Code, Codex, OpenCode, Cursor and Antigravity resume each other’s sessions.',
   alternates: { canonical: '/pricing' },
 };
 
 const FAQ: { q: string; a: ReactNode }[] = [
   {
     q: 'What is a principal?',
-    a: 'One human or team identity: whoever holds the API key. Run as many agents and harnesses under it as your plan’s agent limit allows.',
+    a: 'One human or team identity: whoever holds the API key. Run as many agents under it as your plan’s agent limit allows.',
   },
   {
     q: 'Is Free a trial?',
     a: 'No. Free has no expiry and needs no card.',
   },
   {
-    q: 'What gets captured?',
+    q: 'What gets synced, and where does it go?',
     a: (
       <>
-        Session transcripts, plus files the agent wrote that git doesn&apos;t track. Known secret
+        Session transcripts, plus files the agent wrote in a session that git doesn&apos;t track, upload to your AgentDrive
+        workspace. If you run <code>adrive watch</code>, every file under that folder uploads too, existing files included,
+        except anything matched by <code>.gitignore</code> or <code>.adriveignore</code>. Known secret
         patterns are redacted before upload, files matching <code>.adriveignore</code> (and defaults like{' '}
         <code>.env</code>, keys and <code>.ssh</code>) are excluded from artifact uploads, and you can switch
-        transcript or file capture off with <code>adrive privacy</code>. Redaction is best-effort, so
-        avoid pasting sensitive text into captured conversations.
+        transcript or file sync off with <code>adrive privacy</code>. Redaction is best-effort, so
+        avoid pasting sensitive text into synced conversations.
       </>
     ),
   },

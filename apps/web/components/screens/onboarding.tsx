@@ -58,8 +58,8 @@ export function Onboarding() {
           }}
         >
           One command installs the <span className="mono">adrive</span> CLI,
-          signs you in, and wires session capture into Claude Code, Codex,
-          OpenCode, Cursor, Gemini CLI and Antigravity.
+          signs you in, and wires session sync into Claude Code, Codex,
+          OpenCode, Cursor and Antigravity.
         </p>
       </div>
 

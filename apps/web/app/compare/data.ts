@@ -6,7 +6,7 @@ type Row = (typeof ROWS)[number];
 export const AGENTDRIVE_ROW: Record<Row, string> = {
   'Unit of storage': 'Sessions and files, versioned, with provenance',
   'Where it runs': 'Hosted workspace plus a local CLI and MCP server',
-  'Coding-agent sessions': 'Captured by hooks in Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity; resumable from any of them',
+  'Coding-agent sessions': 'Synced by hooks in Claude Code, Codex, OpenCode, Cursor and Antigravity; resumable from any of them',
   'Storage location': 'AgentDrive R2 by default; your own R2 or S3 bucket on Team',
   Availability: 'Free plan; Pro $20/mo, Team $30/seat/mo',
 };
@@ -48,8 +48,8 @@ export const COMPETITORS: Competitor[] = [
     ],
     different: [
       'AgentDrive keeps whole sessions and the files agents wrote, not facts extracted from them, so the next agent sees the actual goal, recent turns and touched files.',
-      'Capture is automatic: hooks in six agent tools upload each session in the background, and any of them can resume it with drive_resume.',
-      'Every artifact records which agent wrote it, so the workspace doubles as a provenance timeline.',
+      'Sync is automatic: hooks in five agents upload each session in the background, and any of them can resume it with drive_resume.',
+      'Every artifact shows which agent wrote it, so the workspace doubles as a provenance timeline.',
       'On Team, your files can live in your own R2 or S3 bucket.',
     ],
     pickThem: 'You are building a product or agent that needs to remember its users across conversations.',
@@ -58,7 +58,7 @@ export const COMPETITORS: Competitor[] = [
   {
     slug: 'cloudflare-agent-memory',
     name: 'Cloudflare Agent Memory',
-    tagline: 'Cloudflare Agent Memory is managed memory for agents you build on Cloudflare. AgentDrive captures and hands off sessions between the coding agents you already use.',
+    tagline: 'Cloudflare Agent Memory is managed memory for agents you build on Cloudflare. AgentDrive syncs and hands off sessions between the coding agents you already use.',
     row: {
       'Unit of storage': 'Memories extracted and classified from agent conversations',
       'Where it runs': 'Managed service: Worker binding or REST API',
@@ -78,7 +78,7 @@ export const COMPETITORS: Competitor[] = [
       'Sharing one memory profile across a team or across several agents.',
     ],
     different: [
-      'AgentDrive needs no code. It hooks into Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity and captures their sessions as they run.',
+      'AgentDrive needs no code. It hooks into Claude Code, Codex, OpenCode, Cursor and Antigravity and syncs their sessions as they run.',
       'It stores the raw transcript and the files an agent wrote, versioned and content-addressed, rather than extracted memories.',
       'Each artifact carries provenance: which agent CLI wrote it, in which session.',
       'AgentDrive also runs on Cloudflare. The difference is that on Team your files can live in your own R2 or S3 bucket.',
@@ -93,7 +93,7 @@ export const COMPETITORS: Competitor[] = [
     row: {
       'Unit of storage': 'Files on your local disk',
       'Where it runs': 'Local process over stdio (npx or Docker)',
-      'Coding-agent sessions': 'Not captured; it exposes file operations',
+      'Coding-agent sessions': 'Not synced; it exposes file operations',
       'Storage location': 'Directories you allow on your machine',
       Availability: 'Open-source reference server',
     },
@@ -110,9 +110,9 @@ export const COMPETITORS: Competitor[] = [
     ],
     different: [
       'AgentDrive lives off your machine, so an agent on another laptop or a CI runner reads the same workspace.',
-      'Files are versioned and content-addressed, and every write records which agent made it.',
+      'Files are versioned and content-addressed, and every write keeps the name of the agent that made it.',
       'drive_search searches by meaning, not by file-name glob.',
-      'Hooks capture each coding-agent session so another agent can resume it.',
+      'Hooks sync each coding-agent session so another agent can resume it.',
     ],
     pickThem: 'One agent on one machine needs read and write access to local folders.',
     pickUs: 'The handoff crosses agents or machines, and you want history and provenance on what was written.',

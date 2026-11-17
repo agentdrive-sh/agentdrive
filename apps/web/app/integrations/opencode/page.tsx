@@ -11,7 +11,7 @@ import { INSTALL_COMMAND } from '../data';
 export const metadata: Metadata = {
   title: 'OpenCode integration',
   description:
-    'Capture OpenCode sessions in the background and resume them in Claude Code, Codex, Cursor, Gemini CLI or Antigravity, or the other way round.',
+    'Sync OpenCode sessions in the background and resume them in Claude Code, Codex, Cursor or Antigravity, or the other way round.',
   alternates: { canonical: '/integrations/opencode' },
 };
 
@@ -20,7 +20,7 @@ export default function OpencodeIntegration() {
     <IntegrationLayout
       platform="opencode"
       label="OpenCode"
-      lede="Switch models and agents without losing the thread. AgentDrive captures OpenCode sessions in the background and lets OpenCode resume sessions other agents started."
+      lede="Switch models and agents without losing the thread. AgentDrive syncs OpenCode sessions in the background and lets OpenCode resume sessions other agents started."
     >
       <IntegrationSection id="install" title="1. Install">
         <p>
@@ -36,10 +36,10 @@ export default function OpencodeIntegration() {
         </p>
       </IntegrationSection>
 
-      <IntegrationSection id="capture" title="2. Capture a session">
+      <IntegrationSection id="capture" title="2. Sync a session">
         <p>For this walkthrough, first connect Claude Code using its <a href="/integrations/claude-code">setup guide</a>. Work on a small task there, leave a clear goal and next step, then end the session. AgentDrive syncs it in the background. Open OpenCode in the same project to receive the handoff below.</p>
         <details className="m-reference">
-          <summary>How capture works in this agent</summary>
+          <summary>How sync works in this agent</summary>
           <p>
             The plugin listens for <code>session.created</code> and <code>session.idle</code> and hands the session to
             a detached <code>adrive</code> process without waiting on it, so a slow or missing CLI never stalls
@@ -47,7 +47,7 @@ export default function OpencodeIntegration() {
             transcript, plus files the agent wrote that git doesn&apos;t track, to{' '}
             <code>sessions/&lt;project&gt;/opencode/&lt;session&gt;.md</code>. Unlike
             the other harnesses, OpenCode&apos;s plugin API cannot inject context at session start, so ask for{' '}
-            <code>/agentdrive-sessions</code> when you want the list. Control what is captured with{' '}
+            <code>/agentdrive-sessions</code> when you want the list. Control what is synced with{' '}
             <code>adrive privacy</code>; details are in <a href="/docs/concepts/sessions">Sessions</a>.
           </p>
         </details>

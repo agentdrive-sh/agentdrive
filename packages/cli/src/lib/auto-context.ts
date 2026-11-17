@@ -17,8 +17,8 @@ const END = '<!-- agentdrive:auto-context:end -->';
 const INSTRUCTIONS = `${BEGIN}
 ## AgentDrive — your cross-agent memory
 
-AgentDrive records the user's agent sessions across Claude Code, Codex,
-OpenCode, Gemini CLI, Cursor, and Antigravity. Use its MCP tools without waiting to be
+AgentDrive syncs the user's agent sessions across Claude Code, Codex,
+OpenCode, Cursor, and Antigravity. Use its MCP tools without waiting to be
 asked:
 
 - **Session start** — if the user wants to continue earlier work, call
@@ -30,8 +30,8 @@ asked:
 - **Saving work** — after producing a file worth sharing with the user's
   other agents, call \`drive_write\`.
 
-Privacy: the user controls capture and encryption with \`adrive privacy\`.
-With "Private workspace" on, content is end-to-end encrypted on their
+Privacy: the user controls session sync and encryption with \`adrive privacy\`.
+With Private Workspace on, synced content is end-to-end encrypted on their
 device; the AgentDrive server stores only ciphertext.
 ${END}`;
 

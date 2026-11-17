@@ -6,7 +6,7 @@ import { formatPostDate, listPosts } from '@/lib/source';
 export const metadata: Metadata = {
   title: 'Blog',
   description:
-    'Notes from building AgentDrive: session continuity across Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity, provenance, and portable storage.',
+    'Notes from building AgentDrive: session continuity across Claude Code, Codex, OpenCode, Cursor and Antigravity, provenance, and portable storage.',
   alternates: { canonical: '/blog', types: { 'application/rss+xml': '/blog/rss.xml' } },
 };
 

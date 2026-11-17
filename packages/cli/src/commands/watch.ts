@@ -31,7 +31,7 @@ export async function cmdWatch(rawRoot: string | undefined, opts: WatchOptions =
 
   if (!cfg.preferences?.capture_artifacts && !opts.dryRun) {
     process.stderr.write(
-      `${kleur.yellow('[warn]')} Capture artifacts is off in your preferences.\n` +
+      `${kleur.yellow('[warn]')} Sync artifacts is off in your preferences.\n` +
         `       Either enable it with \`adrive privacy --capture-artifacts on\`\n` +
         `       or run a one-off dry-run with \`adrive watch --dry-run\`.\n`,
     );

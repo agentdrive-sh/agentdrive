@@ -4,32 +4,32 @@ import { Contents, sectionId } from '@/components/marketing/contents';
 
 export const metadata: Metadata = {
   title: 'Security',
-  description: 'What AgentDrive captures, what Private Workspace encrypts, and what stays managed when you bring your own bucket.',
+  description: 'What AgentDrive syncs, what Private Workspace encrypts, and what stays managed when you bring your own bucket.',
   alternates: { canonical: '/security' },
 };
 
-const titles = ['Choose how content is stored', 'Capture controls', 'Private Workspace', 'Access and identity', 'Infrastructure and transport', 'BYO-bucket', 'Roadmap and disclosures', 'Reporting a vulnerability'];
+const titles = ['Choose how content is stored', 'Sync controls', 'Private Workspace', 'Access and identity', 'Infrastructure and transport', 'BYO-bucket', 'Roadmap and disclosures', 'Reporting a vulnerability'];
 
 export default function SecurityPage() {
   return (
     <MarketingPageShell screenLabel="marketing/security">
       <PageHero title="Know what leaves your machine."
-        lede="Choose what gets captured, whether content is encrypted locally, and where files are stored. Metadata stays in the managed service."
-        meta="Storage and capture behavior reviewed against the implementation: November 16, 2026." />
+        lede="Choose what gets synced, whether content is encrypted locally, and where files are stored. Metadata stays in the managed service."
+        meta="Storage and sync behavior reviewed against the implementation: November 16, 2026." />
       <ProseSection>
         <Contents titles={titles} />
         <section id={sectionId(titles[0])}>
           <h2>{titles[0]}</h2>
           <div className="m-data-modes">
             <article><h3>Standard workspace</h3><dl>
-              <dt>Content</dt><dd>Redacted transcripts and captured files go to AgentDrive object storage.</dd>
+              <dt>Content</dt><dd>Redacted transcripts and synced files go to AgentDrive object storage.</dd>
               <dt>Search and resume</dt><dd>The service can process content for semantic search and build a handoff brief.</dd>
               <dt>Metadata</dt><dd>Workspace records, file paths, version history and session metadata stay managed.</dd>
             </dl></article>
             <article><h3>Private Workspace</h3><dl>
-              <dt>Content</dt><dd>The CLI encrypts captured content before upload. The service stores ciphertext.</dd>
+              <dt>Content</dt><dd>The CLI encrypts synced content before upload. The service stores ciphertext.</dd>
               <dt>Search and resume</dt><dd>No semantic search of the plaintext. Resume decrypts locally with your key.</dd>
-              <dt>Metadata</dt><dd>Project and captured-file paths are hashed. Account, platform, session identifiers, timing and counts remain managed.</dd>
+              <dt>Metadata</dt><dd>Project and synced-file paths are hashed. Account, platform, session identifiers, timing and counts remain managed.</dd>
             </dl></article>
             <article><h3>Your own bucket</h3><dl>
               <dt>Content</dt><dd>On Team and Enterprise, workspace files can live in your R2 or S3-compatible bucket.</dd>
@@ -38,13 +38,13 @@ export default function SecurityPage() {
             </dl></article>
           </div>
         </section>
-        <section id="capture-controls"><h2>Capture controls</h2>
-          <p>Use <code>adrive privacy</code> to control auto-context, transcript capture, artifact capture and Private Workspace. Artifact capture only uploads eligible files the agent touched that git does not track. Built-in exclusions and <code>.adriveignore</code> filter file paths before upload.</p>
-          <p>Pattern-based redaction removes known secret shapes from transcripts and captured files. It is best-effort, not a security boundary: an ignored file path does not remove text already pasted into a conversation. Disable transcript capture for conversations that must stay on your machine.</p>
-          <p>See the <a href="/docs/concepts/sessions">session capture reference</a> for exclusions and controls.</p>
+        <section id="sync-controls"><h2>Sync controls</h2>
+          <p>Use <code>adrive privacy</code> to control auto-context, transcript sync, artifact sync and Private Workspace. Artifact sync uploads eligible files the agent touched in a session that git does not track. It also allows <code>adrive watch</code>, which uploads every file under the watched folder, existing files included, whether or not git tracks them. Built-in exclusions, <code>.adriveignore</code> and, for watch, <code>.gitignore</code> filter file paths before upload.</p>
+          <p>Pattern-based redaction removes known secret shapes from transcripts and synced files. It is best-effort, not a security boundary: an ignored file path does not remove text already pasted into a conversation. Disable transcript sync for conversations that must stay on your machine.</p>
+          <p>See the <a href="/docs/concepts/sessions">session sync reference</a> for exclusions and controls.</p>
         </section>
         <section id="private-workspace"><h2>Private Workspace</h2>
-          <p>Enable it with <code>adrive privacy --private-workspace on</code>. New captured transcripts and files are encrypted locally with AES-256-GCM. Capture omits the working directory, title and touched paths from readable run metadata and hashes project and captured-file storage paths.</p>
+          <p>Enable it with <code>adrive privacy --private-workspace on</code>. New synced transcripts and files are encrypted locally with AES-256-GCM. Sync omits the working directory, title and touched paths from readable run metadata and hashes project and synced-file storage paths.</p>
           <p>The local data key is stored wrapped in the CLI configuration directory. The current software key store uses local machine/user identity and a separate local protector; it is not an OS keychain. Keep both keychain.bin and keychain.bin.protector on the original machine/user. Existing legacy keys migrate while their original API credential is available. Changing login credentials after migration preserves the data key; losing the original legacy credential before migration cannot be repaired by the hosted service.</p>
           <p>For an encrypted session, MCP resume directs you to <code>adrive resume &lt;session-id&gt;</code>, which decrypts locally. Server-side semantic search cannot search the plaintext. Turning this setting on does not retroactively encrypt or delete earlier uploads, and direct MCP writes are not encrypted by the CLI preference.</p>
         </section>

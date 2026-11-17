@@ -182,7 +182,7 @@ privacy_preamble() {
   printf '\n'
   log "Your agent workspace"
   printf '%sSave artifacts, provenance, and context so the next agent can pick up the work.%s\n' "$C_DIM" "$C_RESET"
-  printf '%sNext, log in once in your browser; every installed agent tool is then connected. Change what gets captured with %sadrive privacy%s.%s\n' "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM" "$C_RESET"
+  printf '%sNext, log in once in your browser; every installed agent tool is then connected. Change what gets synced with %sadrive privacy%s.%s\n' "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM" "$C_RESET"
   printf '\n'
 }
 
@@ -203,10 +203,10 @@ run_init() {
 print_next_steps() {
   printf '\n'
   log "AgentDrive is ready"
-  printf '%s  Start a session in Claude Code, Codex, OpenCode, Gemini CLI, Cursor, or Antigravity; it is captured in the background.%s\n' "$C_DIM" "$C_RESET"
+  printf '%s  Start a session in Claude Code, Codex, OpenCode, Cursor, or Antigravity; it syncs to your workspace in the background.%s\n' "$C_DIM" "$C_RESET"
   printf '%s  %s privacy%s         change what gets shared\n' "$C_DIM" "$BIN_NAME" "$C_RESET"
-  printf '%s  %s watch%s           capture artifacts your agents produce\n' "$C_DIM" "$BIN_NAME" "$C_RESET"
-  printf '%s  %s resume --list%s   sessions from every harness in this project\n' "$C_DIM" "$BIN_NAME" "$C_RESET"
+  printf '%s  %s watch%s           upload every file in a folder, then each change\n' "$C_DIM" "$BIN_NAME" "$C_RESET"
+  printf '%s  %s resume --list%s   sessions from every agent in this project\n' "$C_DIM" "$BIN_NAME" "$C_RESET"
   printf '%s  docs: %s%s\n' "$C_DIM" "$DOCS_URL" "$C_RESET"
   printf '\n'
 }

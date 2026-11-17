@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { serverApiClient } from '../../../../lib/server-api';
 import { requireServerSession } from '../../../../lib/server-session';
 import { PageHead } from '../../../../components/shared';
-import { PLATFORMS, type PlatformId } from '../../../../components/platform-glyph';
+import { PLATFORMS, displayPlatform, type PlatformId } from '../../../../components/platform-glyph';
 import { TimelineHead, TimelineRow } from '../../../../components/screens/timeline-row';
 import { TimelineEmpty } from '../../../../components/screens/timeline-empty';
 import type { ActivityEvent } from '../../../../lib/api-client';
@@ -85,10 +85,10 @@ export default async function TimelinePage(props: { searchParams?: Promise<Searc
   }
 
   const filteredItems = platformFilter
-    ? items.filter((e) => (e.agent_platform ?? '') === platformFilter)
+    ? items.filter((e) => displayPlatform(e.agent_platform ?? '') === platformFilter)
     : items;
 
-  const PLATFORM_CHIPS: PlatformId[] = ['claude-code', 'codex', 'opencode', 'cursor', 'gemini-cli', 'antigravity'];
+  const PLATFORM_CHIPS: PlatformId[] = ['claude-code', 'codex', 'opencode', 'cursor', 'antigravity'];
 
   return (
     <div className="fade-in" style={{ maxWidth: 1240, margin: '0 auto' }}>

@@ -13,7 +13,7 @@ export function generateStaticParams() {
 }
 
 function describe(from: string, to: string): string {
-  return `Hit a limit in ${from}? AgentDrive captures the ${from} session in the background and resumes it in ${to} with the goal, files touched and recent turns. Works in both directions.`;
+  return `Hit a limit in ${from}? AgentDrive syncs the ${from} session in the background and resumes it in ${to} with the goal, files touched and recent turns. Works in both directions.`;
 }
 
 export async function generateMetadata(props: { params: Promise<{ pair: string }> }): Promise<Metadata> {
@@ -42,7 +42,7 @@ export default async function ResumePairPage(props: { params: Promise<{ pair: st
         kicker="Resume across agents"
         kickerHref="/resume"
         title={`Resume a ${from.label} session in ${to.label}`}
-        lede={`Hit a usage limit in ${from.label}, or want a second model's take? AgentDrive captures the ${from.label} session in the background and loads it into ${to.label} as a handoff brief: the goal, the files touched and the most recent turns.`}
+        lede={`Hit a usage limit in ${from.label}, or want a second model's take? AgentDrive syncs the ${from.label} session in the background and loads it into ${to.label} as a handoff brief: the goal, the files touched and the most recent turns.`}
       />
       <ProseSection>
         {p.notes.length > 0 && (
@@ -58,7 +58,7 @@ export default async function ResumePairPage(props: { params: Promise<{ pair: st
         <IntegrationSection id="install" title="1. Install once">
           <Snippet>{INSTALL_COMMAND}</Snippet>
           <p>
-            It signs you in and wires session capture and resume into every agent it finds on this machine,{' '}
+            It signs you in and wires session sync and resume into every agent it finds on this machine,{' '}
             {from.label} and {to.label} included.
           </p>
           {from.profile.setup && <p>{from.profile.setup}</p>}

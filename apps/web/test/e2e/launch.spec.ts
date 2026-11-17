@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { displayPlatform } from '../../components/platform-glyph';
 
 // Regression: FE-01/02/03/04 — comment persistence, workspace identity,
 // pagination and expired-session recovery. Found by /qa on 2026-11-16.
@@ -25,6 +26,17 @@ test('selecting another workspace and opening a scoped deep link preserves proje
   await expect(page.getByRole('heading', { name: 'beta-plan.md' })).toBeVisible();
   await page.goto('/files/f_beta?workspace=ws_beta');
   await expect(page.getByRole('heading', { name: 'beta-plan.md' })).toBeVisible();
+});
+
+test('gemini-cli platform ids count and filter as Antigravity', async ({ page }) => {
+  expect(['gemini-cli', 'antigravity', 'codex'].map(displayPlatform)).toEqual(['antigravity', 'antigravity', 'codex']);
+  await signIn(page);
+  await page.goto('/files');
+  await page.getByRole('combobox', { name: 'Workspace' }).selectOption('ws_beta');
+  const chip = page.getByRole('button', { name: /^Antigravity/ });
+  await expect(chip).toHaveText(/Antigravity\s*1/);
+  await chip.click();
+  await expect(page.getByText('beta-plan.md', { exact: true })).toBeVisible();
 });
 
 test('file pagination exposes the 51st artifact and hash filtering works', async ({ page }) => {
@@ -101,6 +113,20 @@ test('mobile workspace selection and files keep the document within the viewport
   await page.goto('/files');
   await expect(page.getByRole('combobox', { name: 'Workspace' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('mobile pricing cards never overlap a plan name with its price', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/pricing');
+  const cards = page.locator('.m-plan');
+  await expect(cards.filter({ hasText: 'Team' })).toBeVisible();
+  for (const card of await cards.all()) {
+    const name = await card.locator('.m-plan-head .m-h3').boundingBox();
+    const price = await card.locator('.price').boundingBox();
+    if (!name || !price) throw new Error('plan card is missing its name or price');
+    const overlaps = name.x < price.x + price.width && price.x < name.x + name.width && name.y < price.y + price.height && price.y < name.y + name.height;
+    expect(overlaps, await card.locator('.m-h3').innerText()).toBe(false);
+  }
 });
 
 test('billing failure cannot misrepresent a paid customer as a Free account', async ({ page }) => {

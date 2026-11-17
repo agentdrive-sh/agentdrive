@@ -9,10 +9,10 @@ The MCP server is the lead surface. It exposes 22 tools: 18 stable tools for ses
 
 | Tool | Purpose |
 |---|---|
-| `drive_sessions` | List recent agent sessions for this project across harnesses (Claude Code, Codex, OpenCode, Gemini CLI, Cursor, Antigravity), newest first. Use to find prior work to continue. Optional `platform` and `project` filters, `limit` up to 50. |
-| `drive_resume` | Load a compact handoff brief (goal, files touched, recent turns) from a prior session, by default the latest one from a different harness, so you can continue that work. Pass `session_id` from `drive_sessions` to pick one; `max_chars` sets the budget (default 12,000). |
+| `drive_sessions` | List recent agent sessions for this project across agents (Claude Code, Codex, OpenCode, Cursor, Antigravity), newest first. Use to find prior work to continue. Optional `platform` and `project` filters, `limit` up to 50. |
+| `drive_resume` | Load a compact handoff brief (goal, files touched, recent turns) from a prior session, by default the latest one from a different agent, so you can continue that work. Pass `session_id` from `drive_sessions` to pick one; `max_chars` sets the budget (default 12,000). |
 
-Sessions are captured by hooks, not by these tools. See [Sessions](/docs/concepts/sessions).
+Sessions are synced by hooks, not by these tools. See [Sessions](/docs/concepts/sessions).
 
 ## Files
 
@@ -53,14 +53,14 @@ Sessions are captured by hooks, not by these tools. See [Sessions](/docs/concept
 | `drive_search` | Semantic search over your workspace artifacts. |
 | `drive_recall` | Search artifacts for facts and preferences, with keyword fallback when semantic retrieval returns no results. Narrowing to auto-extracted facts is planned. |
 | `drive_context` | Top-N relevant artifacts for the current task, ranked by similarity and recency. The "right context at the right time" tool. |
-| `drive_log_run` | Capture agent run metadata: platform, run ID, artifacts referenced, artifacts produced, duration, status. |
+| `drive_log_run` | Log agent run metadata: platform, run ID, artifacts referenced, artifacts produced, duration, status. |
 
 ## Sandbox (experimental)
 
 | Tool | Purpose |
 |---|---|
 | `drive_sandbox_clone` | Clone a repository into a per-workspace Linux sandbox. |
-| `drive_sandbox_exec` | Run a shell command in the sandbox and capture stdout, stderr, exit code and duration. |
+| `drive_sandbox_exec` | Run a shell command in the sandbox and return stdout, stderr, exit code and duration. |
 | `drive_sandbox_read` | Read a file from the sandbox filesystem, such as build output or logs. |
 | `drive_sandbox_commit` | Stage and commit the sandbox worktree; the commit surfaces as an artifact at `commits/<sha>.json`. |
 

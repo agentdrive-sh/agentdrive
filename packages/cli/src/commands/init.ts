@@ -91,7 +91,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   // Saved before wiring: hooks and the MCP server read the key from this file.
   await writeConfig(config);
 
-  process.stdout.write(`\n${kleur.bold('Connecting agent harnesses')}\n`);
+  process.stdout.write(`\n${kleur.bold('Connecting your agents')}\n`);
   const outcomes = await wireInstalled(home, process.env);
   for (const o of outcomes) {
     for (const p of o.changed) process.stdout.write(`  ${kleur.green('+')} ${p}\n`);
@@ -120,16 +120,16 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   process.stdout.write(`  ${'Auto-context'.padEnd(width)}${preferences.auto_context ? 'on' : 'off'}\n`);
   if (local) {
     process.stdout.write(`  ${'Mode'.padEnd(width)}local (no account, nothing uploaded)\n`);
-    process.stdout.write('\nStart a session in any wired harness, then pick it up in another one on this machine with\n');
+    process.stdout.write('\nStart a session in any wired agent, then pick it up in another one on this machine with\n');
     process.stdout.write('/agentdrive:resume in Claude Code or `adrive resume`. Run `adrive init` again to sign in and sync across machines.\n');
     return;
   }
   process.stdout.write(
-    `  ${'Capture'.padEnd(width)}transcripts ${preferences.capture_transcripts ? 'on' : 'off'}, artifacts ${preferences.capture_artifacts ? 'on' : 'off'}\n`,
+    `  ${'Sync'.padEnd(width)}transcripts ${preferences.capture_transcripts ? 'on' : 'off'}, artifacts ${preferences.capture_artifacts ? 'on' : 'off'}\n`,
   );
   process.stdout.write(`  ${'Encryption'.padEnd(width)}${preferences.private_workspace ? 'on (E2E)' : 'off'}\n`);
   process.stdout.write(`  ${'New tools'.padEnd(width)}${preferences.auto_wire ? 'connected automatically when installed' : 'off (re-run adrive init)'}\n`);
 
-  process.stdout.write('\nStart a session in any wired harness; it is captured in the background.\n');
+  process.stdout.write('\nStart a session in any wired agent; it syncs to your workspace in the background.\n');
   process.stdout.write('Pick it up anywhere with /agentdrive:resume in Claude Code or `adrive resume`. Change settings with `adrive privacy`.\n');
 }

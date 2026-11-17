@@ -99,7 +99,7 @@ export default async function OG() {
               display: 'flex',
             }}
           >
-            One shared workspace for Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity. Provenance on every artifact. Storage on R2, S3, or your own bucket.
+            One shared workspace for Claude Code, Codex, OpenCode, Cursor and Antigravity. Provenance on every artifact. Storage on R2, S3, or your own bucket.
           </div>
         </div>
 

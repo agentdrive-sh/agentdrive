@@ -2,7 +2,7 @@
 
 This document is the single canonical system overview. It answers "what runs where, what talks to what, and what does each piece do." Read this before `CLAUDE.md` if you're new to the codebase; read `CLAUDE.md` after when you're about to make a change.
 
-The load-bearing decisions are captured separately as ADRs under [`docs/tech/adr/`](./adr/) — this doc links into them rather than repeating the reasoning.
+The load-bearing decisions are documented separately as ADRs under [`docs/tech/adr/`](./adr/) — this doc links into them rather than repeating the reasoning.
 
 ---
 
@@ -62,7 +62,7 @@ The load-bearing decisions are captured separately as ADRs under [`docs/tech/adr
 
 ## Runtime
 
-The entire backend runs on **one Cloudflare Worker** (`apps/worker`), built on **Hono** with the MCP TypeScript SDK and Zod for validation. The runtime decision is captured in [ADR-0002](./adr/0002-hono-on-cloudflare-workers.md).
+The entire backend runs on **one Cloudflare Worker** (`apps/worker`), built on **Hono** with the MCP TypeScript SDK and Zod for validation. The runtime decision is explained in [ADR-0002](./adr/0002-hono-on-cloudflare-workers.md).
 
 Worker entry: `apps/worker/src/index.ts` mounts the per-domain route modules:
 
@@ -155,7 +155,7 @@ Decision rationale: [ADR-0005](./adr/0005-bucket-driver-byo-bucket.md).
 
 Standard workspace content passes directly to the selected storage driver. AgentDrive can read it to provide search and handoff context. Storage-provider encryption is a separate layer; customer bucket encryption and access policies remain the customer's responsibility.
 
-Private Workspace encrypts CLI-captured content locally with AES-256-GCM before upload. Its key store is local software, not an OS-backed keychain. API credential changes must preserve the local data key; the hosted service cannot recover a lost local key. Direct MCP writes are not encrypted by this CLI capture setting.
+Private Workspace encrypts the content the CLI syncs on your machine with AES-256-GCM before upload. Its key store is local software, not an OS-backed keychain. API credential changes must preserve the local data key; the hosted service cannot recover a lost local key. Direct MCP writes are not encrypted by this CLI sync setting.
 
 `services/envelope-encryption.ts` implements the design in [ADR-0006](./adr/0006-envelope-encryption-versioned-kek.md), but ordinary storage does not call it. Its KEK settings are not proof that blobs are envelope-encrypted, and changing them cannot recover a lost client key. A future activation needs a separately verified migration and rotation procedure.
 
@@ -202,7 +202,7 @@ The API key represents an agent principal in an org; the headers label which too
 4. **`storage.writeFile`**:
    - Computes SHA-256 of the supplied content (including ciphertext for an encrypted CLI upload).
    - Resolves the destination driver via `resolveDriverForWrite(env, workspace, contentHash)` — usually `R2DefaultDriver`, sometimes an S3-HMAC driver for a BYO bucket.
-   - Preserves the supplied content (plaintext for standard writes, ciphertext for CLI Private Workspace captures).
+   - Preserves the supplied content (plaintext for standard writes, ciphertext for Private Workspace content the CLI syncs).
    - `driver.head(content/<hash>)` — if present, skip the write (dedup).
    - `driver.put(content/<hash>, content)` if absent.
    - Writes `FileMeta` to KV with the `StorageLocator` recorded.
@@ -211,7 +211,7 @@ The API key represents an agent principal in an org; the headers label which too
    - `ctx.waitUntil(embed(content, hash))` — fire-and-forget; failures don't block the response.
 5. **Response** — `FileMeta` returned (without secrets). Total latency target: <100 ms warm.
 
-Read flow is route → `storage.readFile` → resolve driver from the stored locator → `driver.get` → return stored content. The CLI decrypts Private Workspace captures locally. **Writes route by current config; reads route by the locator stored on the file**. Retired bucket credentials remain available for historical reads; actively assigned bucket configs cannot be removed until reassigned.
+Read flow is route → `storage.readFile` → resolve driver from the stored locator → `driver.get` → return stored content. The CLI decrypts Private Workspace content locally. **Writes route by current config; reads route by the locator stored on the file**. Retired bucket credentials remain available for historical reads; actively assigned bucket configs cannot be removed until reassigned.
 
 ---
 

@@ -1348,6 +1348,10 @@ a.m-tile:hover { border-color: var(--border-strong); background: color-mix(in ok
   .m-plan > .btn { grid-column: 1 / -1; }
   .m-plan-head { flex-wrap: wrap; justify-content: flex-start; }
 }
+@media (max-width: 599px) {
+  /* Team's long cadence would take the whole row and crush the plan name, so stack the price under it. */
+  .m-plan { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 359px) {
   .m-plan { column-gap: 12px; }
   .m-plan .price strong { font-size: 30px; }

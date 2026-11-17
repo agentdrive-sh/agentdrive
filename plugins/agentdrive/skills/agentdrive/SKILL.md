@@ -1,12 +1,12 @@
 ---
 name: agentdrive
-description: Cross-agent session memory and artifact workspace. Use when the user wants to continue work another agent session started (Claude Code, Codex, OpenCode, Gemini CLI, Cursor, Antigravity), asks what an earlier session did, needs prior context for a task, or wants to save an artifact for their other agents.
+description: Cross-agent session memory and artifact workspace. Use when the user wants to continue work another agent session started (Claude Code, Codex, OpenCode, Cursor, Antigravity), asks what an earlier session did, needs prior context for a task, or wants to save an artifact for their other agents.
 ---
 
 # AgentDrive
 
-AgentDrive captures the user's agent sessions in the background and makes any
-of them resumable from any harness. Prefer the `drive_*` MCP tools; fall back
+AgentDrive syncs the user's agent sessions in the background and makes any
+of them resumable from any other agent. Prefer the `drive_*` MCP tools; fall back
 to the `adrive` CLI when they are not available.
 
 ## Sessions
@@ -35,8 +35,8 @@ the `last_run` task when present.
 ## Saving work
 
 After producing a file worth sharing with the user's other agents, call
-`drive_write`. Transcripts and files git doesn't track are already captured
-automatically when the user has capture on, so don't re-upload them.
+`drive_write`. Transcripts and files git doesn't track are already synced
+automatically when the user has session sync on, so don't re-upload them.
 
 ## CLI fallback
 
@@ -55,5 +55,5 @@ credentials.
 
 ## Privacy
 
-Respect `adrive privacy`. With "Private workspace" on, content is encrypted
+Respect `adrive privacy`. With Private Workspace on, content is encrypted
 on the device and the server stores only ciphertext.

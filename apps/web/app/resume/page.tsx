@@ -4,7 +4,7 @@ import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketi
 import { HARNESSES, PAIRS } from './data';
 
 const DESCRIPTION =
-  'Start a coding-agent session in Claude Code, Codex, Cursor, OpenCode, Gemini CLI or Antigravity and resume it in any of the others, in any direction.';
+  'Start a coding-agent session in Claude Code, Codex, Cursor, OpenCode or Antigravity and resume it in any of the others, in any direction.';
 
 export const metadata: Metadata = {
   title: 'Resume a session in another coding agent',

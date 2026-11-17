@@ -20,7 +20,7 @@ export const HOOK_HARNESSES: HookHarness[] = ['codex', 'opencode', 'gemini-cli',
 export const HARNESS_LABELS: Record<HookHarness, string> = {
   codex: 'Codex',
   opencode: 'OpenCode',
-  'gemini-cli': 'Gemini CLI',
+  'gemini-cli': 'Antigravity (.gemini)',
   cursor: 'Cursor',
   antigravity: 'Antigravity',
 };

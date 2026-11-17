@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory records the load-bearing decisions behind AgentDrive. Each ADR captures the context that forced a choice, the choice itself, the consequences (good and bad), and the alternatives that were rejected. They are not changelogs; they are the *reasons* a future reader needs to understand the code.
+This directory records the load-bearing decisions behind AgentDrive. Each ADR explains the context that forced a choice, the choice itself, the consequences (good and bad), and the alternatives that were rejected. They are not changelogs; they are the *reasons* a future reader needs to understand the code.
 
 Read these before proposing a structural change. Most of these decisions are reversible at a cost — the ADR exists so the cost is paid knowingly.
 

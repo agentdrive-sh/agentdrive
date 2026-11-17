@@ -9,3 +9,6 @@ apps/worker/wrangler.selfhost.toml
 .env.*.local
 *.log
 .DS_Store
+
+# Launch film renders and sources (hundreds of MB of video), kept out of git
+agentdrive-launch-video/

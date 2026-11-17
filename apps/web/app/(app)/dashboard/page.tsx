@@ -90,7 +90,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<{ ra
     <div className="fade-in" style={{ maxWidth: 1240, margin: '0 auto' }}>
       <PageHead
         heading={greeting}
-        sub="Start in any agent, finish in any other. Sessions from Claude Code, Codex, OpenCode, Cursor, Gemini CLI and Antigravity are captured here, ready to resume in any of them."
+        sub="Start in any agent, finish in any other. Sessions from Claude Code, Codex, OpenCode, Cursor and Antigravity are synced here, ready to resume in any of them."
         actions={
           <Link href="/onboarding" className="btn primary">
             <Icon name="plus" size={13} /> Wire a new agent

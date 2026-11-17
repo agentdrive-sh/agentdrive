@@ -5,13 +5,13 @@
     "url": "https://github.com/agentdrive-sh"
   },
   "metadata": {
-    "description": "AgentDrive: cross-agent session capture and resume."
+    "description": "AgentDrive: cross-agent session sync and resume."
   },
   "plugins": [
     {
       "name": "agentdrive",
       "source": "./plugins/agentdrive",
-      "description": "Capture every agent session in the background and resume it from any harness: Claude Code, Codex, OpenCode, Gemini CLI, Cursor, or Antigravity."
+      "description": "Sync your agent sessions in the background and resume them from any agent: Claude Code, Codex, OpenCode, Cursor, or Antigravity."
     }
   ]
 }

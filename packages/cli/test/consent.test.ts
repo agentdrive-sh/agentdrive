@@ -57,7 +57,7 @@ describe('ensureCaptureConsent', () => {
     const out = await ensureCaptureConsent(saved, client([]), { interactive: false, preferencesSaved: true, now });
     expect(out.preferences).toEqual(saved.preferences);
     expect(out.capture_notice_at).toBe('2026-10-21T12:00:00.000Z');
-    expect(printed()).toMatch(/capture is off/);
+    expect(printed()).toMatch(/session sync is off/);
     expect(printed()).toMatch(/Turn it on: .*adrive privacy/);
   });
 
