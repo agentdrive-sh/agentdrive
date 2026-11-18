@@ -1,5 +1,6 @@
 import type { Env } from '../env.js';
-import type { FileMeta } from '@agentdrive/shared';
+import { resolveLocator, type AgentPlatform, type FileMeta } from '@agentdrive/shared';
+import { StorageService } from './storage.js';
 import { resolveDriverForRead } from './bucket-driver/resolve.js';
 
 // Hybrid fallback for when Vectorize returns zero hits. BM25-lite over path +
@@ -36,62 +37,53 @@ function termFreq(tokens: string[]): Map<string, number> {
   return tf;
 }
 
+interface SearchFilter { agent_platform?: AgentPlatform; agent_id?: string; path_prefix?: string }
+
 export async function keywordSearch(
   env: Env,
-  args: { orgId: string; workspaceId?: string; query: string; limit: number },
+  args: { orgId: string; workspaceId?: string; query: string; limit: number; filter?: SearchFilter },
 ): Promise<KeywordHit[]> {
   const queryTokens = tokenize(args.query);
   if (queryTokens.length === 0) return [];
 
-  const candidates: FileMeta[] = [];
-
+  const store = new StorageService(env.KV, env.R2);
+  let workspaces: string[];
   if (args.workspaceId) {
-    const list = await env.KV.list({
-      prefix: `idx:ws_files:${args.workspaceId}:`,
-      limit: MAX_CANDIDATES,
-    });
-    const fids = await Promise.all(list.keys.map((k) => env.KV.get(k.name)));
-    const metas = await Promise.all(
-      fids
-        .filter((fid): fid is string => Boolean(fid))
-        .map((fid) => env.KV.get<FileMeta>(`file:${args.workspaceId}:${fid}`, 'json')),
-    );
-    for (const m of metas) {
-      if (m) candidates.push(m);
-    }
+    workspaces = [args.workspaceId];
   } else {
-    // No workspace scope — best-effort: scan workspaces in the org and merge.
-    // Capped at 4 workspaces for one round-trip; larger orgs accept a partial
-    // keyword-tier result rather than blocking.
-    const orgWs = await env.KV.list({
-      prefix: `idx:org_workspaces:${args.orgId}:`,
-      limit: 4,
-    });
-    const wsIds = await Promise.all(orgWs.keys.map((k) => env.KV.get(k.name)));
-    for (const wsId of wsIds) {
-      if (!wsId) continue;
-      const list = await env.KV.list({
-        prefix: `idx:ws_files:${wsId}:`,
-        limit: 50,
-      });
-      const fids = await Promise.all(list.keys.map((k) => env.KV.get(k.name)));
-      const metas = await Promise.all(
-        fids
-          .filter((fid): fid is string => Boolean(fid))
-          .map((fid) => env.KV.get<FileMeta>(`file:${wsId}:${fid}`, 'json')),
-      );
-      for (const m of metas) {
-        if (m) candidates.push(m);
-      }
-      if (candidates.length >= MAX_CANDIDATES) break;
-    }
+    const page = await store.listWorkspaces(args.orgId, undefined, 4);
+    workspaces = page.items.map(ws => ws.id);
+  }
+  const candidates: FileMeta[] = [];
+  for (const wid of workspaces) {
+    const page = await store.listFiles(wid, args.filter?.path_prefix, undefined, args.workspaceId ? MAX_CANDIDATES : 50);
+    candidates.push(...page.items.filter(meta =>
+      (!args.filter?.agent_id || meta.updated_by === args.filter.agent_id) &&
+      (!args.filter?.agent_platform || (meta.updated_by_platform ?? 'unknown') === args.filter.agent_platform),
+    ));
   }
 
-  if (candidates.length === 0) return [];
+  // Copies of a blob in the same workspace and bucket reuse its content for
+  // this request. A bucket switch or distinct object key gets its own read.
+  let unavailableContents = 0;
+  const contents = new Map<string, Promise<string | undefined>>();
+  function readContent(meta: FileMeta) {
+    const locator = resolveLocator(meta, meta.content_hash);
+    const key = JSON.stringify([meta.workspace_id, locator.provider, locator.bucket_config_id, locator.object_key, locator.key_version]);
+    let pending = contents.get(key);
+    if (!pending) {
+      pending = resolveDriverForRead(env, meta)
+        .then(async ({ driver, objectKey }) => (await driver.get(objectKey))?.text())
+        .catch(() => {
+          unavailableContents++;
+          return undefined;
+        });
+      contents.set(key, pending);
+    }
+    return pending;
+  }
 
-  // Score by token frequency in path + small-file content.
-  const scored: { meta: FileMeta; score: number; snippet: string }[] = [];
-  for (const meta of candidates) {
+  async function scoreCandidate(meta: FileMeta) {
     const pathTokens = tokenize(meta.path);
     const pathTf = termFreq(pathTokens);
     const pathScore = queryTokens.reduce((s, t) => s + (pathTf.get(t) ?? 0), 0);
@@ -99,10 +91,8 @@ export async function keywordSearch(
     let contentScore = 0;
     let snippet = meta.path;
     if (meta.size <= SMALL_FILE_BYTES) {
-      const { driver, objectKey } = await resolveDriverForRead(env, meta);
-      const obj = await driver.get(objectKey);
-      if (obj) {
-        const content = await obj.text();
+      const content = await readContent(meta);
+      if (content !== undefined) {
         const contentTokens = tokenize(content);
         const contentTf = termFreq(contentTokens);
         contentScore = queryTokens.reduce(
@@ -125,9 +115,19 @@ export async function keywordSearch(
       }
     }
     const score = pathScore * 2 + contentScore;
-    if (score > 0) scored.push({ meta, score, snippet });
+    return { meta, score, snippet };
   }
 
+  const scored: { meta: FileMeta; score: number; snippet: string }[] = [];
+  // Bound concurrent bucket connections and preserve candidate order for ties.
+  for (let offset = 0; offset < candidates.length; offset += 4) {
+    const group = await Promise.all(candidates.slice(offset, offset + 4).map(scoreCandidate));
+    scored.push(...group.filter(hit => hit.score > 0));
+  }
+
+  if (unavailableContents) {
+    console.warn(JSON.stringify({ event: 'keyword_content_unavailable', count: unavailableContents }));
+  }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, args.limit).map(({ meta, score, snippet }) => ({
     ws_id: meta.workspace_id,
@@ -136,7 +136,7 @@ export async function keywordSearch(
     score,
     snippet,
     agent_id: meta.updated_by,
-    agent_platform: undefined,
+    agent_platform: meta.updated_by_platform,
     created_at: Date.parse(meta.updated_at),
   }));
 }

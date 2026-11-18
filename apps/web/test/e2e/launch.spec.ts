@@ -129,6 +129,21 @@ test('mobile pricing cards never overlap a plan name with its price', async ({ p
   }
 });
 
+test('billing retains the current plan during an invoice outage', async ({ page }) => {
+  await signIn(page, 'sess_invoice_outage_fixture');
+  await page.goto('/billing');
+  await expect(page.getByText('Current plan', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Invoice history is temporarily unavailable/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No invoices yet' })).toHaveCount(0);
+});
+
+test('billing shows the invoiced currency and only offers available invoice links', async ({ page }) => {
+  await signIn(page, 'sess_invoice_currency_fixture');
+  await page.goto('/billing');
+  await expect(page.getByText('¥1,200', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download invoice PDF' })).toHaveCount(0);
+});
+
 test('billing failure cannot misrepresent a paid customer as a Free account', async ({ page }) => {
   await signIn(page, 'sess_billing_outage_fixture');
   await page.goto('/billing');

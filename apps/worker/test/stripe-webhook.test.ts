@@ -138,12 +138,15 @@ describe('webhook plan sync', () => {
 
   // What Stripe returns for GET /v1/subscriptions/:id; null makes the lookup fail.
   let liveSub: Record<string, unknown> | null;
+  let heldSub: Record<string, unknown> | null;
   beforeEach(() => {
     liveSub = null;
+    heldSub = null;
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
       const req = args[0] instanceof Request ? args[0] : new Request(...args);
       if (!req.url.startsWith('https://api.stripe.com/v1/subscriptions/')) return realFetch(...args);
+      if (heldSub && req.url.endsWith('/' + heldSub.id)) return Response.json(heldSub);
       return liveSub ? Response.json(liveSub) : Response.json({ error: { message: 'boom' } }, { status: 500 });
     });
   });
@@ -250,6 +253,21 @@ describe('webhook plan sync', () => {
     liveSub = sub('sub_7', orgId, 'active', 'price_test_team');
     await deliver('customer.subscription.updated', liveSub);
     expect((await getOrg(orgId)).plan).toBe('team');
+  });
+
+  it('keeps a paying subscription when a different legacy checkout is incomplete and then expires', async () => {
+    const orgId = await newOrg({ plan: 'team', stripe_subscription_id: 'sub_paid' });
+    heldSub = sub('sub_paid', orgId, 'active', 'price_test_team');
+    liveSub = sub('sub_pending', orgId, 'incomplete', 'price_test_pro');
+    await deliver('checkout.session.completed', { metadata: { org_id: orgId }, subscription: 'sub_pending' });
+    liveSub = sub('sub_pending', orgId, 'incomplete_expired', 'price_test_pro');
+    await deliver('customer.subscription.updated', liveSub);
+    expect(await getOrg(orgId)).toMatchObject({ plan: 'team', stripe_subscription_id: 'sub_paid' });
+
+    heldSub = sub('sub_paid', orgId, 'canceled', 'price_test_team');
+    liveSub = sub('sub_new', orgId, 'active', 'price_test_pro');
+    await deliver('checkout.session.completed', { metadata: { org_id: orgId }, subscription: 'sub_new' });
+    expect(await getOrg(orgId)).toMatchObject({ plan: 'pro', stripe_subscription_id: 'sub_new' });
   });
 
   it('ignores subscription events for a subscription the org no longer holds', async () => {

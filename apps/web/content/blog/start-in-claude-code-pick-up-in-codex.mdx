@@ -1,6 +1,6 @@
 ---
 title: Start in Claude Code, pick up in Codex
-description: AgentDrive syncs your coding-agent sessions in the background and lets any of five agents resume where another left off, with provenance on every artifact and storage you can move.
+description: How AgentDrive syncs your coding-agent sessions in the background so Claude Code, Codex, OpenCode, Cursor and Antigravity can resume each other's work.
 date: 2026-11-02
 author: Rakesh Roushan
 draft: false
@@ -50,7 +50,7 @@ Syncing transcripts means uploading what you and your agents said, so you contro
 - **Transcript sync:** upload session transcripts.
 - **Private Workspace:** encrypt transcripts and files on your machine before upload. Synced project and file storage paths are hashed too. Account and session metadata remain managed; direct MCP writes are not encrypted by this CLI setting.
 
-Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when synced content must not leave your machine in readable form. If it must not be uploaded at all, turn sync off for that session.
+Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when synced content must not leave your machine in readable form. If it must not be uploaded at all, turn transcript sync off with `adrive privacy --capture-transcripts off` before you start that session.
 
 ## Pricing
 

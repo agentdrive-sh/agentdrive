@@ -1,0 +1,39 @@
+diff --git a/dist/worker/lib/cloudflare/test-internal.mjs b/dist/worker/lib/cloudflare/test-internal.mjs
+index 1f3df7b7d12cded0c4f8aa4fe9b0a8ef25874687..d924fa1620eb3f599d96ae63c7231906a0e93ffc 100644
+--- a/dist/worker/lib/cloudflare/test-internal.mjs
++++ b/dist/worker/lib/cloudflare/test-internal.mjs
+@@ -305,21 +305,22 @@ function importModule(env2, specifier) {
+ }
+ function createProxyPrototypeClass(superClass, getUnknownPrototypeKey) {
+   function Class(...args) {
+-    Class.prototype = new Proxy(Class.prototype, {
+-      get(target, key, receiver) {
+-        const value = Reflect.get(target, key, receiver);
+-        if (value !== void 0) {
+-          return value;
+-        }
+-        if (key === "self" || typeof key === "symbol") {
+-          return;
+-        }
+-        return getUnknownPrototypeKey.call(receiver, key);
+-      }
+-    });
+     return Reflect.construct(superClass, args, Class);
+   }
+   Reflect.setPrototypeOf(Class.prototype, superClass.prototype);
++  // Keep one RPC proxy per wrapper. Nesting proxies per request exhausts the stack in a long-lived test Worker.
++  Class.prototype = new Proxy(Class.prototype, {
++    get(target, key, receiver) {
++      const value = Reflect.get(target, key, receiver);
++      if (value !== void 0) {
++        return value;
++      }
++      if (key === "self" || typeof key === "symbol") {
++        return;
++      }
++      return getUnknownPrototypeKey.call(receiver, key);
++    }
++  });
+   Reflect.setPrototypeOf(Class, superClass);
+   return Class;
+ }

@@ -9,7 +9,7 @@ import { BucketConfigStore } from './bucket-config.js';
 import type {
   FileMeta, FileVersion, WorkspaceMeta, ActivityEvent, Comment,
   OrgMeta, OrgMember, OrgInvite, OrgAgent, SessionMeta, RoleAssignment,
-  ActivityAction, ActivityTarget, Paginated,
+  ActivityAction, ActivityTarget, AgentPlatform, Paginated,
   OAuthProvider, ProviderLinkedUser, ApiKeyMeta, ApiKeyRecord, ShareTokenMeta,
 } from '@agentdrive/shared';
 import type { Env } from '../env.js';
@@ -42,7 +42,7 @@ const EMPTY_USAGE: Usage = { storage_bytes: 0, embedding_count: 0, agent_count: 
 export const ORG_INVITE_TTL_SECONDS = 14 * 24 * 60 * 60;
 const XRESUME_TTL_SECONDS = 400 * 24 * 60 * 60;
 // Outlives the month in the key, so a marker never expires mid-month.
-const RESUME_MARKER_TTL_SECONDS = 40 * 24 * 60 * 60;
+export const RESUME_MARKER_TTL_SECONDS = 40 * 24 * 60 * 60;
 
 export function resumeMonth(d: Date): string {
   return d.toISOString().slice(0, 7);
@@ -104,17 +104,13 @@ export class StorageService {
 
   // MIGRATION: now returns Paginated<WorkspaceMeta>. Top-level handler exposes
   // items as `data` and adds `cursor` as a response sibling.
-  async listWorkspaces(orgId: string, cursor?: string): Promise<Paginated<WorkspaceMeta>> {
-    const list = await this.kv.list({ prefix: `idx:org_workspaces:${orgId}:`, limit: DEFAULT_PAGE_SIZE, cursor });
-    // Two-stage parallel fetch: index keys → ws ids → ws meta. Drops the
-    // 1 + 2N sequential round-trip pattern down to roughly 2 round-trips.
-    const wids = await Promise.all(list.keys.map((k) => this.kv.get(k.name)));
-    const metas = await Promise.all(
-      wids
-        .filter((w): w is string => Boolean(w))
-        .map((w) => this.getWorkspace(w)),
-    );
-    const workspaces = metas.filter((m): m is WorkspaceMeta => m !== null);
+  async listWorkspaces(orgId: string, cursor?: string, limit = DEFAULT_PAGE_SIZE): Promise<Paginated<WorkspaceMeta>> {
+    const prefix = `idx:org_workspaces:${orgId}:`;
+    const list = await this.kv.list({ prefix, limit, cursor });
+    // The index can outlive an ownership change. Use it to find candidates,
+    // then check the canonical workspace before exposing or mutating anything.
+    const metas = await Promise.all(list.keys.map(k => this.getWorkspace(k.name.slice(prefix.length))));
+    const workspaces = metas.filter((m): m is WorkspaceMeta => m?.org_id === orgId);
     return { items: workspaces, cursor: list.list_complete ? null : list.cursor };
   }
 
@@ -132,7 +128,7 @@ export class StorageService {
     message?: string,
     env?: Env,
     ctx?: WaitUntilCtx,
-    embedOpts?: { agent_platform?: string; org_id?: string; mime?: string },
+    embedOpts?: { agent_platform?: AgentPlatform; org_id?: string; mime?: string },
   ): Promise<FileMeta> {
     const contentHash = await hashContent(content);
     const encoder = new TextEncoder();
@@ -262,6 +258,7 @@ export class StorageService {
         updated_at: now,
         created_by: current?.created_by ?? actorId,
         updated_by: actorId,
+        updated_by_platform: embedOpts?.agent_platform,
         ...locator,
       };
 
@@ -276,7 +273,7 @@ export class StorageService {
         message,
         ...locator,
       };
-      await this.kv.put(`ver:${existingFileId}:${padVersion(newVersion)}`, JSON.stringify(version));
+      await this.storeVersion(existingFileId, version);
     } else {
       // New file
       const fileId = generateId('f');
@@ -293,6 +290,7 @@ export class StorageService {
         updated_at: now,
         created_by: actorId,
         updated_by: actorId,
+        updated_by_platform: embedOpts?.agent_platform,
         ...locator,
       };
 
@@ -307,7 +305,7 @@ export class StorageService {
         message,
         ...locator,
       };
-      await this.kv.put(`ver:${fileMeta.id}:${padVersion(1)}`, JSON.stringify(version));
+      await this.storeVersion(fileMeta.id, version);
     }
 
     // Store file metadata BEFORE the path index so a path-based read between
@@ -318,7 +316,7 @@ export class StorageService {
     if (!existingFileId) {
       // Index: path → file ID. Last in the new-file commit chain so the
       // pointer only goes live once the canonical record exists.
-      await this.kv.put(`idx:ws_files:${wid}:${path}`, fileMeta.id);
+      await this.kv.put(`idx:ws_files:${wid}:${path}`, fileMeta.id, { metadata: { id: fileMeta.id } });
     }
 
     // Ref-counting index for orphan-vector cleanup. One entry per
@@ -417,11 +415,12 @@ export class StorageService {
   // MIGRATION: now returns Paginated<FileMeta>. Sorting is per-page; cross-page
   // ordering follows KV key order (path-prefix lexicographic), which is what
   // we want anyway.
-  async listFiles(wid: string, prefix?: string, cursor?: string): Promise<Paginated<FileMeta>> {
+  async listFiles(wid: string, prefix?: string, cursor?: string, limit = DEFAULT_PAGE_SIZE): Promise<Paginated<FileMeta>> {
     const listPrefix = `idx:ws_files:${wid}:${prefix ?? ''}`;
-    const list = await this.kv.list({ prefix: listPrefix, limit: DEFAULT_PAGE_SIZE, cursor });
-
-    const fids = await Promise.all(list.keys.map((k) => this.kv.get(k.name)));
+    const list = await this.kv.list<{ id: string }>({ prefix: listPrefix, limit, cursor });
+    // New path indexes inline the ID in the list response. Older entries
+    // still carry it in their value and use the same lookup as before.
+    const fids = await Promise.all(list.keys.map((k) => k.metadata?.id ?? this.kv.get(k.name)));
     const metas = await Promise.all(
       fids
         .filter((f): f is string => Boolean(f))
@@ -474,15 +473,23 @@ export class StorageService {
     return true;
   }
 
+  private async storeVersion(fid: string, version: FileVersion): Promise<void> {
+    const value = JSON.stringify(version);
+    // Version records are immutable. Inline short ones in the KV list result
+    // and use the value for long change messages or pre-migration records.
+    const metadata = new TextEncoder().encode(value).length <= 1024 ? version : undefined;
+    await this.kv.put(`ver:${fid}:${padVersion(version.version)}`, value, { metadata });
+  }
+
   // MIGRATION: now returns Paginated<FileVersion>. Per-page sort by descending
   // version; cross-page ordering follows KV key order (padded version ascending),
   // so the newest version sits on the last page when paging forward — this is
   // fine for "show me the last N versions" since most callers only page once.
   async getVersions(fid: string, cursor?: string): Promise<Paginated<FileVersion>> {
-    const list = await this.kv.list({ prefix: `ver:${fid}:`, limit: DEFAULT_PAGE_SIZE, cursor });
+    const list = await this.kv.list<FileVersion>({ prefix: `ver:${fid}:`, limit: DEFAULT_PAGE_SIZE, cursor });
 
     const values = await Promise.all(
-      list.keys.map((k) => this.kv.get<FileVersion>(k.name, 'json')),
+      list.keys.map((k) => k.metadata ?? this.kv.get<FileVersion>(k.name, 'json')),
     );
     const versions = values.filter((v): v is FileVersion => v !== null);
 
@@ -595,25 +602,6 @@ export class StorageService {
       activation === null && this.kv.put(activationKey, JSON.stringify({ at, from, to, agent_id: agentId, project })),
       metric === null && this.kv.put(metricKey, '', { metadata: { from, to, at }, expirationTtl: XRESUME_TTL_SECONDS }),
     ]);
-  }
-
-  async hasResumeMarker(key: string): Promise<boolean> {
-    return (await this.kv.get(key)) !== null;
-  }
-
-  async putResumeMarker(key: string): Promise<void> {
-    await this.kv.put(key, '', { expirationTtl: RESUME_MARKER_TTL_SECONDS });
-  }
-
-  async resumeMarkers(orgId: string, month: string): Promise<string[]> {
-    const names: string[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.kv.list({ prefix: `xresume_m:${orgId}:${month}:`, limit: 1000, cursor });
-      for (const k of page.keys) names.push(k.name);
-      cursor = page.list_complete ? undefined : page.cursor;
-    } while (cursor);
-    return names;
   }
 
   // MIGRATION: signature changed from (wid, limit) to (wid, cursor). The
@@ -948,12 +936,11 @@ export class StorageService {
   // A role grant outlives org membership, so removal takes the member's roles too.
   private async removeRolesInOrg(orgId: string, email: string): Promise<void> {
     email = email.toLowerCase();
-    const prefix = `idx:org_workspaces:${orgId}:`;
     let cursor: string | undefined;
     do {
-      const list = await this.kv.list({ prefix, limit: DEFAULT_PAGE_SIZE, cursor });
-      await Promise.all(list.keys.map(({ name }) => this.kv.delete(`role:${name.slice(prefix.length)}:${email}`)));
-      cursor = list.list_complete ? undefined : list.cursor;
+      const page = await this.listWorkspaces(orgId, cursor);
+      await Promise.all(page.items.map(ws => this.kv.delete(`role:${ws.id}:${email}`)));
+      cursor = page.cursor ?? undefined;
     } while (cursor);
   }
 

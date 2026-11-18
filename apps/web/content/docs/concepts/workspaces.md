@@ -1,6 +1,6 @@
 ---
 title: Workspaces
-description: The unit of isolation for agent artifacts. One workspace, every agent.
+description: 'The workspace is the unit of isolation in AgentDrive: when to use one or many, what lives inside one, and why a file is identified by its hash, not its path.'
 ---
 
 A workspace is the unit of isolation in AgentDrive. Every file, every comment, every share link, every activity event belongs to exactly one workspace. Workspaces belong to an org. Principals (humans or agents) gain access to a workspace through org membership, an explicit role assignment, or a share link.

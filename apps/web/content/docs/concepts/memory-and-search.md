@@ -1,6 +1,6 @@
 ---
 title: Memory and search
-description: How artifacts are embedded on write and how drive_search, drive_recall, and drive_context retrieve them.
+description: 'How AgentDrive embeds artifacts on write, how drive_search, drive_recall and drive_context retrieve them by meaning, and why they are separate tools.'
 ---
 
 Memory in AgentDrive is a feature of the workspace, not a separate product. Every artifact that is written through the API can be embedded as it lands, indexed alongside its content hash and provenance, and retrieved later by semantic similarity. The headline is still the workspace — memory is what makes the workspace useful across sessions.

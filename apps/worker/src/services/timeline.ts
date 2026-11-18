@@ -1,5 +1,6 @@
 import type { ActivityEvent, Paginated } from '@agentdrive/shared';
 import type { Env } from '../env.js';
+import { StorageService } from './storage.js';
 
 // Cross-workspace org timeline. Scan-at-read per CEO plan D13 — rebuild as
 // an org-keyed index when first paying customer hits the scale. Hard
@@ -8,28 +9,14 @@ import type { Env } from '../env.js';
 export const TIMELINE_HARD_LIMIT = 1000;
 const KV_LIST_PAGE = 1000;
 
-interface ListWorkspacesOpts {
-  orgId: string;
-  cursor?: string;
-}
-
 async function listWorkspaceIdsAll(env: Env, orgId: string): Promise<string[]> {
-  // Walk all pages of `idx:org_workspaces:<org_id>:*` — workspaces per org
-  // are bounded by plan quota, well under 10k for any v1 customer, so
-  // unbounded iteration is fine here.
+  const store = new StorageService(env.KV, env.R2);
   const out: string[] = [];
   let cursor: string | undefined;
   do {
-    const list = await env.KV.list({
-      prefix: `idx:org_workspaces:${orgId}:`,
-      limit: KV_LIST_PAGE,
-      cursor,
-    });
-    for (const k of list.keys) {
-      const id = k.name.slice(`idx:org_workspaces:${orgId}:`.length);
-      if (id) out.push(id);
-    }
-    cursor = list.list_complete ? undefined : list.cursor;
+    const page = await store.listWorkspaces(orgId, cursor);
+    out.push(...page.items.map(ws => ws.id));
+    cursor = page.cursor ?? undefined;
   } while (cursor);
   return out;
 }

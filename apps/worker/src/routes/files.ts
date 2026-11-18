@@ -11,6 +11,7 @@ import {
   metricWarning, orgQuota, orgUsageStatus, planLimitBody, planLimitError, resumeEnforced, usageStatus, usageWarning,
   type PlanLimitBody, type UsageWarning,
 } from '../services/limits.js';
+import { monthlyMeter } from '../durable-objects/resume-meter.js';
 import { resumeMarkerKey, resumeMonth } from '../services/storage.js';
 import { selfHosted } from '../lib/self-hosted.js';
 
@@ -40,7 +41,6 @@ const validateWrite = createMiddleware<AppType>(async (c, next) => {
 const SESSION_TRANSCRIPT = /^sessions\/([^/]+)\/([^/]+)\/[^/]+\.md$/;
 const HARNESSES = new Set<string>(AGENT_PLATFORMS.filter((p) => p !== 'unknown'));
 
-// gstack-shortcut(dec-2c48b700): soft cap; concurrent first reads, KV list lag and the self-reported platform can let a Free org pass 10, upgrade when RESUME_METER_ENFORCE is on and logs show >12
 // gstack-shortcut(dec-9013b25a): hosted-MCP reads with platform unknown are never counted, upgrade when enforcement turns on or hosted-MCP traffic appears
 // The meter must never break a read, so any KV error serves the content.
 async function meterResume(
@@ -51,31 +51,18 @@ async function meterResume(
   try {
     const month = resumeMonth(new Date());
     const key = await resumeMarkerKey(orgId, month, path, to);
-    const [org, usage, marked, markers] = await Promise.all([
-      s.getOrg(orgId), s.getUsage(orgId), s.hasResumeMarker(key), s.resumeMarkers(orgId, month),
-    ]);
-    // A get can miss a marker the list already shows, and a session already counted must never be refused.
-    const seen = marked || markers.includes(key);
+    const [org, usage] = await Promise.all([s.getOrg(orgId), s.getUsage(orgId)]);
     if (!org) return {};
     const quota = orgQuota(org);
-    const status = (count: number) => usageStatus(org.plan, usage, c.env.SITE_URL, quota, { count, enforced });
-    const log = (outcome: 'counted' | 'repeat' | 'refused', count: number) => console.log(JSON.stringify({
+    const { meter, prefix } = monthlyMeter(c.env, orgId, month);
+    const { count, outcome } = await meter.record(prefix, key, enforced ? quota.max_resumes_month : null);
+    const status = usageStatus(org.plan, usage, c.env.SITE_URL, quota, { count, enforced });
+    console.log(JSON.stringify({
       event: 'resume_meter', org_id: orgId, from, to, count, limit: quota.max_resumes_month, enforced, outcome,
     }));
-    let count = markers.length;
-    if (!seen) {
-      const before = status(count);
-      if (before.metrics.resume_count?.level === 'paused') {
-        log('refused', count);
-        return { refusal: planLimitBody(before, 'resume_count') };
-      }
-      c.executionCtx.waitUntil(s.putResumeMarker(key).catch((err) => {
-        console.error(JSON.stringify({ event: 'resume_meter_error', org_id: orgId, from, to }), err);
-      }));
-      count += 1;
-    }
-    log(seen ? 'repeat' : 'counted', count);
-    return { warning: metricWarning(status(count), 'resume_count') };
+    return outcome === 'refused'
+      ? { refusal: planLimitBody(status, 'resume_count') }
+      : { warning: metricWarning(status, 'resume_count') };
   } catch (err) {
     console.error(JSON.stringify({ event: 'resume_meter_error', org_id: orgId, from, to }), err);
     return {};

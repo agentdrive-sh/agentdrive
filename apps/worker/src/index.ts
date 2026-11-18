@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
-import type { PaidPlan } from '@agentdrive/shared';
 import type { Env, AuthContext } from './env.js';
 import { corsMiddleware } from './middleware/cors.js';
-import { storage } from './lib/route-helpers.js';
+import { orgBilling } from './durable-objects/billing-coordinator.js';
 import { constructStripeEvent } from './services/stripe-webhook.js';
 import { handleOAuthSurface } from './routes/oauth-server.js';
 import searchRoutes from './routes/search.js';
@@ -22,7 +21,7 @@ import commentsRoutes from './routes/comments.js';
 import activityRoutes from './routes/activity.js';
 import orgsRoutes from './routes/orgs.js';
 import keysRoutes from './routes/keys.js';
-import billingRoutes, { priceIds, stripeApi } from './routes/billing.js';
+import billingRoutes from './routes/billing.js';
 import authRoutes from './routes/auth.js';
 import registerRoutes from './routes/register.js';
 import tokenInfoRoutes from './routes/token-info.js';
@@ -33,6 +32,8 @@ import { storageReadiness } from './services/health.js';
 import { selfHosted } from './lib/self-hosted.js';
 
 export { FileCollab } from './durable-objects/file-collab.js';
+export { BillingCoordinator } from './durable-objects/billing-coordinator.js';
+export { ResumeMeter } from './durable-objects/resume-meter.js';
 export { MagicCodes } from './durable-objects/magic-codes.js';
 
 type Variables = { auth: AuthContext };
@@ -114,15 +115,6 @@ app.post('/v1/webhooks/stripe', async (c) => {
   const event = await constructStripeEvent(rawBody, signature, c.env.STRIPE_WEBHOOK_SECRET);
   if (!event) return c.json({ success: false, error: 'Invalid signature' }, 400);
 
-  const s = storage(c);
-
-  type StripeSubscription = {
-    id: string;
-    status?: string;
-    metadata?: { org_id?: string };
-    items?: { data?: Array<{ price?: { id?: string }; quantity?: number }> };
-  };
-
   if (
     event.type === 'checkout.session.completed' ||
     event.type === 'customer.subscription.updated' ||
@@ -132,28 +124,9 @@ app.post('/v1/webhooks/stripe', async (c) => {
     const obj = event.data.object as { id?: string; subscription?: string; metadata?: { org_id?: string } };
     const subId = fromCheckout ? obj.subscription : obj.id;
     const orgId = obj.metadata?.org_id;
-    const org = orgId ? await s.getOrg(orgId) : null;
-    // A checkout introduces the org's subscription; later events only count for that one.
-    if (orgId && org && subId && (fromCheckout || subId === org.stripe_subscription_id)) {
-      // Stripe retries failed deliveries for hours and doesn't order them, so act
-      // on the subscription's current state rather than the event's snapshot.
-      const res = await stripeApi(c.env, `subscriptions/${encodeURIComponent(subId)}`);
-      if (!res.ok) return c.json({ success: false, error: 'Subscription lookup failed' }, 502);
-      const sub = (await res.json()) as StripeSubscription;
-      const plan = (Object.entries(priceIds(c.env)) as [PaidPlan, string | undefined][])
-        .find(([, id]) => id && id === sub.items?.data?.[0]?.price?.id)?.[0];
-      // shortcut: overlapping deliveries for one subscription can race between this read
-      // and the KV write; serialize per org through a Durable Object if that ever shows up.
-      if ((sub.status === 'active' || sub.status === 'trialing') && plan) {
-        await s.updateOrg(orgId, { plan, stripe_subscription_id: sub.id, seats: sub.items?.data?.[0]?.quantity });
-      } else if (fromCheckout && sub.status === 'incomplete') {
-        // First payment still pending: remember the subscription so its activation applies.
-        await s.updateOrg(orgId, { stripe_subscription_id: sub.id });
-      } else if (!fromCheckout && (sub.status === 'canceled' || sub.status === 'incomplete_expired')) {
-        await s.updateOrg(orgId, { plan: 'trial', stripe_subscription_id: undefined });
-      } else if (!fromCheckout && sub.status === 'unpaid') {
-        await s.updateOrg(orgId, { plan: 'trial' });
-      }
+    if (orgId && subId) {
+      const synced = await orgBilling(c.env, orgId).reconcile(orgId, subId, fromCheckout).catch(() => false);
+      if (!synced) return c.json({ success: false, error: 'Subscription reconciliation failed' }, 502);
     }
   }
 

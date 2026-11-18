@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
 import {
   IntegrationLayout,
+  integrationMetadata,
   IntegrationSection,
   PromptExample,
   Snippet,
@@ -8,20 +8,11 @@ import {
 } from '@/components/marketing/integration-page';
 import { INSTALL_COMMAND } from '../data';
 
-export const metadata: Metadata = {
-  title: 'Cursor integration',
-  description:
-    'Sync Cursor agent sessions in the background and resume them in Claude Code, Codex, OpenCode or Antigravity, or the other way round.',
-  alternates: { canonical: '/integrations/cursor' },
-};
+export const metadata = integrationMetadata('cursor');
 
 export default function CursorIntegration() {
   return (
-    <IntegrationLayout
-      platform="cursor"
-      label="Cursor"
-      lede="Pick up a Claude Code or Codex session inside Cursor, or hand a Cursor session to a terminal agent. AgentDrive syncs Cursor sessions in the background."
-    >
+    <IntegrationLayout platform="cursor" label="Cursor">
       <IntegrationSection id="install" title="1. Install">
         <p>
           The installer signs you in, then merges session sync hooks into <code>~/.cursor/hooks.json</code> and

@@ -62,7 +62,7 @@ export function MarketingFooter() {
           ))}
         </div>
         <div className="m-footer-base">
-          <small>CLI v{cli.version}, Apache-2.0 client tools.</small>
+          <small>CLI v{cli.version}. AGPL-3.0 server, Apache-2.0 clients.</small>
           <small>© 2026 Roushan Inc</small>
         </div>
       </div>

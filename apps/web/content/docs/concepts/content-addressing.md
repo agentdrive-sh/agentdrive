@@ -1,6 +1,6 @@
 ---
 title: Content-addressing
-description: How AgentDrive stores artifacts so that identical content shares storage and version history is immutable.
+description: 'How AgentDrive stores artifacts by the sha256 of their content, so identical content shares storage and history is immutable, and what that means for agents.'
 ---
 
 Artifact bytes live in the selected object store, keyed by the sha256 of the supplied content. A managed metadata store tracks the path, version number, actor, and message that points at each blob.

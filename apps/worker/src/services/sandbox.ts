@@ -145,7 +145,7 @@ export async function sandboxCommit(
     message: string;
     author?: { name: string; email: string };
     actorId: string;
-    actorAgentPlatform?: string;
+    actorAgentPlatform?: import('@agentdrive/shared').AgentPlatform;
     orgId?: string;
   },
 ): Promise<SandboxCommitResult> {

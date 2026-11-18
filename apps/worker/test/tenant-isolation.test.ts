@@ -197,6 +197,23 @@ describe("another org's agent key", () => {
     expect(await context.text()).not.toContain('alpha');
   });
 
+  it('ignores a stale organization workspace index across listing, retrieval, activity and member removal', async () => {
+    await env.KV.put(`idx:org_workspaces:${b.org_id}:${wsA}`, wsA);
+    const workspaces = await json<Array<{ id: string }>>(await api('/workspaces', 'GET', b.headers));
+    expect(workspaces.map(w => w.id)).toEqual([wsB]);
+    const timeline = await json<Array<{ workspace_id: string }>>(await api('/org/timeline', 'GET', b.headers));
+    expect(timeline.length).toBeGreaterThan(0);
+    expect(timeline.every(event => event.workspace_id === wsB)).toBe(true);
+    const search = await json<{ hits: unknown[] }>(await api('/search', 'POST', b.headers, { query: SECRET }));
+    expect(search.hits).toEqual([]);
+    const context = await json<{ artifacts: unknown[] }>(await api('/context', 'POST', b.headers, { task: SECRET }));
+    expect(context.artifacts).toEqual([]);
+
+    await joinOrg(b, 'kept@example.com');
+    expect((await api('/org/members/kept%40example.com', 'DELETE', b.headers)).status).toBe(200);
+    expect(await env.KV.get(`role:${wsA}:kept@example.com`)).not.toBeNull();
+  });
+
   it("cannot read org A's comments by putting A's file id under its own workspace", async () => {
     const res = await api(`/workspaces/${wsB}/files/${fA}/comments`, 'GET', b.headers);
     expect(res.status).toBe(404);

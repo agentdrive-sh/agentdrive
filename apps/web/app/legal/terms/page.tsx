@@ -6,11 +6,13 @@ import {
 } from '@/components/marketing/page-shell';
 import { Contents } from '@/components/marketing/contents';
 import { LegalSection } from '@/components/marketing/legal-section';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Terms of Service',
-  description: 'The agreement between you and AgentDrive when you use the hosted service.',
-};
+export const metadata: Metadata = pageMetadata(
+  'Terms of Service',
+  'The terms for using hosted AgentDrive: accounts, acceptable use, your content, subscriptions and payments, service availability, termination and liability.',
+  '/legal/terms',
+);
 
 export default function TermsPage() {
   return (

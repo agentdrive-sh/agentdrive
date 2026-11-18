@@ -38,7 +38,7 @@ const commitSchema = z.object({
 const app = new Hono<AppType>();
 app.use('*', flexAuth, workspaceAccess());
 
-function workspaceGate(c: Context<AppType>): { ok: true; orgId: string; actorId: string; platform?: string } | { ok: false; status: 403 | 404; error: string } {
+function workspaceGate(c: Context<AppType>): { ok: true; orgId: string; actorId: string; platform?: import('@agentdrive/shared').AgentPlatform } | { ok: false; status: 403 | 404; error: string } {
   const auth = c.get('auth');
   if (auth.type === 'share') return { ok: false, status: 403, error: 'Share tokens cannot use the sandbox' };
   // A role grant opens a workspace's files to an outside email, never its sandbox.

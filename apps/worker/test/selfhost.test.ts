@@ -36,12 +36,14 @@ describe('selfhostConfig', () => {
     expect(out.some((b) => b.header === '[durable_objects]')).toBe(true);
   });
 
-  it('carries both Durable Objects and every migration', () => {
+  it('carries the production Durable Object bindings and every migration', () => {
     const out = generate();
     expect(out).toContain('{ name = "FILE_COLLAB", class_name = "FileCollab" },');
     expect(out).toContain('{ name = "MAGIC_CODES", class_name = "MagicCodes" }');
     const migrations = blocks(out).filter((b) => b.header === '[[migrations]]').map((b) => b.lines.join('\n'));
-    expect(migrations).toEqual(['tag = "v1"\nnew_classes = ["FileCollab"]', 'tag = "v2"\nnew_sqlite_classes = ["MagicCodes"]']);
+    expect(out).toContain('{ name = "RESUME_METER", class_name = "ResumeMeter" }');
+    expect(migrations).toEqual(blocks(prod).filter(b => b.header === '[[migrations]]').map(b => b.lines.join('\n')));
+    expect(migrations).toContain('tag = "v4-resume"\nnew_sqlite_classes = ["ResumeMeter"]');
   });
 
   it('sets SELF_HOSTED and the deployed URL', () => {

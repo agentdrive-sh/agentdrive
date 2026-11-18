@@ -1,17 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { InstallBlock } from '@/components/marketing/install-block';
+import { pageMetadata } from '@/components/seo/site';
 import {
   MarketingPageShell,
   PageHero,
   ProseSection,
 } from '@/components/marketing/page-shell';
 
-export const metadata: Metadata = {
-  title: 'Manifesto',
-  description:
-    'Agents need a shared artifact workspace with provenance. Why we built AgentDrive across Claude Code, Codex, OpenCode, Cursor and Antigravity.',
-};
+export const metadata: Metadata = pageMetadata(
+  'Manifesto',
+  'Agents need a shared artifact workspace with provenance. Why we built AgentDrive across Claude Code, Codex, OpenCode, Cursor and Antigravity.',
+  '/manifesto',
+);
 
 export default function ManifestoPage() {
   return (

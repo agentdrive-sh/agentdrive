@@ -56,6 +56,11 @@ const config: NextConfig = {
         permanent: false,
       },
       ...geminiRedirects,
+      {
+        source: '/blog/how-background-session-capture-works',
+        destination: '/blog/how-background-session-sync-works',
+        permanent: true,
+      },
     ];
   },
   async rewrites() {

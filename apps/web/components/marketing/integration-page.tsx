@@ -4,18 +4,36 @@ import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketi
 import { PlatformGlyph } from '@/components/platform-glyph';
 import { CodeBlock } from './code-block';
 import type { PlatformId } from '@/components/platform-glyph';
+import { JsonLd } from '@/components/seo/json-ld';
+import { INTEGRATION_PAGES } from '@/app/integrations/data';
 import { PAIRS } from '@/app/resume/data';
+import { FaqSection, Rich, breadcrumbLd, faqLd, pageMetadata } from './answer-page';
 
 interface IntegrationLayoutProps {
   platform: PlatformId;
   label: string;
-  lede: string;
   children: ReactNode;
 }
 
-export function IntegrationLayout({ platform, label, lede, children }: IntegrationLayoutProps) {
+export function integrationMetadata(platform: PlatformId) {
+  const page = INTEGRATION_PAGES[platform]!;
+  return pageMetadata(page.title, page.description, `/integrations/${platform}`);
+}
+
+export function IntegrationLayout({ platform, label, children }: IntegrationLayoutProps) {
+  const page = INTEGRATION_PAGES[platform]!;
   return (
     <MarketingPageShell screenLabel={`marketing/integrations/${platform}`}>
+      <JsonLd
+        data={[
+          faqLd(page.faq),
+          breadcrumbLd([
+            { name: 'Home', path: '/' },
+            { name: 'Integrations', path: '/integrations' },
+            { name: label, path: `/integrations/${platform}` },
+          ]),
+        ]}
+      />
       <section className="m-wrap narrow m-page-hero">
         <p className="m-crumb">
           <Link href="/integrations">Integrations</Link>
@@ -25,7 +43,9 @@ export function IntegrationLayout({ platform, label, lede, children }: Integrati
           <span className="pill success">Sync + resume</span>
         </div>
         <h1 className="m-h1 page">AgentDrive for {label}</h1>
-        <p className="m-lede">{lede}</p>
+        <p className="m-lede">
+          <Rich text={page.answer} />
+        </p>
         <div className="m-actions">
           <Link href="#install" className="btn lg primary">
             Install AgentDrive
@@ -38,14 +58,27 @@ export function IntegrationLayout({ platform, label, lede, children }: Integrati
       <ProseSection>
         <nav className="m-toc" aria-label="On this page">
           <strong>Your first handoff</strong>
-          <a href="#install">1. Install</a><a href="#capture">2. Sync</a><a href="#resume">3. Resume</a><a href="#troubleshooting">Troubleshooting</a>
+          <a href="#install">1. Install</a><a href="#capture">2. Sync</a><a href="#resume">3. Resume</a><a href="#files">Files</a><a href="#faq">FAQ</a><a href="#troubleshooting">Troubleshooting</a>
         </nav>
         {children}
+        <IntegrationSection id="files" title={`What setup writes for ${label}`}>
+          <ul>
+            {page.files.map((f) => (
+              <li key={f.path}>
+                <strong>
+                  <Rich text={f.path} />
+                </strong>
+                : <Rich text={f.what} />
+              </li>
+            ))}
+          </ul>
+        </IntegrationSection>
+        <FaqSection faq={page.faq} />
         <IntegrationSection id="handoffs" title={`Hand off from ${label}`}>
           <ul>
             {PAIRS.filter((p) => p.from.id === platform).map((p) => (
               <li key={p.slug}>
-                <Link href={`/resume/${p.slug}`}>Resume a {label} session in {p.to.label}</Link>
+                <Link href={`/resume/${p.slug}`}>Continue {p.from.article} {label} session in {p.to.label}</Link>
               </li>
             ))}
           </ul>

@@ -1,6 +1,6 @@
 ---
 title: How background session sync works
-description: Hooks in five agents, a detached sync, client-side redaction and ignore rules, the storage layout, and how a handoff brief is built for the next agent.
+description: 'How AgentDrive syncs agent sessions in the background: hooks in five agents, a detached sync, redaction and ignore rules, storage and the handoff brief.'
 date: 2026-11-10
 author: Rakesh Roushan
 draft: false
@@ -10,7 +10,7 @@ AgentDrive lets one coding agent resume a session another one started. To make t
 
 ## 1. A hook in every agent
 
-Each supported agent CLI has a lifecycle hook system, and AgentDrive registers the same command in each one:
+Each supported agent CLI has a lifecycle hook system, and AgentDrive registers the same command in each one. Antigravity's hook payloads carry no event name, so its entries add `--event <name>`.
 
 ```bash
 command -v adrive >/dev/null 2>&1 && adrive hook <harness> || npx -y @adrive/cli hook <harness>
@@ -37,7 +37,7 @@ On a session-start event, if auto-context is on, the hook also asks AgentDrive f
 The detached sync then does the real work:
 
 - **Locking.** One sync runs at a time, coordinated through a lock file in `~/.config/agentdrive/`. A sync started by a burst of hook events waits up to 30 seconds for the lock instead of giving up.
-- **Debounce.** A turn-end event (`Stop`, `stop`, `AfterAgent`) re-syncs a session at most every two minutes. Session-end and compaction events skip the debounce, so the final state always lands.
+- **Debounce.** A turn-end event (`Stop`, `stop`, `AfterAgent`) re-syncs a session at most every two minutes. Session-end and compaction events skip the debounce, so the final state always lands. OpenCode has no session-end event, so its `session.idle` skips the debounce too.
 - **Sweep.** Each sync also checks every agent for sessions that changed since the last sweep. The first sweep looks back 14 days and handles at most 50 sessions per run. A session that was killed before its end event gets finalized once it has been idle for 30 minutes.
 - **Reading transcripts.** Each agent stores sessions differently. Claude Code keeps JSONL under `~/.claude/projects`, Codex keeps rollout files under `$CODEX_HOME/sessions`, Cursor under `~/.cursor/projects`, Antigravity under `~/.gemini/<app>/brain` and `~/.gemini/tmp`, and OpenCode exposes them through `opencode session list` and `opencode export`. A parser for each one normalizes the session into turns, tool calls and touched paths.
 
@@ -66,26 +66,28 @@ sessions/<project>/<harness>/<session-id>.md
 sessions/<project>/files/<path relative to the project>
 ```
 
+A file outside the project, but inside your home directory, goes under `files/_external/` with a short hash of its path in the name.
+
 The project key is derived from where you work, so every agent files the same repo under the same key:
 
 - With a git remote, it's the normalized remote URL, such as `github.com__acme__api`.
 - With a local repo and no remote, it's the repo folder name plus a short hash of its path.
 - Outside a repo, it's `local__<folder>-<hash>`.
-- Sessions from Claude Code worktrees file under their parent repo.
+- Sessions from a Claude Code worktree that has since been removed file under its parent repo.
 
 Workspace files are versioned and content-addressed, so re-uploading an unchanged file costs nothing. Each session is also recorded as a run with the id `<harness>:<session-id>`. The run carries the session title, its status (`in_progress` or `success`), the ids of the files it uploaded, the transcript path, the paths it touched and the time of the last turn. Every request is stamped with the agent as its agent platform, which is where provenance comes from: the timeline shows that Codex wrote this file and Claude Code read it.
 
 ## 5. Building the handoff brief
 
-When an agent calls `drive_resume` with no arguments, AgentDrive picks the latest session in this project from a **different** agent. Resuming in Codex therefore gives you the Claude Code session, not Codex's own last run. You can also pass a specific id from `drive_sessions`.
+When an agent calls `drive_resume` with no arguments, AgentDrive picks the latest session in this project from a **different** agent. Resuming in Codex therefore gives you the Claude Code session, not Codex's own last run. If no other agent has a session there, it falls back to the latest one. You can also pass a specific id from `drive_sessions`.
 
-The full transcript would usually be too large to load, so the brief is built to a character budget (12,000 by default, up to 50,000):
+The full transcript would usually be too large to load, so the brief is built to a character budget (12,000 by default, from 1,000 up to 50,000):
 
 1. A one-line intro naming the source agent and session, with an instruction to check file state on disk before relying on it.
 2. The session metadata.
-3. **Goal:** the first user message, capped at 1,500 characters.
-4. **Files touched**, plus the workspace ids of the uploaded copies, so an agent on another machine can fetch them with `drive_read`.
-5. **Recent turns**, newest first, added until the budget runs out, with a marker for how many earlier turns were left out.
+3. **Goal:** the first user message, capped at 1,500 characters, or an eighth of the budget if that is smaller.
+4. **Files touched**, plus the file ids of the uploaded copies, so an agent on another machine can fetch them with `drive_read`.
+5. **Recent turns**, picked from the newest back until the budget runs out and shown in order, with a marker for how many earlier turns were left out.
 
 If the head is too large, the file lists shrink first, so even a small budget carries the latest turns. Resume works the same way through `/agentdrive:resume` in Claude Code and `adrive resume` in a shell.
 

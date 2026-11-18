@@ -1,15 +1,35 @@
+import type { Metadata } from 'next';
 import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
 import { PLAN_CATALOG } from '@agentdrive/shared';
 import { Icon } from '@/components/icon';
 import { PlatformGlyph, PLATFORMS, type PlatformId } from '@/components/platform-glyph';
+import { FaqSection } from '@/components/marketing/faq';
 import { HandoffDemo } from '@/components/marketing/handoff-demo';
 import { InstallBlock } from '@/components/marketing/install-block';
 import { ENTERPRISE_CTA, PlanCard } from '@/components/marketing/plan-card';
 import { MarketingNav } from '@/components/marketing/nav';
 import { MarketingFooter } from '@/components/marketing/footer';
 import cli from '../../../packages/cli/package.json';
+import { HOME_FAQ } from './faq';
+import { alt, size } from './opengraph-image';
 import './landing.css';
+import { OPEN_GRAPH_BASE } from '@/components/seo/site';
+
+const TITLE = 'AgentDrive — start in any agent, finish in any other';
+const DESCRIPTION =
+  "The shared workspace that lets Claude Code, Codex, OpenCode, Cursor and Antigravity pick up each other's sessions, with provenance on every artifact and portable storage on R2, S3 or your own bucket.";
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/', types: { 'text/markdown': '/index.md' } },
+  openGraph: {
+    ...OPEN_GRAPH_BASE,
+    url: '/',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: '/opengraph-image', ...size, alt }],
+  },
+};
 
 const CAPTURE_HARNESSES: PlatformId[] = ['claude-code', 'codex', 'opencode', 'cursor', 'antigravity'];
 const MCP_CLIENTS: PlatformId[] = ['cline', 'zed', 'continue'];
@@ -289,6 +309,8 @@ export default function MarketingHome() {
             )}
           </div>
         </section>
+
+        <FaqSection id="l-faq-title" title="Questions" items={HOME_FAQ} />
 
         <section className="l-final" aria-labelledby="l-final-title">
           <div className="m-wrap">

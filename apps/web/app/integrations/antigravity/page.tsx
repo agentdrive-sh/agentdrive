@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
 import {
   IntegrationLayout,
+  integrationMetadata,
   IntegrationSection,
   PromptExample,
   Snippet,
@@ -8,20 +8,11 @@ import {
 } from '@/components/marketing/integration-page';
 import { INSTALL_COMMAND } from '../data';
 
-export const metadata: Metadata = {
-  title: 'Antigravity integration',
-  description:
-    'Sync Antigravity CLI, app and IDE sessions in the background and resume them in Claude Code, Codex, OpenCode or Cursor, or the other way round.',
-  alternates: { canonical: '/integrations/antigravity' },
-};
+export const metadata = integrationMetadata('antigravity');
 
 export default function AntigravityIntegration() {
   return (
-    <IntegrationLayout
-      platform="antigravity"
-      label="Antigravity"
-      lede="Hand work between Antigravity and your other agents without re-explaining it. AgentDrive syncs Antigravity sessions in the background and lets Antigravity resume sessions other agents started."
-    >
+    <IntegrationLayout platform="antigravity" label="Antigravity">
       <IntegrationSection title="Which Antigravity">
         <p>
           Google&apos;s Antigravity CLI (<code>agy</code>), the Antigravity app and the Antigravity IDE all read

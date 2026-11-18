@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { serverApiClient } from '../../../lib/server-api';
-import type { BillingPlan } from '../../../lib/api-client';
+import { ApiError, type BillingPlan } from '../../../lib/api-client';
 import { requireServerSession } from '../../../lib/server-session';
 import { Icon } from '../../../components/icon';
 import { PageHead } from '../../../components/shared';
@@ -8,7 +8,6 @@ import { UsageBars } from '../../../components/screens/usage-bars';
 import type { Quota } from '../../../components/screens/usage-bars';
 import { PlanCompare } from '../../../components/screens/plan-compare';
 import { InvoiceRow } from '../../../components/screens/invoice-row';
-import type { Invoice } from '../../../components/screens/invoice-row';
 import { BillingActions } from './billing-actions';
 import { PLAN_CATALOG, catalogIdForPlan } from '@agentdrive/shared';
 
@@ -30,12 +29,18 @@ export default async function BillingPage() {
   const session = await requireServerSession();
   const client = serverApiClient(session);
 
-  let plan: BillingPlan | null = null;
-  let invoices: Invoice[] = [];
-  if (session?.api_key) {
-    [plan, invoices] = await Promise.all([client.billingPlan(), client.billingInvoices()]);
-  }
-
+  const [plan, invoiceResult] = await Promise.all([
+    client.billingPlan(),
+    client.billingInvoices().then(
+      (invoices) => ({ state: 'ready' as const, invoices }),
+      (error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) throw error;
+        if (error instanceof ApiError && error.status === 403) return { state: 'restricted' as const };
+        return { state: 'unavailable' as const };
+      },
+    ),
+  ]);
+  const managesBilling = invoiceResult.state !== 'restricted';
   const currentId = catalogIdForPlan(plan?.plan ?? 'trial');
   const current = PLAN_CATALOG.find((p) => p.id === currentId) ?? PLAN_CATALOG[0];
   const subscribed = currentId === 'pro' || currentId === 'team';
@@ -96,7 +101,7 @@ export default async function BillingPage() {
                 {seatLabel}
               </div>
             </div>
-            {plan?.stripe_customer_id && <BillingActions />}
+            {managesBilling && plan?.stripe_customer_id && <BillingActions />}
           </div>
 
           <div style={{ marginTop: 24 }}>
@@ -145,7 +150,7 @@ export default async function BillingPage() {
                 <a className="btn ghost sm" href="mailto:hello@agentdrive.sh">
                   Contact us
                 </a>
-              ) : (p.id === 'pro' || p.id === 'team') && !subscribed ? (
+              ) : (p.id === 'pro' || p.id === 'team') && !subscribed && managesBilling ? (
                 <BillingActions plan={p.id} />
               ) : null
             }
@@ -163,9 +168,9 @@ export default async function BillingPage() {
           }}
         >
           <div className="t-md wt-600 fg-0">Invoices</div>
-          <Link href="/billing/portal" className="btn ghost sm">
+          {managesBilling && plan.stripe_customer_id && <Link href="/billing/portal" className="btn ghost sm">
             View all <Icon name="arrow-right" size={11} />
-          </Link>
+          </Link>}
         </div>
         <div
           className="row-item"
@@ -188,7 +193,11 @@ export default async function BillingPage() {
           <span>Status</span>
           <span />
         </div>
-        {invoices.length === 0 ? (
+        {invoiceResult.state === 'unavailable' ? (
+          <p className="empty" role="status">Invoice history is temporarily unavailable. Refresh this page to try again.</p>
+        ) : invoiceResult.state === 'restricted' ? (
+          <p className="empty">Organization owners and admins can view invoices.</p>
+        ) : invoiceResult.invoices.length === 0 ? (
           <div className="empty">
             <Icon name="card" size={24} />
             <h3>No invoices yet</h3>
@@ -199,7 +208,7 @@ export default async function BillingPage() {
             </p>
           </div>
         ) : (
-          invoices.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)
+          invoiceResult.invoices.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)
         )}
       </div>
     </div>

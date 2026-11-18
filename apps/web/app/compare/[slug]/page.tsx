@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { FaqSection, breadcrumbLd, faqLd, pageMetadata, type Faq } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
-import { COMPETITORS, LAST_CHECKED, getCompetitor } from '../data';
+import { JsonLd } from '@/components/seo/json-ld';
+import { COMPETITORS, LAST_CHECKED, getCompetitor, type Competitor } from '../data';
 import { ComparisonTable } from '../table';
 
 export const dynamicParams = false;
@@ -14,22 +16,36 @@ export function generateStaticParams() {
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const c = getCompetitor((await props.params).slug);
   if (!c) notFound();
-  const title = `AgentDrive vs ${c.name}`;
-  return {
-    title,
-    description: c.tagline,
-    alternates: { canonical: `/compare/${c.slug}` },
-    openGraph: { title, description: c.tagline, url: `/compare/${c.slug}` },
-  };
+  return pageMetadata(`AgentDrive vs ${c.name}`, c.description, `/compare/${c.slug}`, `/compare/${c.slug}/opengraph-image`);
+}
+
+function faqFor(c: Competitor): Faq[] {
+  return [
+    { q: `What is the difference between ${c.name} and AgentDrive?`, a: c.tagline },
+    { q: `When should I use ${c.name}?`, a: c.pickThem },
+    { q: 'When should I use AgentDrive instead?', a: c.pickUs },
+    { q: `Can I use AgentDrive alongside ${c.name}?`, a: `Yes. ${c.together}` },
+  ];
 }
 
 export default async function ComparePage(props: { params: Promise<{ slug: string }> }) {
   const c = getCompetitor((await props.params).slug);
   if (!c) notFound();
   const sources = [...new Set(c.facts.map((f) => f.source))];
+  const faq = faqFor(c);
 
   return (
     <MarketingPageShell screenLabel={`marketing/compare/${c.slug}`}>
+      <JsonLd
+        data={[
+          faqLd(faq),
+          breadcrumbLd([
+            { name: 'Home', path: '/' },
+            { name: 'Compare', path: '/compare' },
+            { name: `AgentDrive vs ${c.name}`, path: `/compare/${c.slug}` },
+          ]),
+        ]}
+      />
       <PageHero
         kicker="Compare"
         kickerHref="/compare"
@@ -50,7 +66,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
               <p>{c.pickUs}</p>
             </div>
           </div>
-          <p>They also work side by side: nothing stops an agent from using both.</p>
+          <p>{c.together}</p>
         </section>
 
       </ProseSection>
@@ -59,7 +75,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
       </section>
       <ProseSection>
         <section>
-          <h2>What {c.name} is</h2>
+          <h2>About {c.name}</h2>
           <ul>
             {c.facts.map((f) => (
               <li key={f.text}>{f.text}</li>
@@ -67,8 +83,17 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
           </ul>
         </section>
 
+        {c.sections?.map((s) => (
+          <section key={s.title}>
+            <h2>{s.title}</h2>
+            {s.body.map((b) => (
+              <p key={b}>{b}</p>
+            ))}
+          </section>
+        ))}
+
         <section>
-          <h2>What {c.name} is good at</h2>
+          <h2>Where {c.name} works well</h2>
           <ul>
             {c.goodAt.map((g) => (
               <li key={g}>{g}</li>
@@ -85,6 +110,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
           </ul>
         </section>
 
+        <FaqSection faq={faq} />
 
         <section>
           <h2>Sources</h2>

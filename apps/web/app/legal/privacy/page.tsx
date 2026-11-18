@@ -6,11 +6,13 @@ import {
 } from '@/components/marketing/page-shell';
 import { Contents } from '@/components/marketing/contents';
 import { LegalSection } from '@/components/marketing/legal-section';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy',
-  description: "What AgentDrive collects, why, how long we keep it, and what your rights are.",
-};
+export const metadata: Metadata = pageMetadata(
+  'Privacy Policy',
+  'What AgentDrive collects, including synced session transcripts, how it is used, which subprocessors see it, how long it is kept, and your GDPR and CCPA rights.',
+  '/legal/privacy',
+);
 
 export default function PrivacyPage() {
   return (

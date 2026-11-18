@@ -1,6 +1,6 @@
 ---
 title: Cross-agent identity
-description: One API key, one principal, many agent platforms — with full provenance per session.
+description: 'One API key is one principal across many agent platforms. Platform and role headers on each request give every session its own provenance in AgentDrive.'
 ---
 
 A persistent workspace is only useful if the platform underneath it knows who wrote what. AgentDrive's identity model is built so that the same principal can act through Claude Code on Tuesday, Codex on Wednesday, and Cursor on Thursday, and the audit trail tells you all three without forcing you to manage three keys.

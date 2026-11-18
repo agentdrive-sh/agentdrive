@@ -14,7 +14,8 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "predeploy": "pnpm --filter @agentdrive/shared run build",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "indexnow": "node scripts/indexnow.ts"
   },
   "dependencies": {
     "@agentdrive/shared": "workspace:*",

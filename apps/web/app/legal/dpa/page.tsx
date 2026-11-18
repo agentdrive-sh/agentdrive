@@ -6,12 +6,13 @@ import {
 } from '@/components/marketing/page-shell';
 import { Contents } from '@/components/marketing/contents';
 import { LegalSection } from '@/components/marketing/legal-section';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Data Processing Agreement',
-  description:
-    'GDPR-compliant DPA for B2B customers processing personal data in AgentDrive.',
-};
+export const metadata: Metadata = pageMetadata(
+  'Data Processing Agreement',
+  "AgentDrive's data processing agreement for business customers: processor obligations, sub-processors, international transfers, breach notice and audits.",
+  '/legal/dpa',
+);
 
 export default function DpaPage() {
   return (

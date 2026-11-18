@@ -1,26 +1,14 @@
 import { Icon } from '../icon';
 import { StatusPill } from '../shared';
-
-export interface Invoice {
-  id: string;
-  date: string;
-  total: number;
-  currency?: string;
-  status: 'paid' | 'pending' | 'failed' | string;
-  pdfUrl?: string;
-}
+import type { InvoiceSummary } from '../../lib/api-client';
 
 interface Props {
-  inv: Invoice;
+  inv: InvoiceSummary;
 }
 
 export function InvoiceRow({ inv }: Props) {
-  const status =
-    inv.status === 'paid'
-      ? 'success'
-      : inv.status === 'failed'
-        ? 'failed'
-        : 'pending';
+  const link = inv.pdfUrl ?? inv.hostedUrl;
+  const hasPdf = inv.pdfUrl && inv.pdfUrl !== inv.hostedUrl;
   return (
     <div
       className="row-item"
@@ -33,19 +21,19 @@ export function InvoiceRow({ inv }: Props) {
       <span className="mono t-sm faint">{inv.id}</span>
       <span className="mono t-sm muted">{inv.date}</span>
       <span className="mono t-sm fg-0">
-        ${inv.total.toFixed(2)}
+        {new Intl.NumberFormat('en-US', { style: 'currency', currency: inv.currency ?? 'USD' }).format(inv.total)}
       </span>
-      <StatusPill status={status} />
-      <a
+      <StatusPill status={inv.status} />
+      {link && <a
         className="btn sm ghost"
-        href={inv.pdfUrl ?? '#'}
-        target={inv.pdfUrl ? '_blank' : undefined}
+        href={link}
+        target="_blank"
         rel="noreferrer"
         style={{ justifySelf: 'end' }}
-        aria-label="Download invoice PDF"
+        aria-label={hasPdf ? 'Download invoice PDF' : 'Open hosted invoice'}
       >
-        <Icon name="download" size={11} />
-      </a>
+        <Icon name={hasPdf ? 'download' : 'arrow-right'} size={11} />
+      </a>}
     </div>
   );
 }

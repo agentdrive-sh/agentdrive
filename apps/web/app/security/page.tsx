@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { Contents, sectionId } from '@/components/marketing/contents';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Security',
-  description: 'What AgentDrive syncs, what Private Workspace encrypts, and what stays managed when you bring your own bucket.',
-  alternates: { canonical: '/security' },
-};
+export const metadata: Metadata = pageMetadata(
+  'Security',
+  'What AgentDrive syncs, what Private Workspace encrypts on your machine, what stays managed when you bring your own bucket, and how to report a vulnerability.',
+  '/security',
+);
 
 const titles = ['Choose how content is stored', 'Sync controls', 'Private Workspace', 'Access and identity', 'Infrastructure and transport', 'BYO-bucket', 'Roadmap and disclosures', 'Reporting a vulnerability'];
 

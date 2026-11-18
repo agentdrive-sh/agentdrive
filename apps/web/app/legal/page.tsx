@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingPageShell, PageHero } from '@/components/marketing/page-shell';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Legal',
-  description: 'Privacy policy, terms of service, data processing agreement.',
-};
+export const metadata: Metadata = pageMetadata(
+  'Legal',
+  "AgentDrive's legal documents: the privacy policy, the terms of service for the hosted service, and the data processing agreement for business customers.",
+  '/legal',
+);
 
 const docs = [
   {

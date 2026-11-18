@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { env, SELF, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
+import { env, SELF, runInDurableObject, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import worker from '../src/index';
 import type { Env } from '../src/env';
 import { isoWeek, resumeMarkerKey, resumeMonth } from '../src/services/storage';
+import { monthlyMeter, ResumeMeter } from '../src/durable-objects/resume-meter';
 import { deliveredCode } from './magic-code-helper';
 
 async function clearKv(): Promise<void> {
@@ -175,21 +176,13 @@ describe('cross-agent resume meter', () => {
     expect(await markers(org)).toHaveLength(8);
   });
 
-  it('treats a session as already counted when its marker is listed but the get misses it', async () => {
+  it('imports an existing session marker and allows the repeat at the limit', async () => {
     const org = await setup();
     const fid = await write(org, TRANSCRIPT);
     await seed(org, 9);
     await env.KV.put(await resumeMarkerKey(org.org_id, month, TRANSCRIPT, 'codex'), '');
-    const kv = env.KV;
-    const lagging = {
-      get: (key: string, type?: never) => (key.startsWith('xresume_m:') ? Promise.resolve(null) : kv.get(key, type)),
-      getWithMetadata: kv.getWithMetadata.bind(kv),
-      put: kv.put.bind(kv),
-      delete: kv.delete.bind(kv),
-      list: kv.list.bind(kv),
-    } as unknown as KVNamespace;
 
-    const res = await resume(org, fid, codex(org), { ...enforced, KV: lagging });
+    const res = await resume(org, fid, codex(org), enforced);
     expect(res.status).toBe(200);
     expect((await warning(res))!.message).toContain('(10 of 10)');
     expect(await markers(org)).toHaveLength(10);
@@ -282,28 +275,24 @@ describe('cross-agent resume meter', () => {
     expect(await markers(org)).toHaveLength(1);
   });
 
-  it('serves the content when the meter cannot reach KV', async () => {
+  it('serves content and reports unknown usage when the meter is unavailable', async () => {
     const org = await setup();
     const fid = await write(org, TRANSCRIPT);
-    const kv = env.KV;
+    const unavailable = async () => { throw new Error('meter offline'); };
     const broken = {
-      get: kv.get.bind(kv),
-      getWithMetadata: kv.getWithMetadata.bind(kv),
-      put: kv.put.bind(kv),
-      delete: kv.delete.bind(kv),
-      list: (opts?: KVNamespaceListOptions) =>
-        opts?.prefix?.startsWith('xresume_m:') ? Promise.reject(new Error('kv down')) : kv.list(opts),
-    } as unknown as KVNamespace;
+      idFromName: (name: string) => env.RESUME_METER.idFromName(name),
+      get: () => ({ count: unavailable, record: unavailable }),
+    } as unknown as Env['RESUME_METER'];
     const errors = vi.spyOn(console, 'error');
 
-    const res = await resume(org, fid, codex(org), { ...enforced, KV: broken });
+    const res = await resume(org, fid, codex(org), { ...enforced, RESUME_METER: broken });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { data: { content: string } }).data.content).toBe('# transcript');
     expect(errors.mock.calls.map((args) => String(args[0]))).toContain(
       JSON.stringify({ event: 'resume_meter_error', org_id: org.org_id, from: 'claude-code', to: 'codex' }),
     );
 
-    const plan = await call('/billing/plan', org.key, { KV: broken });
+    const plan = await call('/billing/plan', org.key, { RESUME_METER: undefined });
     expect(plan.status).toBe(200);
     const data = ((await plan.json()) as { data: { usage: Record<string, unknown>; quota: Record<string, unknown> } }).data;
     expect(data.usage).not.toHaveProperty('resume_count');
@@ -311,14 +300,70 @@ describe('cross-agent resume meter', () => {
     errors.mockRestore();
   });
 
-  // Documents the soft cap (dec-2c48b700): both first reads see 9 and go through.
-  it('lets two concurrent first reads at 9 both through', async () => {
+  it.each([3, 2003])('imports %i legacy markers once and keeps steady-state KV work constant', async (size) => {
+    const { meter, prefix } = monthlyMeter(env, crypto.randomUUID(), month);
+    const stats = await runInDurableObject(meter, async (_obj, state) => {
+      let lists = 0;
+      let writes = 0;
+      const kv = {
+        list: async ({ limit, cursor }: { limit: number; cursor?: string }) => {
+          lists++;
+          const first = Number(cursor ?? 0);
+          const end = Math.min(size, first + limit);
+          return {
+            keys: Array.from({ length: end - first }, (_, i) => ({ name: prefix + (i + first) })),
+            cursor: end < size ? String(end) : undefined,
+            list_complete: end === size,
+          };
+        },
+        put: async () => { writes++; },
+      } as unknown as KVNamespace;
+      const migrated = new ResumeMeter(state, { ...env, KV: kv });
+      expect(await migrated.count(prefix)).toBe(size);
+      const importLists = lists;
+      // A new object instance represents an eviction with its SQLite state intact.
+      const again = new ResumeMeter(state, { ...env, KV: kv });
+      expect((await again.record(prefix, prefix + (size - 1), size)).outcome).toBe('repeat');
+      const fresh = prefix + 'new';
+      const results = await Promise.all([again.record(prefix, fresh, null), again.record(prefix, fresh, null)]);
+      expect(results.map(r => r.outcome).sort()).toEqual(['counted', 'repeat']);
+      expect(await again.count(prefix)).toBe(size + 1);
+      return { importLists, steadyStateLists: lists - importLists, writes };
+    });
+    expect(stats).toEqual({ importLists: Math.ceil(size / 1000), steadyStateLists: 0, writes: 1 });
+  });
+
+  it('retries a pending rollback mirror without counting the same session again', async () => {
+    const { meter, prefix } = monthlyMeter(env, crypto.randomUUID(), month);
+    await runInDurableObject(meter, async (_obj, state) => {
+      let available = false;
+      const written: string[] = [];
+      const kv = {
+        list: async () => ({ keys: [], list_complete: true }),
+        put: async (key: string) => {
+          if (!available) throw new Error('mirror outage');
+          written.push(key);
+        },
+      } as unknown as KVNamespace;
+      const migrating = new ResumeMeter(state, { ...env, KV: kv });
+      const key = prefix + 'test';
+      expect(await migrating.record(prefix, key, 1)).toEqual({ count: 1, outcome: 'counted' });
+      available = true;
+      await migrating.alarm();
+      expect(written).toEqual([key]);
+      expect(await migrating.record(prefix, key, 1)).toEqual({ count: 1, outcome: 'repeat' });
+      await migrating.alarm();
+      expect(written).toHaveLength(1);
+    });
+  });
+
+  it('atomically gives the final free resume to one of two new sessions', async () => {
     const org = await setup();
     const a = await write(org, TRANSCRIPT);
     const b = await write(org, 'sessions/github.com__acme__app/claude-code/def456.md');
     await seed(org, 9);
     const [ra, rb] = await Promise.all([resume(org, a, codex(org), enforced), resume(org, b, codex(org), enforced)]);
-    expect([ra.status, rb.status]).toEqual([200, 200]);
-    expect(await markers(org)).toHaveLength(11);
+    expect([ra.status, rb.status].sort()).toEqual([200, 402]);
+    expect(await markers(org)).toHaveLength(10);
   });
 });

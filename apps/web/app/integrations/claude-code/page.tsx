@@ -1,29 +1,20 @@
-import type { Metadata } from 'next';
 import {
   IntegrationLayout,
+  integrationMetadata,
   IntegrationSection,
   Snippet,
   WorkspaceTools,
 } from '@/components/marketing/integration-page';
 import { INSTALL_COMMAND } from '../data';
 
-export const metadata: Metadata = {
-  title: 'Claude Code integration',
-  description:
-    'Sync Claude Code sessions in the background and resume them in Codex, OpenCode, Cursor or Antigravity, or the other way round.',
-  alternates: { canonical: '/integrations/claude-code' },
-};
+export const metadata = integrationMetadata('claude-code');
 
 const pluginInstall = `/plugin marketplace add agentdrive-sh/agentdrive-mcp
 /plugin install agentdrive@agentdrive`;
 
 export default function ClaudeCodeIntegration() {
   return (
-    <IntegrationLayout
-      platform="claude-code"
-      label="Claude Code"
-      lede="Start a task in Claude Code and finish it in Codex, OpenCode, Cursor or Antigravity. The AgentDrive plugin syncs each session in the background and lets Claude Code resume theirs."
-    >
+    <IntegrationLayout platform="claude-code" label="Claude Code">
       <IntegrationSection id="install" title="1. Install the plugin">
         <p>
           Run these inside Claude Code. The plugin adds the session sync hooks, the MCP server, and the{' '}

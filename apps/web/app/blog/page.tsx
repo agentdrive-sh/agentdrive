@@ -1,12 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHero } from '@/components/marketing/page-shell';
+import { pageMetadata } from '@/components/seo/site';
 import { formatPostDate, listPosts } from '@/lib/source';
 
 export const metadata: Metadata = {
-  title: 'Blog',
-  description:
+  ...pageMetadata(
+    'Blog',
     'Notes from building AgentDrive: session continuity across Claude Code, Codex, OpenCode, Cursor and Antigravity, provenance, and portable storage.',
+    '/blog',
+  ),
   alternates: { canonical: '/blog', types: { 'application/rss+xml': '/blog/rss.xml' } },
 };
 

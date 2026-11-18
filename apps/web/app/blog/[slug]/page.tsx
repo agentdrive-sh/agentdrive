@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { JsonLd } from '@/components/seo/json-ld';
+import { breadcrumbList, ORGANIZATION, SITE_URL } from '@/components/seo/site';
 import { formatPostDate, getPost, listPosts } from '@/lib/source';
 
 export const dynamicParams = false;
@@ -25,6 +27,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       url: post.url,
       siteName: 'AgentDrive',
       publishedTime: post.data.date,
+      modifiedTime: post.data.updated,
       authors: [post.data.author],
     },
     twitter: {
@@ -40,9 +43,32 @@ export default async function BlogPost(props: { params: Promise<{ slug: string }
   const post = getPost(slug);
   if (!post) notFound();
   const MDX = post.data.body;
+  const url = `${SITE_URL}${post.url}`;
 
   return (
     <article className="blog-post">
+      <JsonLd
+        data={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BlogPosting',
+            headline: post.data.title,
+            description: post.data.description,
+            datePublished: post.data.date,
+            dateModified: post.data.updated,
+            author: { '@type': 'Person', name: post.data.author },
+            publisher: ORGANIZATION,
+            mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+            url,
+            image: `${url}/opengraph-image`,
+          },
+          breadcrumbList([
+            { name: 'Home', path: '/' },
+            { name: 'Blog', path: '/blog' },
+            { name: post.data.title, path: post.url },
+          ]),
+        ]}
+      />
       <header className="blog-post-head">
         <p className="m-crumb">
           <Link href="/blog">Blog</Link>

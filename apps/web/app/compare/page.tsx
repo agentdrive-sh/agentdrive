@@ -1,15 +1,14 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
+import { pageMetadata } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero } from '@/components/marketing/page-shell';
 import { COMPETITORS, LAST_CHECKED } from './data';
 import { ComparisonTable } from './table';
 
-export const metadata: Metadata = {
-  title: 'Compare',
-  description:
-    'How AgentDrive compares with Mem0, Cloudflare Agent Memory and the Filesystem MCP server, and when to pick which.',
-  alternates: { canonical: '/compare' },
-};
+export const metadata = pageMetadata(
+  'Compare AgentDrive with memory and file tools',
+  'How AgentDrive compares with Mem0, Cloudflare Agent Memory, the Filesystem MCP server and CLAUDE.md handoff notes, and when to pick which.',
+  '/compare',
+);
 
 export default function CompareIndex() {
   return (
@@ -17,7 +16,7 @@ export default function CompareIndex() {
       <PageHero
         width="wide"
         title="Where AgentDrive fits."
-        lede="Choose AgentDrive to carry work between coding agents. Choose a memory service when you are building an app that remembers its users. Choose Filesystem MCP for direct access to local files. Compare the details below."
+        lede="Choose AgentDrive to carry work between coding agents. Choose a memory service when you are building an app that remembers its users. Choose Filesystem MCP for direct access to local files, and CLAUDE.md or AGENTS.md for rules every session should follow. Compare the details below."
       />
       <section className="m-wrap" aria-label="Comparison table">
         <ComparisonTable competitors={COMPETITORS} />

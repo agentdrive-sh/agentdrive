@@ -32,7 +32,7 @@ createServer(async (req, res) => {
     return res.end(JSON.stringify({ status: healthy ? 'ok' : 'unavailable', version: '1.2.5', checks: { kv: healthy ? 'ok' : 'unavailable', r2: 'ok' } }));
   }
   if (url.pathname === '/v1/auth/providers') return reply(res, { email: true, google: false, github: false });
-  if (!['sess_launch_fixture', 'sess_outage_fixture', 'sess_removed_fixture', 'sess_billing_outage_fixture', 'sess_revoked_fixture'].includes(req.headers['x-session-token'])) return reply(res, 'Invalid or expired session', 401);
+  if (!['sess_launch_fixture', 'sess_outage_fixture', 'sess_removed_fixture', 'sess_billing_outage_fixture', 'sess_invoice_outage_fixture', 'sess_invoice_currency_fixture', 'sess_revoked_fixture'].includes(req.headers['x-session-token'])) return reply(res, 'Invalid or expired session', 401);
   if (url.pathname === '/v1/auth/me' && req.headers['x-session-token'] === 'sess_removed_fixture') return reply(res, { type: 'session', email: 'launch@example.invalid', org: null });
   if (url.pathname === '/v1/auth/me') return reply(res, { email: 'launch@example.invalid', org_id: 'org_fixture', org: { id: 'org_fixture', name: 'Launch fixture' } });
   if (url.pathname === '/v1/auth/cli/complete' && req.method === 'POST') {
@@ -56,7 +56,13 @@ createServer(async (req, res) => {
     return reply(res, url.pathname === '/v1/search' ? { hits, total: hits.length } : { artifacts: hits, retrieved_at: Date.now() });
   }
   if (url.pathname === '/v1/org/invites') return reply(res, []);
-  if (url.pathname === '/v1/billing/invoices') return reply(res, []);
+  if (url.pathname === '/v1/billing/invoices') {
+    if (req.headers['x-session-token'] === 'sess_invoice_outage_fixture') return reply(res, 'Invoice history unavailable', 502);
+    if (req.headers['x-session-token'] === 'sess_invoice_currency_fixture') return reply(res, [
+      { id: 'AD-42', date: '2026-10-01', total: 1200, currency: 'jpy', status: 'paid' },
+    ]);
+    return reply(res, []);
+  }
   if (url.pathname === '/v1/billing/plan') {
     if (req.headers['x-session-token'] === 'sess_billing_outage_fixture') return reply(res, 'Billing service unavailable', 503);
     return reply(res, { plan: 'pro', usage: {}, quota: {}, status: { level: 'ok', upgrade_url: '/billing' } });

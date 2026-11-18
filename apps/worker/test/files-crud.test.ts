@@ -363,7 +363,7 @@ describe('GET /v1/workspaces/:wid/files/:fid/versions', () => {
     const writeRes2 = await SELF.fetch(`http://localhost/v1/workspaces/${wid}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader(agent.api_key) },
-      body: JSON.stringify({ path: 'plan.md', content: 'v2' }),
+      body: JSON.stringify({ path: 'plan.md', content: 'v2', message: 'long'.repeat(300) }),
     });
     const written = (await writeRes2.json()) as FileWriteOk;
 
@@ -374,7 +374,7 @@ describe('GET /v1/workspaces/:wid/files/:fid/versions', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as VersionsOk;
     expect(body.success).toBe(true);
-    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data[0]).toMatchObject({ version: 2, message: 'long'.repeat(300) });
     expect(body.data.length).toBeGreaterThanOrEqual(2);
     expect('cursor' in body).toBe(true);
   });

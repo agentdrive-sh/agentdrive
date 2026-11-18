@@ -1,42 +1,39 @@
 ---
-title: Keep your Conductor history after November 20
-description: Conductor Cloud deletes user data after November 20, 2026. Here is how to move your Claude Code and Codex sessions into AgentDrive and resume them in any agent, with your first month of Pro free.
+title: Resume your Conductor sessions in any agent
+description: How to sync the Claude Code and Codex sessions you run in Conductor to AgentDrive, so any coding agent can resume them, alongside Conductor.
 date: 2026-11-09
+updated: 2026-11-13
 author: Rakesh Roushan
 draft: false
 ---
 
-Meta bought Conductor, and [Conductor Cloud is shutting down](https://thenextweb.com/news/meta-acquires-conductor-ai-coding-agents-superintelligence-labs). It goes read-only on November 13, 2026, and cloud data is deleted after November 20. The Mac app keeps getting critical fixes until early 2027, then winds down too.
+**Update, November 13, 2026:** Conductor is staying. An earlier version of this post said Conductor Cloud would shut down and delete user data after November 20. Conductor has since [said it isn't shutting down](https://www.conductor.build/changelog/0.94.2-conductor-is-back), and its [announcement](https://www.conductor.build/announcement) now strikes through the Cloud shutdown. There is no deadline and nothing you need to move. This post now covers the part that still matters: making the sessions you run in Conductor resumable in other agents.
 
-If your agent work lived in Conductor, the history behind it is about to disappear: the plans, the dead ends, and the reasons a change was made. This guide moves that history into AgentDrive, where any coding agent can pick it up.
+Conductor runs Claude Code and Codex in parallel workspaces. Each session holds the plan, the dead ends and the reasons a change was made, but only the agent that ran it can read that history. AgentDrive syncs those sessions so any coding agent can pick one up: start a task with Claude Code in a Conductor workspace, then continue it in Codex, Cursor, OpenCode or Antigravity, inside Conductor or outside it.
 
-## 1. Get your cloud work onto your Mac before November 20
-
-Use the export and move-to-local options in Conductor's shutdown notice, and push every branch you care about to your git remote. Code in git is safe. The conversations that produced it are not, unless you move them.
-
-## 2. Install AgentDrive
+## 1. Install AgentDrive
 
 ```bash
 curl -fsSL agentdrive.sh/install | sh
 ```
 
-This installs the `adrive` CLI, signs you in, and wires session sync into Claude Code, Codex, Cursor, OpenCode and Antigravity on this machine.
+This installs the `adrive` CLI, signs you in, and wires session sync into Claude Code, Codex, Cursor, OpenCode and Antigravity on this machine. From then on, new sessions sync in the background.
 
-## 3. Upload your full history
+## 2. Sync your existing history
 
-Conductor's local workspaces run Claude Code and Codex, which [keep their files in `~/.claude` and `~/.codex`](https://www.conductor.build/docs/faq). AgentDrive reads sessions from there, oldest first, up to 50 per run:
+Conductor's workspaces run Claude Code and Codex, which [keep their files in `~/.claude` and `~/.codex`](https://www.conductor.build/docs/faq). To upload the sessions you already have, run:
 
 ```bash
 adrive sync --all
 ```
 
-Run it again until it reports no new sessions. Add `--dry-run` to preview the next batch without uploading it. Every plan, Free included, lists your whole session history.
+It reads sessions oldest first, up to 50 per run. Run it again until it reports `Synced 0`. Add `--dry-run` to preview the next batch without uploading it. Every plan, Free included, keeps your whole session history.
 
-Sessions are filed by git remote, so work from a Conductor workspace lands in the same project as the rest of that repo. Keep your workspace folders until the sync finishes. Sessions from a folder you already deleted are still uploaded, but they go to a separate project named after the folder.
+Sessions are filed by git remote, so work from a Conductor workspace lands in the same project as the rest of that repo. Sync before you delete a workspace folder: a session whose folder is already gone still uploads, but it goes to a separate project named after the folder.
 
-Transcripts are redacted for common secret shapes before upload. Turn on Private Workspace with `adrive privacy` if you want them encrypted on your machine first.
+Transcripts are redacted for common secret shapes before upload. Turn on Private Workspace with `adrive privacy --private-workspace on` if you want them encrypted on your machine first.
 
-## 4. Resume in any agent
+## 3. Resume in any agent
 
 Open any wired agent in the repo and ask it to resume your last AgentDrive session. In Claude Code, run `/agentdrive:resume`. From a shell:
 
@@ -49,10 +46,8 @@ The handoff brief carries the goal, the files touched and the most recent turns.
 
 ## What AgentDrive is not
 
-AgentDrive does not run agents in parallel or manage worktrees the way Conductor did. It keeps every session and hands work between agents and people. Keep using git worktrees, or another orchestrator, for running agents side by side.
+AgentDrive does not run agents in parallel or manage worktrees the way Conductor does. It keeps your sessions and hands work between agents and people. Keep using Conductor to run agents side by side, and use AgentDrive to carry a session from one agent to the next.
 
-## Your first month of Pro free
+Free includes 10 cloud resumes a month. The [pricing page](/pricing) lists the limits on each plan.
 
-Use code `CONDUCTOR` at checkout for a free first month of Pro, valid until December 31, 2026. Run `adrive upgrade pro`, or upgrade from the [pricing page](/pricing).
-
-If something in your Conductor history doesn't come across, email hello@agentdrive.sh and I'll look at it.
+If a Conductor session doesn't come across, email hello@agentdrive.sh and I'll look at it.

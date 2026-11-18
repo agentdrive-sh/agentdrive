@@ -1,16 +1,15 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
+import { pageMetadata } from '@/components/marketing/answer-page';
 import { InstallBlock } from '@/components/marketing/install-block';
 import { MarketingPageShell, PageHero } from '@/components/marketing/page-shell';
 import { PlatformGlyph } from '@/components/platform-glyph';
 import { CAPTURE_HARNESSES, MCP_CLIENTS } from './data';
 
-export const metadata: Metadata = {
-  title: 'Integrations',
-  description:
-    'Session sync and resume for Claude Code, Codex, OpenCode, Cursor and Antigravity. Workspace tools for Cline, Zed, Continue and any MCP client.',
-  alternates: { canonical: '/integrations' },
-};
+export const metadata = pageMetadata(
+  'Coding agent integrations: sync and resume',
+  'Session sync and resume for Claude Code, Codex, OpenCode, Cursor and Antigravity. Workspace tools for Cline, Zed, Continue and any MCP client.',
+  '/integrations',
+);
 
 export default function IntegrationsIndex() {
   return (

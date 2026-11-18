@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
 import {
   IntegrationLayout,
+  integrationMetadata,
   IntegrationSection,
   PromptExample,
   Snippet,
@@ -8,20 +8,11 @@ import {
 } from '@/components/marketing/integration-page';
 import { INSTALL_COMMAND } from '../data';
 
-export const metadata: Metadata = {
-  title: 'Codex integration',
-  description:
-    'Sync Codex sessions in the background and resume them in Claude Code, OpenCode, Cursor or Antigravity, or the other way round.',
-  alternates: { canonical: '/integrations/codex' },
-};
+export const metadata = integrationMetadata('codex');
 
 export default function CodexIntegration() {
   return (
-    <IntegrationLayout
-      platform="codex"
-      label="Codex"
-      lede="Plan in Claude Code, implement in Codex, and stop pasting context between them. AgentDrive syncs Codex sessions in the background and lets Codex resume sessions other agents started."
-    >
+    <IntegrationLayout platform="codex" label="Codex">
       <IntegrationSection id="install" title="1. Install">
         <p>
           The installer signs you in, then wires session sync hooks into <code>~/.codex/hooks.json</code>, the
@@ -56,7 +47,7 @@ export default function CodexIntegration() {
         <p>
           Codex calls <code>drive_resume</code>, which by default loads the latest session in this project from a
           different agent CLI, as a brief with the goal, files touched and recent turns. The{' '}
-          <code>agentdrive-resume</code> prompt does the same. From a shell, <code>adrive resume</code> prints the
+          <code>agentdrive-resume</code> custom prompt (<code>/prompts:agentdrive-resume</code>) does the same. From a shell, <code>adrive resume</code> prints the
           brief.
         </p>
         <p><strong>Check the result:</strong> the brief should name the source agent, the goal, the files touched and the recent turns. Ask the receiving agent to check those files on disk before continuing. After working in Codex, you can hand the task back to Claude Code in the same way.</p>

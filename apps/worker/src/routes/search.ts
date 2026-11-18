@@ -73,13 +73,13 @@ app.post('/', async (c) => {
     filter,
   });
   const currentHits = await currentEmbeddingHits(c.env, rawHits, indexOrg, parsed.data.workspace_id);
-  const hits = dedupeByContent(currentHits).slice(0, topK);
+  const prefix = parsed.data.filter?.path_prefix;
+  const hits = dedupeByContent(currentHits.filter(hit => !prefix || hit.metadata?.path?.startsWith(prefix))).slice(0, topK);
 
   const results: RetrievalResult[] = [];
   for (const hit of hits) {
     const meta = hit.metadata;
     if (!meta || meta.org_id !== indexOrg) continue;
-    if (parsed.data.filter?.path_prefix && !meta.path?.startsWith(parsed.data.filter.path_prefix)) continue;
 
     results.push({
       path: meta.path,
@@ -103,6 +103,7 @@ app.post('/', async (c) => {
       workspaceId: parsed.data.workspace_id,
       query: parsed.data.query,
       limit: topK,
+      filter: parsed.data.filter,
     });
     for (const k of kwHits) {
       results.push({

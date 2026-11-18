@@ -3,7 +3,10 @@ export interface Env {
   OAUTH_KV: KVNamespace;
   R2: R2Bucket;
   FILE_COLLAB: DurableObjectNamespace;
+  BILLING_COORDINATOR: DurableObjectNamespace<import('./durable-objects/billing-coordinator.js').BillingCoordinator>;
   MAGIC_CODES: DurableObjectNamespace<import('./durable-objects/magic-codes.js').MagicCodes>;
+  RESUME_METER: DurableObjectNamespace<import('./durable-objects/resume-meter.js').ResumeMeter>;
+  RESUME_METER_EPOCH?: string;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
   SEND_EMAIL: SendEmail;

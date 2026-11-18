@@ -15,6 +15,7 @@ const STATIC_ROUTES = [
   '/security',
   '/status',
   '/manifesto',
+  '/facts',
   '/legal',
   '/legal/terms',
   '/legal/privacy',
@@ -28,10 +29,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/resume',
     ...PAIRS.map((p) => `/resume/${p.slug}`),
     ...COMPETITORS.map((c) => `/compare/${c.slug}`),
-    ...source.getPages().map((p) => p.url),
   ];
   return [
     ...paths.map((path) => ({ url: `${SITE}${path === '/' ? '' : path}` })),
-    ...listPosts().map((p) => ({ url: `${SITE}${p.url}`, lastModified: p.data.date })),
+    ...source.getPages().map((p) => ({ url: `${SITE}${p.url}`, lastModified: p.data.lastModified })),
+    ...listPosts().map((p) => ({ url: `${SITE}${p.url}`, lastModified: p.data.updated ?? p.data.date })),
   ];
 }

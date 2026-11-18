@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
+import { pageMetadata } from '@/components/seo/site';
 
-export const metadata: Metadata = {
-  title: 'Service status',
-  description: 'Current API and storage checks for AgentDrive, with support contacts.',
-  alternates: { canonical: '/status' },
-};
+export const metadata: Metadata = pageMetadata(
+  'Service status',
+  'Current read checks for the AgentDrive API, workspace metadata and file storage, what this page does not test, and how to reach support during an outage.',
+  '/status',
+);
 
 interface Health {
   status?: string;

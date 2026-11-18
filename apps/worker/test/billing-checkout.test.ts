@@ -94,24 +94,31 @@ describe('POST /v1/billing/checkout', () => {
     expect(customerCall.headers.get('idempotency-key')).toBe(`customer-${agent.org_id}`);
   });
 
-  it('returns 502 with the Stripe message and saves no customer when customer creation fails', async () => {
+  it('returns 502 and saves no customer when customer creation fails', async () => {
     stripe = () => Response.json({ error: { message: 'Invalid API Key provided' } }, { status: 401 });
     const agent = await registerAgent();
     const res = await checkout(agent.api_key, 'pro');
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toContain('Invalid API Key provided');
+    expect(((await res.json()) as { error: string }).error).toContain('temporarily unavailable');
     expect(await orgCustomerId(agent.org_id)).toBeUndefined();
   });
 
-  it('returns 502 with the Stripe message when session creation fails', async () => {
-    stripe = (url) =>
-      url.endsWith('/v1/customers')
-        ? Response.json({ id: 'cus_2' })
-        : Response.json({ error: { message: 'No such price' } }, { status: 400 });
+  it('allows a corrected checkout after Stripe rejects the requested price', async () => {
+    stripe = (url) => {
+      if (url.endsWith('/v1/customers')) return Response.json({ id: 'cus_2' });
+      if (url.endsWith('/v1/checkout/sessions')) {
+        return Response.json({ error: { type: 'invalid_request_error', message: 'No such price' } }, { status: 400 });
+      }
+      return Response.json({ data: [] });
+    };
     const agent = await registerAgent();
     const res = await checkout(agent.api_key, 'pro');
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toContain('No such price');
+    expect(((await res.json()) as { error: string }).error).toContain('temporarily unavailable');
+    existingCustomer([]);
+    expect((await checkout(agent.api_key, 'team')).status).toBe(200);
+    const creates = calls.filter(c => c.url.endsWith('/v1/checkout/sessions'));
+    expect(creates.map(c => c.body.get('metadata[plan]'))).toEqual(['pro', 'team']);
   });
 
   it('refuses a second subscription while the customer has one that still bills (plan switches go through the portal)', async () => {
@@ -149,6 +156,66 @@ describe('POST /v1/billing/checkout', () => {
     expect((await checkout(other.api_key, 'team', 12)).status).toBe(200);
     expect(sessionForm().get('line_items[0][quantity]')).toBe('12');
     expect(sessionForm().get('subscription_data[metadata][seats]')).toBe('12');
+  });
+
+  it('serializes concurrent checkouts and returns the same Stripe session', async () => {
+    const agent = await registerAgent();
+    const session = { id: 'cs_same', status: 'open', url: 'https://checkout.stripe.com/c/cs_same',
+      metadata: { org_id: agent.org_id, price: 'price_test_team', seats: '4' } };
+    let created = false;
+    stripe = (url) => {
+      if (url.endsWith('/customers')) return Response.json({ id: 'cus_concurrent' });
+      if (url.includes('subscriptions?')) return Response.json({ data: [] });
+      if (url.includes('sessions?')) return Response.json({ data: created ? [session] : [] });
+      if (url.endsWith('/cs_same')) return Response.json(session);
+      if (url.endsWith('/sessions')) { created = true; return Response.json(session); }
+      throw new Error('Unexpected Stripe request');
+    };
+    const results = await Promise.all([checkout(agent.api_key, 'team', 4), checkout(agent.api_key, 'team', 4)]);
+    for (const res of results) {
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ data: { session_id: 'cs_same' } });
+    }
+    expect(calls.filter(c => c.url.endsWith('/sessions'))).toHaveLength(1);
+  });
+
+  it('recovers the original idempotency key after a lost creation response', async () => {
+    const agent = await registerAgent();
+    const session = { id: 'cs_lost', status: 'open', url: 'https://checkout.stripe.com/c/cs_lost',
+      metadata: { org_id: agent.org_id, price: 'price_test_pro', seats: '1' } };
+    let lost = false;
+    stripe = (url) => {
+      if (url.endsWith('/customers')) return Response.json({ id: 'cus_retry' });
+      if (url.includes('subscriptions?') || url.includes('sessions?')) return Response.json({ data: [] });
+      if (url.endsWith('/sessions') && !lost) { lost = true; throw new Error('Response lost'); }
+      return Response.json(session);
+    };
+    expect((await checkout(agent.api_key, 'pro')).status).toBe(502);
+    expect((await checkout(agent.api_key, 'pro')).status).toBe(200);
+    const creates = calls.filter(c => c.url.endsWith('/sessions'));
+    expect(creates).toHaveLength(2);
+    expect(creates[0]!.headers.get('idempotency-key')).toBeTruthy();
+    expect(creates[1]!.headers.get('idempotency-key')).toBe(creates[0]!.headers.get('idempotency-key'));
+  });
+
+  it('recovers a committed Stripe session even when its creation key cached a 500', async () => {
+    const agent = await registerAgent();
+    let attempt: string | null = null;
+    stripe = (url) => {
+      if (url.endsWith('/customers')) return Response.json({ id: 'cus_cached' });
+      if (url.includes('subscriptions?')) return Response.json({ data: [] });
+      if (url.includes('sessions?')) return Response.json({ data: attempt ? [{
+        id: 'cs_cached', status: 'open', url: 'https://checkout.stripe.com/c/cs_cached',
+        metadata: { org_id: agent.org_id, price: 'price_test_pro', seats: '1', attempt },
+      }] : [] });
+      attempt = calls.at(-1)!.body.get('metadata[attempt]');
+      return Response.json({}, { status: 500 });
+    };
+    expect((await checkout(agent.api_key, 'pro')).status).toBe(502);
+    const retried = await checkout(agent.api_key, 'pro');
+    expect(retried.status).toBe(200);
+    expect(await retried.json()).toMatchObject({ data: { session_id: 'cs_cached' } });
+    expect(calls.filter(c => c.url.endsWith('/sessions'))).toHaveLength(1);
   });
 
   it('rejects team seats below 3, above 100 or fractional with 400', async () => {
@@ -202,6 +269,9 @@ describe('who manages billing', () => {
 
     expect((await call('/billing/portal', 'POST', member)).status).toBe(403);
     expect((await call('/billing/portal', 'POST', memberAgent)).status).toBe(403);
+    expect((await call('/billing/invoices', 'GET', member)).status).toBe(403);
+    expect((await call('/billing/invoices', 'GET', memberAgent)).status).toBe(403);
+    expect(calls.some(c => c.url.includes('/invoices?'))).toBe(false);
     expect(portalCalls()).toBe(0);
 
     expect((await call('/billing/portal', 'POST', admin)).status).toBe(200);
@@ -223,6 +293,25 @@ describe('who manages billing', () => {
     expect(calls).toHaveLength(0);
     expect((await checkoutAs(owner)).status).toBe(200);
     expect((await checkoutAs(admin)).status).toBe(200);
+  });
+});
+
+describe('GET /v1/billing/invoices', () => {
+  it('distinguishes an empty history from a Stripe failure and respects currency units', async () => {
+    const agent = await registerAgent();
+    const invoices = () => SELF.fetch('http://localhost/v1/billing/invoices', {
+      headers: { Authorization: `Bearer ${agent.api_key}` },
+    });
+    expect(await (await invoices()).json()).toMatchObject({ data: [] });
+    await setOrg(agent.org_id, { stripe_customer_id: 'cus_1' });
+    stripe = () => Response.json({}, { status: 503 });
+    expect((await invoices()).status).toBe(502);
+    stripe = () => Response.json({ data: ['jpy', 'eur', 'isk'].map(currency => ({
+      id: currency, total: 1200, currency, created: 1, status: 'paid',
+    })) });
+    expect(await (await invoices()).json()).toMatchObject({ data: [
+      { total: 1200, currency: 'jpy' }, { total: 12, currency: 'eur' }, { total: 12, currency: 'isk' },
+    ] });
   });
 });
 

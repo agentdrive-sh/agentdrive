@@ -21,9 +21,27 @@ const APP_ROUTES = [
   '/s/',
 ];
 
+// A crawler named in its own group ignores the * group, so this group repeats the app-route disallow list.
+const AI_CRAWLERS = [
+  'GPTBot',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'ClaudeBot',
+  'Claude-User',
+  'Claude-SearchBot',
+  'PerplexityBot',
+  'Perplexity-User',
+  'Google-Extended',
+  'Applebot-Extended',
+  'Bingbot',
+];
+
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: { userAgent: '*', allow: '/', disallow: APP_ROUTES },
+    rules: [
+      { userAgent: '*', allow: '/', disallow: APP_ROUTES },
+      { userAgent: AI_CRAWLERS, allow: '/', disallow: APP_ROUTES },
+    ],
     sitemap: 'https://agentdrive.sh/sitemap.xml',
   };
 }

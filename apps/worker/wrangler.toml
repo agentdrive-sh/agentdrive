@@ -45,7 +45,9 @@ bucket_name = "agentdrive-content"
 
 [durable_objects]
 bindings = [
+  { name = "RESUME_METER", class_name = "ResumeMeter" },
   { name = "FILE_COLLAB", class_name = "FileCollab" },
+  { name = "BILLING_COORDINATOR", class_name = "BillingCoordinator" },
   # One per lowercased email: its sign-in code, wrong-guess count, lockout and send cap.
   { name = "MAGIC_CODES", class_name = "MagicCodes" }
 ]
@@ -57,6 +59,14 @@ new_classes = ["FileCollab"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["MagicCodes"]
+
+[[migrations]]
+tag = "v3-checkout"
+new_sqlite_classes = ["BillingCoordinator"]
+
+[[migrations]]
+tag = "v4-resume"
+new_sqlite_classes = ["ResumeMeter"]
 
 [ai]
 binding = "AI"

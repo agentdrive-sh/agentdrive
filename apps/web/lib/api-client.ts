@@ -143,6 +143,7 @@ export interface InvoiceSummary {
   currency?: string;
   status: string;
   pdfUrl?: string;
+  hostedUrl?: string;
 }
 
 export interface AuthProviders {

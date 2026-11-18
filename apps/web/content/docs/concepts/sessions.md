@@ -1,6 +1,6 @@
 ---
 title: Sessions
-description: How AgentDrive syncs coding-agent sessions in the background and lets another agent resume them.
+description: 'How AgentDrive syncs coding-agent sessions in the background and lets another agent resume them, with privacy controls, Private Workspace and per-agent notes.'
 ---
 
 A session is one conversation in an agent CLI. AgentDrive syncs sessions from Claude Code, Codex, OpenCode, Cursor and Antigravity into your workspace, so any of them can pick up work another one started.

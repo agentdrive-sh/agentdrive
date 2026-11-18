@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
 import {
   IntegrationLayout,
+  integrationMetadata,
   IntegrationSection,
   PromptExample,
   Snippet,
@@ -8,20 +8,11 @@ import {
 } from '@/components/marketing/integration-page';
 import { INSTALL_COMMAND } from '../data';
 
-export const metadata: Metadata = {
-  title: 'OpenCode integration',
-  description:
-    'Sync OpenCode sessions in the background and resume them in Claude Code, Codex, Cursor or Antigravity, or the other way round.',
-  alternates: { canonical: '/integrations/opencode' },
-};
+export const metadata = integrationMetadata('opencode');
 
 export default function OpencodeIntegration() {
   return (
-    <IntegrationLayout
-      platform="opencode"
-      label="OpenCode"
-      lede="Switch models and agents without losing the thread. AgentDrive syncs OpenCode sessions in the background and lets OpenCode resume sessions other agents started."
-    >
+    <IntegrationLayout platform="opencode" label="OpenCode">
       <IntegrationSection id="install" title="1. Install">
         <p>
           The installer signs you in, then adds a small plugin at{' '}

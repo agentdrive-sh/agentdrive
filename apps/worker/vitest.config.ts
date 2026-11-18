@@ -36,6 +36,8 @@ export default defineWorkersConfig({
           r2Buckets: ['R2'],
           durableObjects: {
             FILE_COLLAB: 'FileCollab',
+            BILLING_COORDINATOR: { className: 'BillingCoordinator', useSQLite: true },
+            RESUME_METER: { className: 'ResumeMeter', useSQLite: true },
             MAGIC_CODES: { className: 'MagicCodes', useSQLite: true },
           },
           bindings: {

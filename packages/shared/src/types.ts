@@ -118,6 +118,7 @@ export interface FileMeta extends StorageLocator {
   updated_at: string;
   created_by: string;
   updated_by: string;
+  updated_by_platform?: AgentPlatform;
 }
 
 export interface FileVersion extends StorageLocator {
