@@ -1,0 +1,149 @@
+---
+title: The handoff brief format
+description: 'The AgentDrive handoff brief as a format: the session document it reads, its fields, order and budget, the MCP tools that serve it and the identity headers.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+A handoff brief is plain text in a fixed order: an intro line, session metadata, a `## Goal` section, `## Files touched`, an optional `## Uploaded files` and `## Recent turns`. It's built from a session document to a character budget, 12,000 by default. Over MCP, `drive_sessions` lists sessions and `drive_resume` returns a brief.
+
+Any tool can produce or read a brief, so the spec is below: every field, its order, how the budget is spent and the MCP surface that serves it. The source is `renderSession` and `buildHandoff` in `packages/mcp-server/src/session.ts`, which is Apache-2.0. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) is the friendlier tour with a full example.
+
+## What are the two layers?
+
+There are two documents, and the brief is made from the first:
+
+1. **The session document.** One markdown file per session, written by `renderSession` from a parsed transcript. This is what sync uploads to `sessions/<project>/<harness>/<session-id>.md`, and what local mode builds in memory.
+2. **The brief.** Made by `buildHandoff`, which parses the session document and cuts it down to the budget.
+
+Both are plain text with no JSON wrapper, so any agent can read them as a message.
+
+## What does a session document contain?
+
+`renderSession` takes a `SessionDoc` with these fields: `harness`, `sessionId`, `project`, an optional `cwd` and `title`, `updatedAt`, `turns` and `filesTouched`. Each turn has a `role`, its `text`, an optional timestamp `ts` and optional `tools`, where each tool has a `name` and an optional `path` or `summary`.
+
+The output has a fixed layout:
+
+1. A title line: `# Session`, a space, an em dash character (U+2014), a space, then `<harness> / <session-id>`. The parser uses this line to name the source agent.
+2. Metadata lines, each on one line: `Project:`, then `Cwd:` and `Title:` when present, `Updated:` and `Turns:`.
+3. A `Files touched:` line followed by one `- <path>` line per file.
+4. One section per turn. The header is `## <role>`, followed by two spaces and the timestamp in the form `_(<ts>)_` when there is one. The role is lowercased to `a-z`, `0-9`, `_` and `-`.
+5. Inside a turn, the text, then one `> tool: <name> <path or summary>` line per tool call.
+
+Here's a session document after its title line:
+
+```text
+Project: github.com__example__todo-api
+Cwd: /Users/you/code/todo-api
+Title: Add due dates to todos
+Updated: 2026-11-18T10:31:12.000Z
+Turns: 2
+
+Files touched:
+- src/schema.ts
+
+## user  _(2026-11-18T10:30:00.000Z)_
+
+Add an optional due_date to todos.
+
+## assistant  _(2026-11-18T10:31:12.000Z)_
+
+Adding the field to the schema first.
+
+> tool: Edit /Users/you/code/todo-api/src/schema.ts
+```
+
+Two escaping rules keep the format parseable. Metadata values and tool details are collapsed to one line. A line of turn text that starts with `## ` or `> tool: ` gets a leading backslash, so it can never be read as a new turn or a tool call.
+
+## What fields does a brief have, and in what order?
+
+`buildHandoff(markdown, maxChars, uploads)` returns these sections, separated by blank lines:
+
+| # | Section | Content |
+|---|---|---|
+| 1 | Intro | `Handoff from a <harness> session (<session-id>). Continue this work; verify file state on disk before assuming it.` If the title line is missing, it says "a prior session". |
+| 2 | Metadata | The `Project:`, `Cwd:`, `Title:`, `Updated:` and `Turns:` lines from the session document. |
+| 3 | `## Goal` | The text of the first `user` turn, without its tool lines. |
+| 4 | `## Files touched` | Up to 50 paths, then `- (+N more)`. |
+| 5 | `## Uploaded files` | Only when an `uploads` argument with file ids is passed: a lead line naming the workspace id and telling the agent to read each file with `drive_read` if it isn't on disk, then the file ids. |
+| 6 | `## Recent turns` | An optional `[... N earlier turns omitted ...]` marker, then the picked turns in order, with headers demoted to `### <role>`. |
+
+If the session document has no turn headers at all, section 6 becomes `## Transcript (tail)` and holds the end of the raw document instead.
+
+## How is the budget spent?
+
+The budget is a character count: 12,000 by default, from 1,000 to 50,000 on the MCP tool. The builder spends it in a fixed way:
+
+- **Goal cap.** The goal is cut to 1,500 characters or an eighth of the budget, whichever is smaller. A cut goal ends in `...`.
+- **Head cap.** Sections 1 to 5 together may use at most half the budget. If they're over, the file lists lose one entry at a time, both lists at once, until the head fits or the lists are down to their `(+N more)` lines. The lists give way first because the recent turns matter more.
+- **Turns.** The builder keeps 64 characters in reserve for the omitted-turns marker, then walks back from the newest turn, adding whole turns while they fit. The first turn that doesn't fit stops the walk.
+- **One long turn.** If even the newest turn is too long, it keeps that turn's header and the end of its text, with `[... turn truncated ...]` in between.
+- **Hard cap.** The result is cut to the budget as a last step, so a brief is never longer than `maxChars`.
+
+The goal always survives, because it sits in the head. Older turns are what get dropped, and the marker says how many.
+
+## How do drive_sessions and drive_resume expose it over MCP?
+
+These two tools are the protocol surface. Both are read-only and both are in the stdio MCP server and the hosted one. With no account, the stdio server's versions read local transcripts instead.
+
+**`drive_sessions`** lists sessions for a project, newest first. It takes:
+
+- `project`: a project key matching `^[a-z0-9._-]{1,200}$`. It defaults to the project of the current working directory.
+- `platform`: only sessions from this agent, such as `codex` or `cursor`.
+- `limit`: default 10, max 50.
+
+It returns one line per session, with its age, agent, title, run id and how many files it uploaded, separated by middle dots, then `Call drive_resume with session_id to load one.` With nothing to list, it says `No prior sessions for project <project>.`
+
+**`drive_resume`** returns a brief. It takes:
+
+- `session_id`: a run id from `drive_sessions`, which is `<harness>:<session-id>`, for example `codex:abc123`.
+- `platform`: when `session_id` is omitted, only consider sessions from this agent.
+- `max_chars`: the budget, from 1,000 to 50,000.
+
+With no `session_id`, it looks at the project's 20 most recent sessions and picks the first one from an agent other than the caller. Signed in, it falls back to the newest session when every one is from the caller. In local mode there is no fallback: it returns `No local sessions from other agents for project <project> on this machine.` It then reads the session document at the path recorded on the run and returns `buildHandoff` of it, with the run's uploaded file ids as section 5. Two cases return a short message instead. A session with no uploaded transcript says so. An encrypted Private Workspace session tells the agent to run `adrive resume <id>` in a shell, which decrypts locally and prints the same brief without section 5.
+
+The shell gives the same output. `adrive resume` prints a brief, `adrive resume --list` lists sessions and `--max-chars` sets the budget. One difference: signed in, `adrive resume` with no id takes the latest session from any agent, since a shell isn't an agent.
+
+## Which identity headers travel with it?
+
+[ADR-0007](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0007-cross-agent-identity-principal-plus-platform.md) sets the model: an API key is a principal, a human or a team, and two headers on each request say which tool is acting for it.
+
+- **`X-Agent-Platform`** names the agent. The MCP server reads it from `AGENTDRIVE_AGENT_PLATFORM`, which `adrive init` writes into each agent's MCP config, such as `cursor` for Cursor. The Worker trims and lowercases it and checks it against a fixed list that includes `claude-code`, `codex`, `cursor`, `opencode` and `antigravity`. Anything else is recorded as `unknown`.
+- **`X-Agent-Role`** is free-form, such as `planner` or `reviewer`. The Worker trims it and keeps the first 64 characters.
+
+The platform header does two jobs for the brief. Sync stamps each session's run with the agent that produced it, which is the agent column in `drive_sessions`. And `drive_resume` compares that column with the caller's own platform to find "a different agent". The headers are labels the client supplies, not authentication. Lying about the platform only muddles your own provenance. The [cross-agent identity docs](/docs/concepts/cross-agent-identity) have the reference.
+
+## How do I produce or read a brief myself?
+
+To read one, treat it as text. The section headings are stable, so a tool can split on `## ` lines if it needs to.
+
+To produce one, the functions are exported from `@adrive/mcp-server/session`: `renderSession` builds a session document from a `SessionDoc`, `buildHandoff` builds the brief, and `sessionPath` and `sessionRunId` give the storage path and run id. Local mode runs exactly this pipeline: parse the transcript, render, redact, build. To make a new agent's sessions resumable, the work is a transcript parser that fills a `SessionDoc`. [Write a transcript adapter](/blog/write-a-transcript-adapter) walks through one.
+
+## FAQ
+
+### Is the brief JSON?
+
+No. It's plain text with markdown headings, so any agent reads it as a message without a parser.
+
+### Why is the goal the first user message?
+
+It's the one part of a session that reliably states the task. If the task changed later, say the current goal when you resume.
+
+### Does the brief include tool output?
+
+No. Each tool call is one line with its name and the path or a short summary of its input. Output isn't kept.
+
+### Can two briefs from the same session differ?
+
+Only by budget or by new turns. The builder is deterministic, so the same session document and the same `max_chars` give the same brief.
+
+## Print a brief and read it against this spec
+
+`adrive resume` prints the same text `drive_resume` returns, so it's the quickest way to see each section, and it works in local mode with no account:
+
+```bash
+adrive resume --max-chars 4000
+```
+
+A small budget shows the head cap and the omitted-turns marker at work. The [MCP tools reference](/docs/mcp-tools) and the [quick start](/docs/quick-start) cover the rest.

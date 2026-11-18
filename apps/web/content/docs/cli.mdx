@@ -67,7 +67,7 @@ The key is stored in `$XDG_CONFIG_HOME/agentdrive/config.json` (falling back to 
 | `adrive ls` | | List workspaces. |
 | `adrive push <local-path>` | `-w, --workspace <id>` (default: the only workspace), `-r, --remote-path <path>` (default: basename), `-m, --message <msg>`, `--encrypt`, `--plaintext` | Upload a local file. |
 | `adrive pull <workspace-id>/<path>` | `-o, --out <file>` (default: stdout) | Download a file. |
-| `adrive watch [path]` | `-w, --workspace <id>`, `--dry-run`, `--no-encrypt`, `--debounce <ms>` | Upload every file under the path (default: cwd), existing ones first, then each change. Skips `.gitignore` and `.adriveignore` matches. |
+| `adrive watch [path]` | `-w, --workspace <id>`, `--dry-run`, `--no-encrypt`, `--debounce <ms>` | Meant to upload every file under the path (default: cwd), existing ones first, then each change. In CLI 1.4.0 it uploads nothing, because of a bug fixed in the next release; use `adrive push` meanwhile. The built-in deny list, `.adriveignore` and `.gitignore` are merged, and the last matching rule wins. |
 | `adrive search <query>` | `--top-k <n>`, `--platform <p>`, `-w, --workspace <id>` | Semantic search across workspace artifacts. |
 | `adrive context [task]` | `--limit <n>`, `-w, --workspace <id>` | Pull artifacts relevant to a task. |
 | `adrive run-log <task>` | `--status <status>` (`success`, `failure`, `partial`, `in_progress`; default `success`), `--duration <ms>`, `--ref <path...>`, `--produced <path...>` | Log an agent run for cross-agent provenance. |

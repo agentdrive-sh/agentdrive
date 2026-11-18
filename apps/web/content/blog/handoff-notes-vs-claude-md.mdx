@@ -1,0 +1,121 @@
+---
+title: 'Handoff notes, CLAUDE.md or AgentDrive: which to use'
+description: CLAUDE.md holds rules, a handoff note holds your judgment about one task, and AgentDrive holds what a session did. When each fits and how they combine.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Use CLAUDE.md or AGENTS.md for rules every session should follow, a handoff note for your own judgment about one task, and AgentDrive for the record of what a session did. They answer different questions, are written by different authors and go stale at different speeds, so most projects that switch agents end up using all three.
+
+I have a [comparison page](/compare/claude-md-handoff-notes) that sets them side by side. This post goes further: real examples of each, the mistakes I made mixing them up, and the order I now use them in when I move a task from Claude Code to Codex or Cursor.
+
+## What does each one hold?
+
+The short version is one question per tool:
+
+| | Answers | Written by | Read |
+|---|---|---|---|
+| CLAUDE.md / AGENTS.md | How do we work in this repo? | You, sometimes drafted with `/init` | At the start of every session |
+| Handoff note | What do I think the next agent should know about this task? | You, or the agent when you ask | When someone opens it |
+| AgentDrive session | What did the last session do? | Sync, from the agent's own transcript | When an agent calls `drive_resume` or you run `adrive resume` |
+
+Here is what each looks like. The rules below are paraphrased from the CLAUDE.md in the AgentDrive repo. The note is a made-up example of the kind I write.
+
+A CLAUDE.md entry is a standing rule:
+
+```markdown
+- Run tests with `pnpm --filter @agentdrive/worker test`.
+- Never change KV key shapes without updating storage.ts and backfilling.
+- No emojis in code, comments or commit messages.
+```
+
+None of those mention a task. They were true last month and will be true next month.
+
+A handoff note is about one task, with judgment in it:
+
+```markdown
+Rate limits: per-principal limiter is in, search limiter is not.
+Tried keying the search limiter on IP first. Wrong: agents behind one
+NAT share an IP. Key it on the principal instead.
+Next: wire RL_SEARCH into /v1/context, then mirror limits in vitest config.
+```
+
+The second line is the valuable one. Nothing in a transcript says "that was wrong" as plainly as a person does.
+
+An AgentDrive brief is the session itself, trimmed to a budget. It opens with the source agent and an instruction to check files on disk, then the session metadata, the goal (the first user message), the files touched and as many recent turns as fit in 12,000 characters by default. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) walks through a full example.
+
+## When does CLAUDE.md fit?
+
+When the instruction would be true for any task in the repo. Build and test commands, conventions, layout, things never to touch.
+
+[Anthropic's memory docs](https://code.claude.com/docs/en/memory) put it the same way: keep CLAUDE.md to "facts Claude should hold in every session: build commands, conventions, project layout, 'always do X' rules." They also suggest under 200 lines per file, because longer files cost context and reduce adherence.
+
+[AGENTS.md](https://agents.md/) is the same idea for every other agent: plain markdown for "build steps, tests, and conventions", read by Codex, Cursor, OpenCode and many more. If a repo has both, the cheapest setup is a CLAUDE.md that imports the shared file with `@AGENTS.md` and adds only Claude-specific lines below it. The Claude Code docs describe that pattern, and it matters because by default Claude Code reads AGENTS.md only when there is no CLAUDE.md in the working directory or above it.
+
+## When does a handoff note fit?
+
+When you stop on purpose and you know something the transcript doesn't say clearly. Three cases where I still write one:
+
+- **A dead end with a reason.** "The streaming approach fails because the Worker closes the connection after the first chunk." The transcript shows the attempt. It may not show the conclusion in one line.
+- **A goal that changed.** I started a session to add a feature, found a bug, and spent the session fixing the bug. The first user message still says "add the feature".
+- **A decision the next agent shouldn't reopen.** "We're keeping the cursor format. Don't switch to offsets." Without this, a fresh agent will often suggest the obvious alternative again.
+
+A note is only as current as the moment you wrote it. If work continues and nobody updates it, the next agent reads a confident description of a state that no longer exists.
+
+## When does AgentDrive fit?
+
+When you didn't plan to stop, or when you don't want to write anything. A usage limit, a crashed terminal or a switch to another agent mid-thought all end a session without a note. Sync runs from hooks in Claude Code, Codex, OpenCode, Cursor and Antigravity, so the record exists anyway.
+
+It also fits when the details matter more than the summary. The brief lists every file the session edited or wrote, up to 50, and the last turns verbatim, including one line per tool call: the tool name and the path or command. That is the part people leave out of notes, because it's tedious to type.
+
+What it doesn't have is judgment. The goal is the first user message even if the task drifted, and a dead end is only visible if it's in the recent turns that fit the budget.
+
+## When does each one go stale?
+
+This is the question that decides most of the mistakes I've seen.
+
+- **CLAUDE.md** goes stale when the code changes and nobody edits the file. It fails quietly: a test command that moved, a folder that was renamed. Anthropic's docs recommend reviewing the files periodically to remove outdated or conflicting instructions.
+- **A handoff note** goes stale the moment work continues past it.
+- **An AgentDrive session** describes a past session, so it is stale by design. That's why the brief's first line tells the next agent to verify file state on disk before assuming anything. It never includes file contents, only paths, so the agent has to read the current files.
+
+## What goes wrong when you mix them up?
+
+The mistake I made most was putting task state into CLAUDE.md. "Currently migrating auth to sessions, step 3 of 5" is useful for a day. After that it loads into every session, in every task, and contradicts the code. A rule file should never need editing because a task finished.
+
+The reverse mistake is putting rules in a handoff note. "Remember to run the worker tests" in a note reaches only the one agent that reads that note. Put it in AGENTS.md and every agent gets it.
+
+The third is treating Claude Code's auto memory as a handoff. The docs say auto memory can hold project notes like "ongoing work, deadlines, and decisions", which sounds like a handoff. But it's written for Claude Code, and the docs say it's machine-local and not shared across machines. Codex on the same laptop doesn't load it, and neither does Claude Code on your other one.
+
+## How do they work together?
+
+My order when I move a task from Claude Code to Codex:
+
+1. The receiving agent loads its own rules at startup, as it always does: AGENTS.md for Codex, CLAUDE.md for Claude Code.
+2. I ask it to resume. It calls `drive_resume`, which by default prefers a recent session in this project from a different agent, and reads the brief.
+3. If I stopped on purpose, the last turn in the brief is the agent stating the next step and anything it ruled out, because I asked for that before I closed the session. That turn is my handoff note, and it travels inside the brief.
+4. If the goal drifted, I say the current goal in the resume prompt.
+
+If you prefer a separate note file, have the agent write it. When the agent writes a file that git doesn't track, sync uploads it with the session, so the note travels with the transcript to another machine too.
+
+## FAQ
+
+### Should I put AgentDrive instructions in CLAUDE.md?
+
+You don't need to. With auto-context on, `adrive init` adds a short instructions block to Codex's and OpenCode's global AGENTS.md, to `~/.gemini/GEMINI.md`, which Antigravity loads as a global rule, and a Cursor rule. In Claude Code, the plugin's MCP server carries its own instructions.
+
+### Can a handoff note replace AgentDrive?
+
+If you always stop on purpose and always write one, mostly yes. The gap is sessions that end without warning, and the file list and tool calls nobody types out by hand.
+
+### Can AgentDrive replace CLAUDE.md?
+
+No. A brief covers one session and is fetched on demand. Rules that every session should follow belong in a file the agent loads at startup.
+
+### Does the brief include my CLAUDE.md?
+
+No. It's built from the session transcript. The receiving agent loads its own instruction files the normal way.
+
+## See what your last session left
+
+Install the CLI with `npm install -g @adrive/cli`, then run `adrive resume --list` in a project where you've used Claude Code, Codex or OpenCode. Those three need no account and no setup, so the list shows straight away which sessions a brief could come from. The [sessions docs](/docs/concepts/sessions) cover resume and the privacy controls.

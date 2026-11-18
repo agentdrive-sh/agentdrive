@@ -1,0 +1,139 @@
+---
+title: What to do when Codex hits its usage limit
+description: Codex hit its usage limit mid-task? You can wait for the reset, buy credits or switch agents. Here is how to carry the task into Claude Code or Cursor.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Codex has no subscription of its own: it draws on your ChatGPT plan's usage allowance, shared between local messages and cloud tasks. If you reach the limit mid-turn, Codex can still finish that turn. Once it stops, Claude Code or Cursor can pick up the task from a handoff brief of the Codex session, so you don't explain it again.
+
+I hit this most often late in a task, when Codex has the plan in its head and half the files are already edited. Below are the three options in the order I'd consider them, then the switch in detail, since that's the part AgentDrive does.
+
+## Why did Codex stop?
+
+OpenAI's [Codex pricing page](https://learn.chatgpt.com/docs/pricing) says Codex is included in the ChatGPT Free, Go, Plus, Pro, Business, Edu and Enterprise plans, and that local messages and cloud chats share your plan's usage allowance. Cloud tasks may use more of that allowance than local messages.
+
+OpenAI publishes estimates of local messages per five-hour period for Plus and Standard Business, and says weekly limits may also apply. It also says the estimates are not fixed message limits, and they vary by model, so I'm not going to repeat numbers here. Two places show your real position:
+
+- `/status` inside an active Codex CLI session shows your remaining limits.
+- The [usage dashboard](https://chatgpt.com/codex/settings/usage) shows current limits and reset times.
+
+One detail from the same page is useful: if you reach the limit during an active turn, the agent can keep working on that turn, within fair use. Let that turn finish if you can. The files on disk will then match the last turn in the transcript, which makes the handoff cleaner.
+
+## Option 1: wait for the reset
+
+Nothing is lost by waiting. Your edits are on disk, and Codex keeps the session in its own transcript store. Check the reset time on the usage dashboard. If it's close, or the work isn't urgent, this is the right call.
+
+## Option 2: pay for more usage
+
+The pricing page lists a few paid routes:
+
+- **Credits.** ChatGPT Plus and Pro users who reach their limit can buy more credits and keep working without changing plan. Business, Edu and Enterprise plans with flexible pricing can buy workspace credits.
+- **A bigger plan.** The page says Pro plans currently have no five-hour limit. Weekly limits can still apply.
+- **An API key.** Any user can run extra local chats with an API key, charged at standard API rates instead of your ChatGPT allowance. The page notes that API-key use has no cloud-based features such as GitHub code review or Slack.
+
+## Option 3: continue in another agent
+
+If you also use Claude Code or Cursor, you can keep going now. The problem is that the new agent knows nothing. You'd normally copy the plan out of the Codex session, paste it in, explain what was tried and list the files that changed.
+
+AgentDrive does that part. It reads the Codex session and hands the next agent a brief with the goal, the files touched and the most recent turns. You can do it with no account, or signed in.
+
+## How do I continue in Claude Code without an account?
+
+Use local mode. It reads each agent's own transcripts on your machine, uploads nothing and needs no network. Codex needs no setup for this, because its transcripts already record the project directory. So it works even if you install AgentDrive after Codex stopped.
+
+Sessions stay local only while you stay in local mode. If you sign in later, the first sync uploads your sessions from the last 14 days, from every agent and every project on this machine, including the ones you ran in local mode. It sends up to 50 per run and picks up the rest on later syncs.
+
+```bash
+npm install -g @adrive/cli
+cd ~/code/your-project
+adrive init --local     # wire your agent tools without signing in
+adrive resume --list    # this project's sessions from your other agents
+adrive resume           # handoff brief for the newest one
+```
+
+`adrive resume --list` prints one line per session: the id, the agent, the time and the title. A Codex session id starts with `codex:`. Pass one to `adrive resume <id>` to print that session's brief.
+
+`adrive init --local` also installs the AgentDrive plugin in Claude Code when the `claude` command is on your PATH. If it isn't, init prints the two commands to run inside Claude Code:
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+Then open Claude Code in the same project and run `/agentdrive:resume`, or ask:
+
+> Resume my last AgentDrive session from Codex. Check the files on disk before continuing.
+
+With no account, the plugin's `drive_sessions` and `drive_resume` tools read the local transcripts too. Resume skips sessions from the agent you run it in, so Claude Code gets the Codex session rather than its own last one. The brief goes through the same secret redaction that sync applies before an upload.
+
+## How do I continue in Cursor?
+
+The same local setup wires Cursor. Reload the Cursor window afterwards (Developer: Reload Window) so it loads the hooks and the MCP server. Then run `/agentdrive-resume` in the same project, or ask in chat for your last AgentDrive session from Codex.
+
+Cursor needs its hook only when Cursor is the agent you're leaving, because Cursor transcripts don't record the project directory. Codex is the source here, so nothing extra is needed.
+
+## How do I do it signed in?
+
+Signing in syncs sessions to your AgentDrive workspace, so you can resume on another machine, share a session with a teammate, and see in the timeline which agent did what.
+
+```bash
+npm install -g @adrive/cli
+adrive init
+```
+
+`adrive init` signs you in through the browser, where you enter the code it prints. It wires session sync hooks into `~/.codex/hooks.json` and approves them for you. On an older Codex, approve them once via `/hooks`.
+
+Then make sure the Codex session has reached your workspace:
+
+- **If AgentDrive was already set up,** end the Codex session. The session-end hook always syncs. Turn-end syncs happen at most every two minutes per session, so the last turn can lag until the session ends.
+- **If you set it up after the limit,** run `adrive sync` in the project. It sweeps every agent's sessions, and the first sweep looks back 14 days.
+
+Now open Claude Code or Cursor in the same project and ask it to resume your last AgentDrive session from Codex. Signed in, `drive_resume` prefers the most recent session in this project from a different agent. From a shell, `adrive resume` without an id picks the latest session from any agent, so use `adrive resume --list` and pass the Codex id.
+
+## What does the other agent get?
+
+The brief opens with a line naming the source agent and session, and tells the agent to verify file state on disk before assuming it. Then come the project, working directory, title, last update and turn count, the goal (the session's first user message), the files touched, and as many recent turns as fit in 12,000 characters by default. I wrote up the format in [what goes into a handoff brief](/blog/what-goes-into-a-handoff-brief).
+
+The Codex parser skips reasoning items, so the brief carries what was said and which tools ran, not what the model was thinking. Tool output isn't in it either. That's why the check on disk matters.
+
+## Which pairs does this cover?
+
+Any direction between Claude Code, Codex, OpenCode, Cursor and Antigravity. For Codex as the source:
+
+- [Codex to Claude Code](/resume/codex-to-claude-code)
+- [Codex to Cursor](/resume/codex-to-cursor)
+- [Codex to Antigravity](/resume/codex-to-antigravity)
+
+The [Codex integration page](/integrations/codex) lists every file setup writes.
+
+## FAQ
+
+### Do I need AgentDrive installed before Codex hits the limit?
+
+Not for local mode. Codex transcripts are already on disk with their project directory, so you can install afterwards and resume right away. Signed in, run `adrive sync` once after installing.
+
+### Does local mode upload anything?
+
+No. It reads transcripts on your machine and prints the brief there. Nothing is uploaded and nothing goes into the provenance timeline.
+
+### Can I go back to Codex after the reset?
+
+Yes. Ask Codex to resume your last AgentDrive session from Claude Code. To call the AgentDrive skill by name, start the request with `$agentdrive`. Either way Codex calls `drive_resume`.
+
+### Does switching cost anything on AgentDrive?
+
+Local resumes are unlimited and need no account. The Free plan includes 10 cloud resumes a month, Pro is $20 a month and Team is $30 per seat a month. `adrive plan` shows your usage. See [pricing](/pricing).
+
+## Pick up where Codex stopped
+
+On the machine where Codex stopped, in the project directory:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+Then open Claude Code in the same project and run `/agentdrive:resume`.

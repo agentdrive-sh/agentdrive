@@ -1,0 +1,122 @@
+---
+title: 'One task, three agents: OpenCode, Codex and Claude Code'
+description: How to pass one task between OpenCode, Codex and Claude Code with AgentDrive, how the OpenCode plugin syncs sessions, and how to pick the right session.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+To run one task across OpenCode, Codex and Claude Code, install AgentDrive once so all three sync their sessions into the same project. Each agent then resumes the one before it with its own command: `/agentdrive-resume` in OpenCode, a plain request (or the `$agentdrive` skill) in Codex and `/agentdrive:resume` in Claude Code. Every resume loads one session's brief.
+
+Two agents is a handoff. Three is a chain, and a chain has questions a pair doesn't: which session does each resume pick, and how does the third agent learn what the first one decided? This post answers both, and starts with the agent whose sync works differently from the others: OpenCode.
+
+## How does each agent sync its sessions?
+
+| Agent | What setup adds | Events that sync |
+|---|---|---|
+| OpenCode | a plugin at `~/.config/opencode/plugins/agentdrive.ts` | `session.created`, `session.idle` |
+| Codex | hooks in `~/.codex/hooks.json` | `SessionStart`, `Stop`, `SessionEnd`, `PreCompact` |
+| Claude Code | the AgentDrive plugin's hooks | `SessionStart`, `Stop`, `SessionEnd`, `PreCompact` |
+
+All three end up in the same place. A hook (or the OpenCode plugin) hands the session to `adrive`, which starts a detached `adrive sync`. The sync redacts the transcript on your machine and uploads it to `sessions/<project>/<agent>/<session-id>.md` in your workspace, with any files the agent wrote that git doesn't track. [How background session sync works](/blog/how-background-session-sync-works) covers the shared machinery.
+
+## How does OpenCode's plugin sync a session?
+
+AgentDrive connects to OpenCode through a plugin rather than a hooks file. OpenCode loads plugins from `~/.config/opencode/plugins/` (or `$XDG_CONFIG_HOME/opencode/plugins/`), so `adrive init` writes one there. It's a short file, and it's regenerated every time you run init, so edits to it don't survive.
+
+The plugin listens for two events:
+
+1. **`session.created`.** When a session starts, the plugin sends its id and directory to `adrive hook opencode`. Sessions with a parent, the ones OpenCode creates for subagents, are skipped, so only your top-level session is synced. The hook treats this as a session start and runs a sync that also sweeps for recent sessions.
+2. **`session.idle`.** When OpenCode finishes responding and goes idle, the plugin sends the session id again. Every idle event forces a sync, with no two-minute wait. That's on purpose: OpenCode has no session-end event, and an idle often lands within two minutes of `session.created`, so waiting would leave a one-shot session empty.
+
+The plugin starts `adrive` as a detached process and never waits on it. If `adrive` is missing, slow or failing, OpenCode doesn't notice.
+
+The sync side is different too. OpenCode keeps sessions in its own store, so AgentDrive reads them through OpenCode's CLI:
+
+- `opencode session list --format json` to find sessions and when each was last updated.
+- `opencode export <id>` to read one session's messages and tool calls.
+
+Both run with `--pure`, which tells OpenCode to skip plugins, so reading a session doesn't fire the AgentDrive plugin again. Each call has a 15-second timeout.
+
+From the export, the parser keeps your messages, OpenCode's replies and its tool calls. The `write` and `edit` tools record their file paths, and patch tools record every file in the patch. Those become the brief's files touched. OpenCode's own session title becomes the session title.
+
+Two limits worth knowing:
+
+- **OpenCode can't add context at session start.** Its plugin API has no channel for that, so OpenCode won't mention your Codex or Claude Code sessions on its own. Codex and Claude Code do, when auto-context is on.
+- **`opencode session list` only lists the project of the directory it runs in.** A sync sees the OpenCode sessions of the directory where the hook fired. That covers the normal case of syncing the project you're working in.
+
+## How do I set up all three?
+
+1. **Install and run init.**
+
+   ```bash
+   npm install -g @adrive/cli
+   adrive init
+   ```
+
+   Or use the one-liner, `curl -fsSL agentdrive.sh/install | sh`. Init signs you in, then wires each agent it finds.
+
+2. **Check OpenCode's files.** Init writes the plugin and merges the MCP server into `opencode.json`. If you only have an `opencode.jsonc` with comments in it, init leaves it alone and tells you to add the `agentdrive` entry by hand, so your comments survive. It also adds `/agentdrive-resume` and `/agentdrive-sessions` under `commands/`.
+
+3. **Check Codex.** Hooks in `hooks.json`, the MCP server in `config.toml`, and the AgentDrive skill in `skills/agentdrive/`. Setup approves the hooks for you. On an older Codex, approve them once via `/hooks`.
+
+4. **Check Claude Code.** Init installs the plugin when `claude` is on your `PATH`. If it can't, run `/plugin marketplace add agentdrive-sh/agentdrive-mcp` and then `/plugin install agentdrive@agentdrive` inside Claude Code.
+
+5. **Restart all three** so they load the new plugin, hooks and MCP server.
+
+## How do I hand one task through all three?
+
+The order here is an example. The commands work in any order.
+
+1. **Start in OpenCode.** Work as usual. Each time OpenCode goes idle, the session syncs. Before you stop, ask it to write down the plan and the next step, so they're in the last turn.
+
+2. **Continue in Codex.** Open Codex in the same project and ask it to resume your last AgentDrive session, or start the request with `$agentdrive` to call the AgentDrive skill by name. It calls `drive_resume`, which loads the latest session in this project from an agent other than Codex: the OpenCode one.
+
+3. **Finish in Claude Code.** Open Claude Code in the same project and run `/agentdrive:resume`. With no id, it loads the latest session from an agent other than Claude Code, which is now the Codex session.
+
+4. **Check the files on disk at every step.** Each resume command tells the agent to check the files the brief mentions before it relies on them. The repo is the only place all three agents' changes add up.
+
+## Which session does resume pick when three agents are involved?
+
+With no id, `drive_resume` picks the newest session in the project from a different agent than the one asking. With two agents, that's always the other one. With three, it's whichever other agent touched the project last.
+
+When that's not the one you want, list and pick:
+
+- `/agentdrive:sessions opencode` in Claude Code lists only OpenCode sessions.
+- `/agentdrive-sessions` in OpenCode, and a request such as "list my AgentDrive sessions" in Codex, list recent sessions from all your agents.
+- `adrive resume --list` in a shell prints session id, agent, last activity and title for the project's ten most recent sessions.
+
+Then pass the id: `/agentdrive:resume opencode:<id>`, or `adrive resume <id>` in a shell.
+
+## How does the third agent learn what the first one decided?
+
+**A brief covers one session, not the chain.** When Claude Code resumes the Codex session, it gets Codex's goal, files touched and recent turns. It doesn't get the OpenCode session, unless Codex's turns repeated it.
+
+Two ways to carry the thread:
+
+1. **Restate before each handoff.** Before you leave an agent, ask it to sum up the goal, what's done, what's left and anything the earlier agents decided. That turn is the newest one in the session, and the brief keeps the newest turns first, so it always reaches the next agent.
+2. **Load both briefs.** In Claude Code, resume the Codex session, then ask it to load the OpenCode one by id as well. Each `drive_resume` call returns one brief, so two calls give it both.
+
+The goal in each brief is that session's first message. In a chain, that's often the resume command itself, which says nothing about the task. Starting each session with one sentence of what you want, before the resume command, fixes that.
+
+## FAQ
+
+### Why didn't my OpenCode session sync?
+
+Check that `~/.config/opencode/plugins/agentdrive.ts` exists and that you restarted OpenCode. The plugin syncs on idle, so let OpenCode finish a response. Then run `adrive sync` in the project directory and look for an `opencode:` line in what it prints.
+
+### Do subagent sessions in OpenCode sync too?
+
+No. The plugin skips sessions with a parent, so only your top-level session is synced.
+
+### Can I run this chain without an account?
+
+Yes, on one machine. Local mode reads Claude Code and Codex transcripts from disk and OpenCode sessions through `opencode export`, and none of the three needs a hook for it. See [Resume across agents with no account](/blog/local-mode-no-account).
+
+### Does each handoff count as a resume on the Free plan?
+
+Signed-in resumes count toward the Free plan's monthly cloud resume limit, and local resumes are unlimited. The [pricing page](/pricing) has the limits for each plan.
+
+## Pick a pair to start with
+
+A chain is a series of pairs, so start with one. Each pair has its own guide, for example [OpenCode to Codex](/resume/opencode-to-codex) and [Codex to Claude Code](/resume/codex-to-claude-code), and the [OpenCode](/integrations/opencode), [Codex](/integrations/codex) and [Claude Code](/integrations/claude-code) pages list every file setup touches.

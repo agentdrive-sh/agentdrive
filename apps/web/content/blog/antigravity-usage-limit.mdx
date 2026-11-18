@@ -1,0 +1,105 @@
+---
+title: 'Antigravity limits: continue your task in another agent'
+description: Hit your Antigravity quota mid-task? What Google says about the limits, and how to move the same task into Claude Code, Codex or Cursor with AgentDrive.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Google doesn't publish Antigravity quota numbers. On Google AI Pro and Ultra the quota refreshes every five hours, within weekly limits; on other plans it refreshes weekly. When the next refresh is too far off, Claude Code, Codex or Cursor can continue the same task from a handoff brief of the Antigravity session.
+
+So this post has no numbers. It has what Google's docs say, and the two things that make Antigravity different as a source: the project directory comes from a hook, and there's no session-end event.
+
+## What are Antigravity's usage limits?
+
+Google's [Antigravity plans page](https://antigravity.google/docs/plans) describes the limits by plan rather than by number:
+
+- **Google AI Ultra:** the highest quota, refreshed every five hours, and the highest weekly rate limits.
+- **Google AI Pro:** a high quota, refreshed every five hours until the weekly limit is reached, and a higher weekly rate limit.
+- **Other plans:** a quota refreshed weekly, and a weekly rate limit.
+
+The same page says the limits correlate with the amount of work the agent does, which differs from prompt to prompt. Straightforward tasks get more prompts out of the quota than complex ones. Google also says the limits are subject to change, and that Google Workspace plans don't include Antigravity plans or higher rate limits. You can see your baseline quota usage across models on the Settings page.
+
+That's all there is to go on. If you see a specific number quoted for Antigravity somewhere, it didn't come from that page.
+
+## What can I do when the quota runs out?
+
+- **Wait for the refresh.** Every five hours on Pro and Ultra, until Pro reaches its weekly limit. Weekly on other plans.
+- **Use AI credits.** Pro and Ultra users can spend purchased AI credits on usage above the baseline quota. An AI Credit Overages setting controls this: "Never" waits for the quota to refresh, "Always" uses credits once the quota is exhausted and switches back when it refreshes.
+- **Upgrade** from Pro to Ultra for a larger quota.
+- **Continue in another agent.** The plans page says Antigravity doesn't support bringing your own key or endpoint for extra rate limits. If you have Claude Code, Codex or Cursor, moving the task there is the fastest way to keep going.
+
+## How do I continue in another agent without an account?
+
+Use local mode. It reads each agent's transcripts on your machine, uploads nothing and needs no network.
+
+```bash
+npm install -g @adrive/cli
+cd ~/code/your-project
+adrive init --local     # wire your agent tools without signing in
+adrive resume --list    # this project's sessions from your other agents
+adrive resume           # handoff brief for the newest one
+```
+
+Then open the other agent in the same project:
+
+- **Claude Code:** run `/agentdrive:resume`. `adrive init --local` installs the plugin when `claude` is on your PATH.
+- **Codex:** ask in plain words, or start the request with `$agentdrive` to call the AgentDrive skill by name.
+- **Cursor:** reload the window, then run `/agentdrive-resume`.
+
+Name Antigravity in the request if you use several agents:
+
+> Resume my last AgentDrive session from Antigravity. Check the files on disk before continuing.
+
+## Why does Antigravity need a hook to be matched?
+
+Antigravity's transcripts don't record the project directory. AgentDrive reads them from `~/.gemini/<app>/brain/<conversation>/`, one folder per app, and nothing in them says which repo the work was in.
+
+Setup merges a hook into `~/.gemini/config/hooks.json` on `SessionStart` and `Stop`. Google's [hooks docs](https://antigravity.google/docs/hooks) say every hook receives the `conversationId` and the `workspacePaths` of the mounted workspaces. Each time the hook runs, AgentDrive records the first workspace path for that conversation in `~/.config/agentdrive/session-cwd.json`. It does this with or without an account, and the file stays on your machine.
+
+So an Antigravity session that ended before you installed AgentDrive can't be matched to a project. Locally it won't show up in `adrive resume --list`; signed in, it syncs under an unknown project. Install before you need it. One setup covers the `agy` CLI, the Antigravity app and the IDE, because all three read `~/.gemini/config`.
+
+## What is the 30-minute idle rule?
+
+The hooks docs list `SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation` and `Stop`. There is no event for a session ending. In Claude Code, Codex and Cursor, AgentDrive syncs right away when a session ends. With Antigravity it can't, so it uses two rules instead:
+
+- `Stop` fires when a turn's execution ends, and AgentDrive re-syncs the session on it at most every two minutes.
+- A session counts as finished once it has been idle for 30 minutes. Until then it shows as in progress.
+
+In practice, if you're signed in and switch the moment Antigravity stops, the copy in your workspace can be a turn behind. On the same machine, local mode doesn't have that gap, because it reads the transcript on disk when you resume. Signed in, `adrive resume --local` does the same.
+
+## Why is resume a skill in Antigravity?
+
+This matters for the trip back, once your quota refreshes. In Claude Code and Cursor, AgentDrive adds resume as a slash command. For Antigravity it installs two skills instead, `agentdrive-resume` and `agentdrive-sessions`, under `~/.gemini/config/skills/`. Both call the same MCP tools as the commands do.
+
+Google's [skills docs](https://antigravity.google/docs/skills) say the agent sees each skill's name and description on every turn and reads the full instructions when one looks relevant. So you ask in plain words: "resume my last AgentDrive session from Claude Code". The same page says you can also call a skill by name: in the app by typing `/` and the skill name, and in the CLI, where skills show up as slash commands.
+
+## Which pairs does this cover?
+
+- [Antigravity to Claude Code](/resume/antigravity-to-claude-code)
+- [Antigravity to Codex](/resume/antigravity-to-codex)
+- [Antigravity to Cursor](/resume/antigravity-to-cursor)
+
+The [Antigravity integration page](/integrations/antigravity) lists every file setup writes.
+
+## FAQ
+
+### Does Google say how many prompts my plan gets?
+
+No. The plans page describes quotas by plan and refresh interval and says usage depends on how much work the agent does. It gives no prompt counts.
+
+### Can I install AgentDrive after the quota runs out?
+
+You can, but an Antigravity session that ended before the hook was installed has no recorded project, so it won't be matched. Sessions after the install are matched.
+
+### Why does my Antigravity session still show as in progress?
+
+Antigravity has no session-end event, so AgentDrive marks a session finished after 30 minutes idle.
+
+### Do I need an account?
+
+No. Local resumes on one machine are unlimited and need no account. Signed-in cloud resumes have a monthly limit on the Free plan; the [pricing page](/pricing) has the numbers.
+
+## Install before the next limit
+
+The hook only matches sessions it saw run, so the useful moment to run `adrive init --local` is while Antigravity still has quota. Every session after that is matched to its project, ready for the next time the quota runs out.

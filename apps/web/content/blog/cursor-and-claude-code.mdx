@@ -1,0 +1,154 @@
+---
+title: Cursor and Claude Code without re-explaining
+description: Hand work between Cursor and Claude Code in both directions with AgentDrive, including the Cursor hook, the project-directory catch and /agentdrive-resume.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Cursor and Claude Code can pick up each other's sessions once AgentDrive is installed. Hooks in `~/.cursor/hooks.json` sync Cursor agent sessions, the Claude Code plugin syncs Claude Code sessions, and each side resumes the other with one command: `/agentdrive:resume` in Claude Code, `/agentdrive-resume` in Cursor. Open both in the same project.
+
+The one-direction guides are on [Cursor to Claude Code](/resume/cursor-to-claude-code) and [Claude Code to Cursor](/resume/claude-code-to-cursor). This post covers both directions in one place, plus the part that trips people up: Cursor doesn't write down which project a session belongs to, so AgentDrive's hook has to.
+
+## What does setup add to Cursor and Claude Code?
+
+For Cursor, `adrive init` merges into what you already have under `~/.cursor`:
+
+- `hooks.json`: an entry on `sessionStart`, `stop`, `sessionEnd` and `preCompact` that runs `adrive hook cursor`. Your own hooks keep their place and order, and running init again gives the same file.
+- `mcp.json`: the `agentdrive` MCP server in `mcpServers`.
+- `commands/agentdrive-resume.md` and `commands/agentdrive-sessions.md`: the `/agentdrive-resume` and `/agentdrive-sessions` commands. They carry a prefix because Cursor commands share one namespace with built-ins.
+- `skills/agentdrive/SKILL.md`: the AgentDrive skill.
+
+For Claude Code, init installs the AgentDrive plugin at user scope when `claude` is on your `PATH`. The plugin brings its own hooks (`SessionStart`, `Stop`, `SessionEnd`, `PreCompact`), the MCP server, `/agentdrive:resume` and `/agentdrive:sessions`.
+
+## How do I set it up?
+
+1. **Install and run init.**
+
+   ```bash
+   npm install -g @adrive/cli
+   adrive init
+   ```
+
+   The one-line installer, `curl -fsSL agentdrive.sh/install | sh`, does the same. Init signs you in through the browser and wires every agent it finds.
+
+2. **Install the plugin by hand if init couldn't.** If `claude` isn't on your `PATH`, init prints the two commands to run inside Claude Code:
+
+   ```
+   /plugin marketplace add agentdrive-sh/agentdrive-mcp
+   /plugin install agentdrive@agentdrive
+   ```
+
+3. **Restart both.** Cursor and Claude Code load hooks and MCP servers at startup. In Cursor, reloading the window is enough.
+
+4. **Start a new Cursor agent session after setup.** This matters more for Cursor than for any other agent, for the reason below.
+
+## Why does Cursor need a hook to know the project?
+
+Cursor keeps agent transcripts under `~/.cursor/projects/<folder>/agent-transcripts/`. Each line holds a role and a message. There is no working directory in the file and no timestamps.
+
+The folder name looks like it encodes the project path, but it maps `/`, `-`, `_` and `.` to the same character. `/code/my-app` and `/code/my/app` come out the same, so AgentDrive can't turn it back into a path.
+
+The hook fills that gap. Cursor's hook payload carries `workspace_roots`, and `adrive hook cursor` records the first root against the conversation id in `~/.config/agentdrive/session-cwd.json`. Sync then uses it to file the session under the right project. That file stays on your machine.
+
+**The rule that follows: a Cursor session is matched to a project only if the hook saw it run.** In practice:
+
+- **Sessions from before setup** have no recorded directory. Signed in, they sync under an unknown project, so a resume from your repo won't find them. In local mode they can't be matched at all.
+- **Multi-root workspaces** use the first root. Put the repo you'll resume in first.
+- **The directory has to line up with Claude Code's.** In a git repo with a remote, the project key is the normalized remote URL, so any folder inside the repo matches. In a repo without a remote, the key is the repo root. Outside git, it's the exact directory, so open Cursor and Claude Code in the same folder.
+
+One more Cursor detail: with no timestamps in the transcript, a Cursor session's **Updated** time in the brief is the transcript file's last-modified time, and its turns have no times next to them.
+
+## How do I continue a Cursor session in Claude Code?
+
+1. **Finish the turn in Cursor.** `stop` fires at the end of each agent turn and syncs at most every two minutes. `sessionEnd` and `preCompact` sync right away. If you're switching mid-task, ask Cursor to write down the next step first, so it's the last turn in the brief.
+
+2. **Open Claude Code in the same project.** With auto-context on (the default), the plugin's start hook lists up to three recent sessions in this project: the newest from each other agent first, then the newest remaining ones, which can include earlier Claude Code sessions. A Cursor one looks like this (made-up id and title):
+
+   ```text
+   Recent AgentDrive sessions in this project:
+   - cursor · 4m ago · "Move the settings form to the new validation schema" (id cursor:00000000-0000-4000-8000-0000000000a1)
+   To continue one, call the drive_resume tool (or /agentdrive:resume) with its id.
+   ```
+
+3. **Run `/agentdrive:resume`.** With no id, it loads the latest session in this project from an agent other than Claude Code. To pick one, run `/agentdrive:sessions cursor` to list only Cursor sessions, then `/agentdrive:resume <id>`.
+
+4. **Check the files before continuing.** The brief lists files Cursor wrote or edited through `Write`, `StrReplace`, `Delete` and `ApplyPatch`. Have Claude Code read them and run `git diff` before it builds on anything.
+
+## How do I continue a Claude Code session in Cursor?
+
+1. **End or pause in Claude Code.** The plugin's `SessionEnd` and `PreCompact` hooks sync right away. `Stop` syncs at most every two minutes.
+
+2. **Open a new agent chat in Cursor in the same project.** With auto-context on, Cursor's `sessionStart` hook gets the same list of recent sessions as extra context, so the Claude Code session is already in front of the agent.
+
+3. **Run `/agentdrive-resume`.** Cursor follows the command file: call `drive_resume`, summarize the goal, what's done, what's left and open questions in three to five bullets, check the files on disk, then continue. To resume a specific session, put its id after the command. `/agentdrive-sessions` lists them first.
+
+4. **Fall back to the shell if the tool isn't there.** If Cursor's MCP server didn't load, the command tells the agent to run `adrive resume` instead. Signed in, `adrive resume` with no id prints the newest session in the project from any agent, so if that's a Cursor one, run `adrive resume --list` and pass the Claude Code session's id. In local mode the CLI recognizes Cursor's agent from the environment and skips Cursor's own sessions.
+
+## What does the brief look like going each way?
+
+It has the same layout in both directions: an intro line naming the source agent, the project and session metadata, the goal (your first message), the files touched and the newest turns that fit in 12,000 characters. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) walks through each part.
+
+The differences come from the source transcript:
+
+- **From Claude Code,** turns carry timestamps and the working directory comes from the transcript itself, so older sessions place fine.
+- **From Cursor,** turns have no timestamps and the directory comes from the hook. A short made-up example:
+
+```text
+Handoff from a cursor session (00000000-0000-4000-8000-0000000000a1). Continue this work; verify file state on disk before assuming it.
+
+Project: github.com__example__settings-app
+Cwd: /Users/you/code/settings-app
+Title: Move the settings form to the new validation schema
+Updated: 2026-11-19T11:20:04.000Z
+Turns: 6
+
+## Goal
+
+Move the settings form to the new validation schema and delete the old validator once nothing imports it.
+
+## Files touched
+
+- src/settings/form.tsx
+- src/settings/schema.ts
+
+## Recent turns
+
+[... 3 earlier turns omitted ...]
+
+### assistant
+
+The form uses the new schema now. The old validator is still imported by the profile page.
+
+> tool: StrReplace src/settings/form.tsx
+
+### user
+
+Leave the old validator for now. Next is the profile page.
+
+### assistant
+
+Noted. Next step: switch the profile page to the new schema, then delete the old validator.
+```
+
+## FAQ
+
+### Why can't Claude Code find my older Cursor sessions?
+
+Cursor transcripts don't store the project directory, and the hook only records it for sessions that ran after setup. Older ones sync under an unknown project. Start a new Cursor session and it will place correctly.
+
+### Do I have to re-explain the task at all?
+
+Usually not. The brief carries your first message as the goal and the most recent turns. If the task changed halfway through, say the current goal in one line when you resume.
+
+### Does the Cursor hook slow Cursor down?
+
+The hook starts a detached `adrive sync` and exits, and any failure in it is swallowed. The upload happens after the hook has returned.
+
+### Can I do this without an account?
+
+Yes, on one machine. Run `adrive init --local` so the Cursor hook is in place, and resume works from local transcripts. See [Resume across agents with no account](/blog/local-mode-no-account). Free includes unlimited local resumes and 10 cloud resumes a month.
+
+## The one step not to skip
+
+After `adrive init`, start a fresh Cursor agent session, so the hook records its project. Everything else in this post follows from that. The [Cursor](/integrations/cursor) and [Claude Code](/integrations/claude-code) integration pages list every file setup touches.

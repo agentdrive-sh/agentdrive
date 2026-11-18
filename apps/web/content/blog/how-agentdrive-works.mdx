@@ -1,0 +1,113 @@
+---
+title: How AgentDrive works
+description: 'The plain-language overview: sessions sync in the background, land in a workspace, and the next agent asks to resume and gets a short handoff brief.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive works in four steps. Your coding agent's sessions sync to a workspace in the background while you work. They are filed under your project. When you open a different agent and ask it to resume, it calls an AgentDrive tool. That tool returns a handoff brief: the goal, the files touched and the latest turns.
+
+That's the whole loop. Each step below links to a detailed post for anyone who wants the mechanics, and [getting started](/blog/getting-started-with-agentdrive) is the shorter path if you'd rather just try it.
+
+## What problem does it solve?
+
+Every coding agent keeps its own history. Claude Code writes JSONL under `~/.claude/projects`. Codex writes rollout files under its sessions folder. Cursor, OpenCode and Antigravity each have their own store. None of them reads the others'.
+
+So when one agent stops, because it hit a usage limit or because another one is better at the next part, the new agent starts blind. You end up copying the plan, the dead ends and the list of changed files from one window to the other. AgentDrive does that copy for you.
+
+## Step 1: what happens while I work?
+
+Picture a small hook sitting in each agent. `adrive init` registers it in Claude Code, Codex, OpenCode, Cursor and Antigravity.
+
+Every time a turn ends, a session ends or the agent compacts its context, the hook fires. It doesn't do the work itself. It starts a separate background process and gets out of the way, so the agent never waits on it.
+
+That background process reads the agent's transcript from disk and turns it into plain markdown: one section per turn, with a one-line note for each tool call. It strips secret-looking strings, skips secret-looking files and uploads the result.
+
+You don't save anything or run a command. [How background session sync works](/blog/how-background-session-sync-works) covers the debounce, locking, the sweep for sessions an agent never closed, and the redaction rules. [Hooks that never block](/blog/hooks-that-never-block) goes into why the hook returns so fast.
+
+## Step 2: where does a session land?
+
+In a workspace, which is your own versioned file store in AgentDrive. Inside it, every session is a markdown file at a predictable path:
+
+```
+sessions/<project>/<harness>/<session-id>.md
+```
+
+The project part is what lets different agents find each other's work. It comes from where you're working, not from the agent:
+
+- In a repo with a git remote, it's the normalized remote, such as `github.com__acme__api`.
+- In a repo with no remote, it's the folder name plus a short hash of its path.
+- Anywhere else, it's `local__<folder>-<hash>`.
+
+So Claude Code and Codex, opened in the same repo, file their sessions side by side. Files the agent wrote that git doesn't track are uploaded next to them, under `sessions/<project>/files/`. Tracked files already live in git, so they stay there.
+
+Each session is also recorded as a run, stamped with the agent that produced it. That's where the provenance timeline comes from: it can say that Codex wrote this file and Claude Code read it later.
+
+## Step 3: how does the next agent ask?
+
+You open another agent in the same project and say something like "resume my last AgentDrive session from the other agent." Most agents also get a command for it: `/agentdrive:resume` in Claude Code, `/agentdrive-resume` in OpenCode and Cursor, the `$agentdrive` skill mention in Codex, and in Antigravity, which has no command files, an `agentdrive-resume` skill you can run as `/agentdrive-resume`.
+
+Under the hood, the agent calls `drive_resume`, one of the tools the AgentDrive MCP server gives it. With no arguments, it looks for the latest session in this project from a **different** agent. Resuming in Codex gets you the Claude Code session, not Codex's own last run. When you're signed in and there's no other agent's session, it falls back to the latest one. In local mode it doesn't fall back: it reports that there are no sessions from other agents. `drive_sessions` lists the options when you want a specific session.
+
+There's a nudge, too. When a new session starts and auto-context is on, the hook tells the agent about up to three recent sessions from your other agents in this project, with a hint to call `drive_resume`. OpenCode's plugin API can't add context at startup, so it skips this.
+
+## Step 4: what does the agent get back?
+
+A handoff brief. It's plain text, built to a budget of 12,000 characters by default, and always in the same order:
+
+1. One line naming the source agent and session, ending with an instruction to verify file state on disk.
+2. The session's project, working directory, title, last update and turn count.
+3. The goal, which is the first thing you asked for in that session.
+4. The files the session touched, plus ids for the uploaded copies.
+5. As many recent turns as fit, newest kept first, printed in order.
+
+The full transcript is usually far too long to load, so the brief keeps what the next agent needs most: what was asked and what happened last. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) shows a real-shaped example. [The handoff brief format](/blog/handoff-brief-format) documents it as a format.
+
+## What doesn't carry over?
+
+The model's internal state. The brief is text, and the next agent reads it like any other message, which is why it works between agents built on different models. Hidden reasoning, such as thinking blocks, isn't in it either, and neither is tool output. [Why model state doesn't transfer](/blog/why-model-state-doesnt-transfer) explains the limits.
+
+The brief also isn't the present. Between the last turn and the resume, files may have changed. That's why the first line tells the agent to look at the disk before trusting the transcript.
+
+## Can it work without an account?
+
+Yes. In local mode (`adrive init --local`), nothing is uploaded. Steps 1 and 2 collapse into "the agent writes its transcript to disk, as it always does." For Cursor and Antigravity, the hook only records which project a session belongs to, since their transcripts don't say. At step 3, resume reads those transcripts directly and applies the same redaction. You lose sync between machines, sharing and the provenance timeline, and you keep everything on one laptop. [Local mode, no account](/blog/local-mode-no-account) walks through it.
+
+## What about privacy?
+
+There are three layers before anything leaves your machine: path rules that keep secret files out, a redactor that scrubs secret-shaped text, and Private Workspace, which encrypts what sync uploads, the transcript and files, on your machine before upload. Content an agent writes directly with `drive_write` isn't covered and is stored as written. With Private Workspace on, the server stores ciphertext of synced content and the brief is decrypted locally by `adrive resume`. Redaction is best-effort, and I say so everywhere it comes up. [Privacy and safety guardrails](/blog/privacy-and-safety-guardrails) covers each control and its limits.
+
+## How do the pieces fit together?
+
+On your machine there's the `adrive` CLI (hooks and sync) and the stdio MCP server (the tools agents call). On Cloudflare there's one Worker that holds the API, with metadata in KV, file content in R2 and search in Vectorize. The web app and a hosted MCP endpoint sit beside it. [AgentDrive architecture](/blog/agentdrive-architecture) draws the full picture.
+
+## FAQ
+
+### Do I have to remember to save my session?
+
+No. Sync runs from the agent's own lifecycle hooks, so a session that stops because of a usage limit or a closed terminal still lands. A session killed before its end event lands on a later sync, whenever any wired agent's hook next fires, and is marked finished once it has been idle for 30 minutes.
+
+### Does the new agent see everything the old one did?
+
+It sees the goal, the files touched and the most recent turns that fit the budget. You can raise the budget to 50,000 characters with `max_chars` on `drive_resume` or `--max-chars` on `adrive resume`.
+
+### Which agents can resume each other?
+
+Claude Code, Codex, OpenCode, Cursor and Antigravity sync and resume. Zed, Cline and Continue can call the resume tools, but their own sessions don't sync.
+
+### What if both agents are on different machines?
+
+Sign in on both with the same account. Sessions sync to your workspace, and the brief lists ids for the untracked files the session wrote, so the agent can fetch them with `drive_read`. Tracked files come from your git remote as usual.
+
+## See the loop on your machine
+
+Local mode runs steps 3 and 4 against the transcripts already on your disk:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+For steps 1 and 2, sign in with `adrive init`. The [quick start](/docs/quick-start) covers both.

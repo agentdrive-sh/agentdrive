@@ -1,0 +1,129 @@
+---
+title: Why AgentDrive's server is AGPL and its clients Apache-2.0
+description: Why the AgentDrive server is AGPL-3.0 and its clients Apache-2.0, and what that means for users, self-hosters and contributors, the CLA and trademarks.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive's server is AGPL-3.0 so anyone can run, read and change it, while a hosted fork has to publish its changes to its users. The clients are Apache-2.0 because people install, import and embed them, and they reach the server only over HTTP and MCP, so the copyleft never travels into your code.
+
+That's the short version. The long version is in two public files: [LICENSING.md](https://github.com/agentdrive-sh/agentdrive/blob/main/LICENSING.md), which explains the split in plain terms, and [ADR-0009](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0009-agpl-server-license.md), which records why I chose it. I'm not a lawyer and this isn't legal advice. The license texts are what bind, and if your situation is unusual, ask your own counsel.
+
+## Which parts are under which license?
+
+| Path | What it is | License |
+|---|---|---|
+| `apps/worker` | REST API and hosted MCP (Cloudflare Worker) | `AGPL-3.0-only` |
+| `apps/web` | Next.js site and dashboard | `AGPL-3.0-only` |
+| `packages/cli` | `@adrive/cli` (`adrive`) | `Apache-2.0` |
+| `packages/mcp-server` | `@adrive/mcp-server` | `Apache-2.0` |
+| `packages/sdk-ts` | `@adrive/sdk` | `Apache-2.0` |
+| `packages/shared` | `@agentdrive/shared` types and primitives | `Apache-2.0` |
+| `apps/installer` | the one-line shell installer | `Apache-2.0` |
+| `plugins/agentdrive` | the Claude Code plugin | `Apache-2.0` |
+
+As LICENSING.md puts it, each path's own `LICENSE` file and `package.json` `license` field are authoritative, and anything not covered by a more specific `LICENSE` falls under the root `LICENSE` (AGPL-3.0). So when in doubt, check the path's own `LICENSE` rather than guessing from what the code does. Copyright is held by Roushan Inc, the company behind AgentDrive.
+
+## Why did the server license change?
+
+Before the open-source release, the server was under the Business Source License 1.1, with a conversion to Apache-2.0 scheduled for 2029. The goal then was to block a competing hosted fork while keeping the clients free to embed.
+
+BSL isn't an OSI-approved license, so calling the server open source wouldn't have been true. The ADR notes two more problems. Developers tend to treat source-available licenses as a reason not to adopt or contribute. And self-hosting on your own Cloudflare account was becoming a supported path, which BSL's use restrictions made harder to explain.
+
+The original concerns didn't go away, though. I still didn't want a closed hosted fork of the server to be possible, and the clients still had to work in any codebase. AGPL-3.0 handles both.
+
+## Why AGPL for the server, and not Apache or MIT?
+
+The AGPL's section 13 is the part that matters here. If you modify the server and let users interact with your modified version over a network, you must offer those users the complete corresponding source of your version under the AGPL. That's the gap it closes: as the [AGPL's own preamble](https://www.gnu.org/licenses/agpl-3.0.html) puts it, the plain GPL lets someone modify a program and offer it to the public on a server without ever releasing the source.
+
+The ADR lists the alternatives I turned down:
+
+- **Keep BSL-1.1.** It stops a hosted fork, but it isn't open source, and that was the point of the release.
+- **Apache-2.0 or MIT for everything.** The widest adoption, but a cloud provider could run a closed hosted fork.
+- **SSPL.** A stronger service clause than the AGPL, but it isn't OSI-approved either, and the same developers who avoid BSL tend to reject it.
+- **AGPL without a CLA.** Simpler for contributors, but more on that below.
+
+## Why are the clients Apache-2.0?
+
+Because they end up inside other things. The CLI, MCP server, SDK, shared types, installer and plugin get installed on developer machines, imported into agents and IDEs, and sometimes shipped inside commercial products. A copyleft license there would stop that.
+
+The earlier decision, ADR-0004, rejected AGPL because corporate legal teams refuse a transitive AGPL dependency. ADR-0009's answer is that this objection applies to code that is linked or vendored. The clients never import server code. They talk to the server only over HTTP and MCP. So the Apache-2.0 packages carry no copyleft, and calling an AGPL server over the network doesn't extend the AGPL to the caller.
+
+## What does this mean if I just use AgentDrive?
+
+Very little changes. LICENSING.md says it directly: talking to an AGPL server over its network API doesn't make your code AGPL. That holds whether the server is the hosted service at `app.agentdrive.sh` or a copy you run yourself.
+
+You can embed the Apache-2.0 clients in commercial or closed-source products, fork them, or redistribute them under the Apache terms. Using the hosted service is governed by its Terms of Service, which are separate from the code licenses.
+
+## What does it mean if I self-host?
+
+You can do all of this without asking anyone:
+
+- Self-host the server for yourself, your team or your company, in production, at any scale.
+- Read, audit, modify and fork the server code.
+- Run an unmodified copy as a service for others.
+
+The condition comes in when you modify the server and let users reach your modified version over a network. Then you owe those users its source under the AGPL. Distributing modified copies carries the usual GPL obligations too.
+
+The [self-hosting guide](/docs/self-hosting) covers the setup itself.
+
+## What does it mean if I contribute?
+
+Every contributor signs the [Contributor License Agreement](https://github.com/agentdrive-sh/agentdrive/blob/main/CLA.md) before a pull request can merge. It's based on the Apache Software Foundation's individual and corporate CLAs, adapted into one document.
+
+What it says, in plain terms:
+
+- **You keep the copyright** in your contribution.
+- **You grant Roushan Inc a broad license** to it: perpetual, worldwide, royalty-free and irrevocable, covering copyright and patents, with the right to sublicense.
+- **That license includes relicensing.** Roushan Inc may license your contribution, and the project that includes it, under other terms, including other open-source licenses and proprietary or commercial ones.
+
+That last point is the one that makes some people hesitate, so here is why it's there. There are two reasons. Without it, every outside contribution would be AGPL-only, and I couldn't offer the commercial license below. It also keeps open the option the ADR names as its trigger to revisit: if the AGPL measurably blocks teams from self-hosting, the server could move to a more permissive license.
+
+Signing is one step. On your first pull request a bot posts a comment, and you reply with the sentence it gives you. Your GitHub username, the pull request and the time are recorded, and the signature covers your future contributions. If you contribute on behalf of an employer, they also email licensing@agentdrive.sh with the entity's legal name, the signer and the GitHub usernames authorized to contribute.
+
+A new file takes the license of the package it lands in, so a client-side change belongs in a client package. [CONTRIBUTING.md](https://github.com/agentdrive-sh/agentdrive/blob/main/CONTRIBUTING.md) has the rest.
+
+## Can I get a commercial license?
+
+Yes. Some companies ban AGPL software outright, even for internal self-hosting, and some want to ship a modified server without publishing their changes. For both, Roushan Inc sells a commercial license. Write to licensing@agentdrive.sh. The hosted service is the other answer for teams that can't run AGPL code.
+
+## What about the AgentDrive name and logo?
+
+The code licenses cover code only. They grant no rights to the name or the logo, which are trademarks of Roushan Inc. [TRADEMARKS.md](https://github.com/agentdrive-sh/agentdrive/blob/main/TRADEMARKS.md) sets out the rules.
+
+Allowed without asking:
+
+- Factual references to AgentDrive in articles, talks, comparisons and docs.
+- Saying your product "works with AgentDrive" or "integrates with AgentDrive", as long as you don't suggest Roushan Inc made or endorses it.
+- Redistributing unmodified releases under their original name.
+
+Not allowed: naming a fork, a modified distribution or a hosted service "AgentDrive" or something confusingly similar, using the logo for one, or suggesting a fork is the official AgentDrive.
+
+Forks are welcome, and they must rebrand: a different name and logo, and AgentDrive branding removed from the interface, the docs and any package names you publish. You may say the fork is "based on AgentDrive".
+
+## FAQ
+
+### Does using `@adrive/cli` or the SDK in my closed-source product make it AGPL?
+
+No. The client packages are Apache-2.0, and calling the server over its API doesn't extend the AGPL to your code.
+
+### Can I run a modified server for my own team?
+
+Yes. If people other than you use your modified version over a network, the AGPL asks you to offer them its source. A commercial license from licensing@agentdrive.sh is the alternative.
+
+### Can I fork AgentDrive?
+
+Yes. A server fork stays under the AGPL, and under the trademark policy it needs its own name and logo.
+
+### Do I keep the copyright in what I contribute?
+
+Yes. The CLA grants Roushan Inc a license, including the right to relicense, but you keep the copyright and can use your own contribution any way you like.
+
+### Is this legal advice?
+
+No. It's my summary of LICENSING.md, the ADR, the CLA and the trademark policy. The license texts are what bind.
+
+## Where to read more
+
+The [license page](/docs/license) has the same summary in reference form. If you want to run the AGPL server yourself, start with the [self-hosting guide](/docs/self-hosting). If you want to contribute, [CONTRIBUTING.md](https://github.com/agentdrive-sh/agentdrive/blob/main/CONTRIBUTING.md) on [GitHub](https://github.com/agentdrive-sh/agentdrive) is the place to begin.

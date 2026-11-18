@@ -40,7 +40,7 @@ export default function SecurityPage() {
           </div>
         </section>
         <section id="sync-controls"><h2>Sync controls</h2>
-          <p>Use <code>adrive privacy</code> to control auto-context, transcript sync, artifact sync and Private Workspace. Artifact sync uploads eligible files the agent touched in a session that git does not track. It also allows <code>adrive watch</code>, which uploads every file under the watched folder, existing files included, whether or not git tracks them. Built-in exclusions, <code>.adriveignore</code> and, for watch, <code>.gitignore</code> filter file paths before upload.</p>
+          <p>Use <code>adrive privacy</code> to control auto-context, transcript sync, artifact sync and Private Workspace. Artifact sync uploads eligible files the agent touched in a session that git does not track. It also allows <code>adrive watch</code>, which is meant to upload every file under the watched folder, existing files included, whether or not git tracks them. In CLI 1.4.0 watch uploads nothing, because of a bug fixed in the next release; use hook sync or <code>adrive push</code> meanwhile. Built-in exclusions and <code>.adriveignore</code> filter file paths before upload. Watch merges them with <code>.gitignore</code>, and the last matching rule wins.</p>
           <p>Pattern-based redaction removes known secret shapes from transcripts and synced files. It is best-effort, not a security boundary: an ignored file path does not remove text already pasted into a conversation. Disable transcript sync for conversations that must stay on your machine.</p>
           <p>See the <a href="/docs/concepts/sessions">session sync reference</a> for exclusions and controls.</p>
         </section>

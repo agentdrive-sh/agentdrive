@@ -23,11 +23,11 @@ const PROFILES: Record<string, Profile> = {
   },
   codex: {
     setup: 'Setup approves the AgentDrive hooks in Codex for you. On an older Codex, approve them once via `/hooks`.',
-    capture: 'Hooks in `~/.codex/hooks.json` fire on `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`. Codex caps hook time at 3 seconds, so the hook only starts a background sync and returns.',
-    command: '/prompts:agentdrive-resume',
+    capture: 'Hooks in `~/.codex/hooks.json` fire on `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`. Codex allows a `SessionEnd` hook at most 3 seconds, so every AgentDrive hook uses a 3-second timeout and only starts a background sync.',
+    command: '$agentdrive resume my last AgentDrive session',
     syncShort: 'hooks in `~/.codex` sync each Codex session in the background',
-    resumeShort: 'run the `agentdrive-resume` custom prompt',
-    list: 'the `agentdrive-sessions` custom prompt',
+    resumeShort: 'ask it to resume your session, or mention the AgentDrive skill with `$agentdrive`',
+    list: 'a plain request such as "list my AgentDrive sessions"',
   },
   opencode: {
     capture: 'A plugin at `~/.config/opencode/plugins/agentdrive.ts` listens for `session.created` and `session.idle` and reads the session through `opencode export`, without ever blocking OpenCode.',
@@ -64,8 +64,8 @@ function notesFor(from: PlatformId, to: PlatformId): Note[] {
   const notes: Note[] = [];
   if (to === 'codex') {
     notes.push({
-      text: 'Codex runs a custom prompt from ~/.codex/prompts as /prompts:<name>, so the AgentDrive one is /prompts:agentdrive-resume. Codex marks custom prompts as deprecated in favor of skills; asking Codex to resume your AgentDrive session works either way.',
-      source: 'https://learn.chatgpt.com/docs/custom-prompts',
+      text: 'In Codex you call a skill by name by typing $ to mention it, so $agentdrive invokes the AgentDrive skill that setup installs. Codex has replaced custom prompts with skills, and current Codex no longer runs the /prompts:agentdrive-resume prompt that setup also writes.',
+      source: 'https://learn.chatgpt.com/docs/build-skills',
     });
   }
   if (to === 'codex' && (from === 'claude-code' || from === 'cursor')) {
@@ -177,7 +177,7 @@ function caveatsFor(from: Harness, to: Harness): string[] {
   if (to.id === 'opencode') {
     out.push(`OpenCode's plugin API can't add context at session start, so OpenCode won't mention the ${from.label} session on its own. Run \`/agentdrive-sessions\` to see it.`);
   } else {
-    out.push(`With auto-context on, ${to.label} is told at session start about up to three recent sessions from your other agents in this project, so the ${from.label} session shows up before you ask.`);
+    out.push(`With auto-context on, ${to.label} is told at session start about up to three recent sessions in this project, the newest from each other agent first, so the ${from.label} session shows up before you ask.`);
   }
   if (to.id === 'antigravity') {
     out.push('Antigravity has no custom commands, so resume is a skill: ask for it in plain words.');
@@ -209,7 +209,7 @@ function faqFor(from: Harness, to: Harness): Faq[] {
   } else if (from.id === 'codex') {
     faq.push({
       q: 'Why does the Codex hook only start a background sync?',
-      a: 'Codex caps hook time at 3 seconds, so the hook starts a detached `adrive sync` and returns. The upload finishes after the hook exits and never slows Codex down.',
+      a: 'Codex allows a `SessionEnd` hook at most 3 seconds, and one AgentDrive hook serves every event, so it starts a detached `adrive sync` and returns. The upload finishes after the hook exits and never slows Codex down.',
     });
   } else {
     faq.push({

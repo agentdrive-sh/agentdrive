@@ -1,0 +1,192 @@
+---
+title: Content-addressed storage on R2 and KV
+description: How AgentDrive keeps file bytes at content/<sha256> in R2 and all metadata in KV, and what that costs in consistency, enumeration and missing SQL.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive has no database. File bytes go to Cloudflare R2 under `content/<sha256>`, and every piece of metadata is a prefixed key in Cloudflare KV. That buys dedup, cheap edge reads and no migrations. It costs JOINs, counts and read-your-writes on listings. Each cost shows up somewhere specific in the storage code.
+
+The server is AGPL-3.0 and all of this is in [`apps/worker/src/services/storage.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/apps/worker/src/services/storage.ts). The design is written up in [`docs/tech/architecture.md`](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/architecture.md), [ADR-0001](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0001-kv-and-r2-as-storage-substrate.md) (KV and R2 as the substrate) and [ADR-0008](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0008-content-addressed-storage.md) (content addressing). I'll quote them where the code alone doesn't explain the choice.
+
+## What goes where?
+
+There are three stores. R2 holds file content. KV holds everything else: orgs, workspaces, files, versions, comments, runs, API key hashes, share tokens, sessions. Vectorize holds embeddings for search. Hosted MCP OAuth state lives in a second KV namespace that the OAuth library owns.
+
+A single file is spread over four kinds of KV key:
+
+| Key | Value | Purpose |
+|---|---|---|
+| `file:<ws_id>:<file_id>` | `FileMeta` | The current version, its `content_hash` and its storage locator |
+| `idx:ws_files:<ws_id>:<path>` | file id | Path lookup and directory listing |
+| `ver:<file_id>:<padded_version>` | `FileVersion` | One immutable record per version |
+| `idx:content_refs:<hash>:<ws_id>:<file_id>` | `"1"` | Which live files point at a hash, for vector cleanup |
+
+The path index points at an id, not at the metadata itself. That's what lets versions, comments and run records refer to a file by id (`artifacts_produced` on a run is a list of file ids) without repeating the path in every record.
+
+## How does a write work?
+
+`writeFile` hashes the content first. The hash is plain SHA-256 over the UTF-8 bytes, from [`packages/shared/src/validation.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/shared/src/validation.ts):
+
+```ts
+export async function hashContent(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+```
+
+The object key is `content/<hash>` (`defaultObjectKey` in [`packages/shared/src/types.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/shared/src/types.ts)). Dedup is a `head` before the `put`:
+
+```ts
+try {
+  const existing = await writeDriver.head(writeLocator.object_key);
+  if (!existing) {
+    await writeDriver.put(writeLocator.object_key, content, { contentType: 'text/markdown' });
+  }
+} catch (err) {
+  // ...
+  throw err;
+}
+```
+
+The driver is usually the default R2 bucket. A Team workspace can point at its own R2 or S3-compatible bucket, which is why the code goes through a `BucketDriver` and stamps the destination onto the file as a locator. Reads route by that stored locator, so switching a workspace's bucket doesn't strand files written before the switch.
+
+Then come the KV writes, and their order is deliberate. The version record goes first, then the file record, and for a new file the path index goes last:
+
+```ts
+// Store file metadata BEFORE the path index so a path-based read between
+// these two writes never returns 404 for a just-published file. T-E3:
+// sequential commit, never Promise.all-ed.
+await this.kv.put(`file:${wid}:${fileMeta.id}`, JSON.stringify(fileMeta));
+
+if (!existingFileId) {
+  // Index: path → file ID. Last in the new-file commit chain so the
+  // pointer only goes live once the canonical record exists.
+  await this.kv.put(`idx:ws_files:${wid}:${path}`, fileMeta.id, { metadata: { id: fileMeta.id } });
+}
+```
+
+There are no transactions, so the best you can do is order writes so that every intermediate state is safe to read. If the worker dies after the file record and before the index, you get an unreachable record, not a pointer to nothing. The embedding job isn't awaited; it runs under `ctx.waitUntil`, so a slow Workers AI call never holds up the write.
+
+## What does content addressing buy, and where does it stop?
+
+The main win is that identical bytes are stored once. A plan written into three workspaces, or a transcript re-uploaded unchanged, costs KV bytes and no new R2 object. A race between two writers of the same new content is harmless too: both miss the `head`, both `put`, and they write the same bytes to the same key.
+
+The objects are immutable. An update produces a new hash, a new object and a new version record, and the old version keeps its own hash and locator.
+
+It stops helping in three places:
+
+1. **Encrypted content doesn't dedup.** With Private Workspace on, the CLI encrypts with AES-256-GCM and a fresh 12-byte random IV per call ([`packages/cli/src/lib/crypto.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/crypto.ts)). The worker hashes what it receives, which is ciphertext, so the same plaintext uploaded twice becomes two objects. ADR-0008 considered hashing ciphertext as a design and rejected it for exactly this reason. Here it's the cost of the server never seeing your plaintext.
+2. **Deletes don't free R2.** `deleteFile` removes the file record, the path index and the content reference, then decrements the org's storage meter. The blob stays, and so do the version records. The `idx:content_refs` index exists today only to decide when a hash's embeddings can be dropped. ADR-0008 lists ref-counted blob deletion as future work.
+3. **The meter counts logical bytes.** Every version adds its size to `storage_bytes`, deduped or not. That's the comment in the code, "Every version keeps its bytes", and it's the right number for a plan limit even if R2 is storing less.
+
+## How are versions stored?
+
+Each version is its own key, `ver:<file_id>:<n>`, with `n` zero-padded to six digits by `padVersion` in [`packages/shared/src/ids.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/shared/src/ids.ts) so that KV's lexicographic order matches numeric order. The record is also inlined as list metadata when it fits:
+
+```ts
+private async storeVersion(fid: string, version: FileVersion): Promise<void> {
+  const value = JSON.stringify(version);
+  // Version records are immutable. Inline short ones in the KV list result
+  // and use the value for long change messages or pre-migration records.
+  const metadata = new TextEncoder().encode(value).length <= 1024 ? version : undefined;
+  await this.kv.put(`ver:${fid}:${padVersion(version.version)}`, value, { metadata });
+}
+```
+
+With metadata inlined, a page of version history is one `kv.list` call instead of one list plus fifty `get`s. Records with long commit messages fall back to the `get`.
+
+This layout has two limits. The key order is ascending, so when you page forward the newest versions are on the last page. The comment in `getVersions` accepts that because most callers only read one page. And six digits runs out at 999,999 versions of a single file, after which the order breaks. Nobody's near that.
+
+There's also a race. The version number is `current.version + 1`, read and then written. KV has no compare-and-swap, so two writers updating the same path at the same instant can both read version 4 and both write version 5. Last write wins. For artifacts written by agents that's acceptable. For a ledger it wouldn't be.
+
+## How does listing work without SQL?
+
+`kv.list({ prefix, cursor, limit })` is the only way to enumerate KV, so every listing in the codebase is a prefix scan with a cursor. The page size is 50 (`DEFAULT_PAGE_SIZE` in `storage.ts`), the KV cap is 1,000, and the shared return type is `Paginated<T> = { items: T[]; cursor: string | null }`. A `null` cursor means the list is complete.
+
+Here's the file listing:
+
+```ts
+async listFiles(wid: string, prefix?: string, cursor?: string, limit = DEFAULT_PAGE_SIZE): Promise<Paginated<FileMeta>> {
+  const listPrefix = `idx:ws_files:${wid}:${prefix ?? ''}`;
+  const list = await this.kv.list<{ id: string }>({ prefix: listPrefix, limit, cursor });
+  // New path indexes inline the ID in the list response. Older entries
+  // still carry it in their value and use the same lookup as before.
+  const fids = await Promise.all(list.keys.map((k) => k.metadata?.id ?? this.kv.get(k.name)));
+  // ...
+}
+```
+
+Because the path is in the key, a directory listing is a prefix query for free, and pages come back in path order. That comment is also what a schema migration looks like with no schema: new writes carry the id in metadata, old ones don't, and readers handle both. Nothing was backfilled.
+
+Newest-first order comes from inverted timestamps. `invertTimestamp` returns `Number.MAX_SAFE_INTEGER - t`, padded to 16 digits, so the most recent key sorts first. Comments use it (`idx:file_comments:<file_id>:<inv_ts>:<comment_id>`). Runs use a 13-digit variant in [`apps/worker/src/services/runs.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/apps/worker/src/services/runs.ts), and the project index for synced sessions is keyed by the session's last activity, so `drive_sessions` is one prefix scan that comes back newest first.
+
+The cost is that every query shape needs its own index, planned ahead. "Which runs touched this file?" exists only because `runs.ts` writes an `idx:artifact_runs:<ws_id>:<file_id>:...` key for every file a run references. There is no `count(*)`. Usage is a counter document per org (`usage:<org_id>`), updated read-modify-write, so concurrent writes can lose an increment. The same kind of race is accepted, in writing, on the key-minting path:
+
+```ts
+// shortcut: racing mints (consents, CLI logins) can exceed the cap by the number in flight;
+// serialize per org through a Durable Object if that ever matters.
+```
+
+## What does eventual consistency cost?
+
+KV is eventually consistent. ADR-0001 spells out what that means: a write you just made may not be visible to a `list` call, and only point reads of the key you wrote are read-your-writes. Three patterns in the code deal with it.
+
+**Indexes are hints and records are the truth.** Every listing re-checks what the index points at. `listWorkspaces` drops workspaces whose record no longer names the org. `listRunsByProject` goes further and recomputes the index key from the run it loaded:
+
+```ts
+const run = await env.KV.get<AgentRun>(`run:${orgId}:${id}`, 'json');
+// KV is eventually consistent, so a superseded index key can outlive its
+// delete; only the key matching the run's current state counts.
+return run && run.org_id === orgId && projectIndexKey(run, project) === k.name ? run : null;
+```
+
+That matters for sessions. A session's index key includes its last activity time, so each sync writes a new index key and deletes the old one. Without the check, a listing could show the same session twice during that window.
+
+**Canonical records are written before indexes,** as in the write path above.
+
+**Grace periods where a miss is ambiguous.** The hosted MCP's OAuth grants carry an API key minted at consent. The client may then call `/mcp` from somewhere else before that key has propagated. From [`apps/worker/src/routes/oauth-server.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/apps/worker/src/routes/oauth-server.ts):
+
+```ts
+// KV is eventually consistent: a key minted at the consenting person's location can read as
+// missing (and that miss be negatively cached) where the client redeems the code and calls
+// /mcp, for a minute or more. Until this long after minting, a missing key counts as
+// propagating rather than revoked.
+const KEY_PROPAGATION_GRACE_MS = 5 * 60 * 1000;
+```
+
+The trade-off is explicit: for five minutes after minting, a revoked key can't be told apart from a slow one.
+
+## Why not Postgres?
+
+ADR-0001 gives the reasons: one vendor, no egress between metadata and blobs, metadata read at the nearest edge with no replication to set up, no migrations, and nothing to back up, pool or fail over. I run this alone, so the operational surface is the reason I weigh most. D1 was still in preview when the decision was made, and a Durable Object per workspace would have funnelled every read through one instance.
+
+The ADR also writes down when to revisit it: a single workspace past 100,000 files, or an Enterprise customer whose queries no single index can answer. Until then, a new query shape means a new index prefix and, for old data, a backfill. That's real work each time, and it's the price I chose.
+
+The other hard limits come from KV itself and are listed in the ADR: 25 MB per value and 512 bytes per key. File content never goes in KV, so the value cap only matters for metadata, but the key cap is a real constraint: the path is part of the `idx:ws_files` key, and `validatePath` in `packages/shared/src/validation.ts` caps paths at 500 characters.
+
+## FAQ
+
+### Can I read an old version's content?
+
+The version list exposes each version's metadata, including its hash and locator, and the bytes are still in R2. The file read endpoint returns the latest version only; there's no version selector today.
+
+### Does deleting a file free storage?
+
+It frees it on your plan's meter, which drops by the size of every version. The R2 object stays until ref-counted deletion lands.
+
+### Why SHA-256 and not something faster?
+
+ADR-0008 says it's the right point on the curve given existing tooling. Web Crypto in Workers has SHA-256 built in, so there's no dependency to add.
+
+### Is this the same on a self-hosted instance?
+
+Yes. `pnpm selfhost` creates the same KV namespace, R2 bucket and Vectorize index on your account, and the storage code is identical. The [self-hosting post](/blog/self-host-agentdrive-on-cloudflare) covers what it creates.
+
+## Where to start reading
+
+`writeFile` in `apps/worker/src/services/storage.ts` is the best entry point: every key prefix above is written there or one call away. If you'd make a different call on any of these trade-offs, issues are open on [the repo](https://github.com/agentdrive-sh/agentdrive). [Content addressing](/docs/concepts/content-addressing) is the reference version, and the [quick start](/docs/quick-start) gets you a workspace to write into.

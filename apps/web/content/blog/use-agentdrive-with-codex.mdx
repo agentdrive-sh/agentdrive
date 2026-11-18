@@ -1,0 +1,103 @@
+---
+title: How to use AgentDrive in Codex
+description: What adrive init writes into ~/.codex, how it approves the hooks, why they use a 3-second timeout, and how to resume a Claude Code session in Codex.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Codex gets AgentDrive from the `adrive` CLI, not a plugin: `npm install -g @adrive/cli`, then `adrive init`. Init writes sync hooks, an MCP server entry and the AgentDrive skill into `~/.codex`, and approves the hooks for you. After that, asking Codex in plain words loads a handoff brief from another agent's session.
+
+Paths and behavior below come from CLI 1.4.0 and MCP server 1.3.0. If you only want the file list, the [Codex integration page](/integrations/codex) has it.
+
+## What lands in `~/.codex`?
+
+Init writes to `$CODEX_HOME` when it's set, and `~/.codex` otherwise.
+
+| File | Contents |
+|---|---|
+| `hooks.json` | One hook group, `adrive hook codex` with `timeout: 3`, attached to `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`. |
+| `config.toml` | `[mcp_servers.agentdrive]` running `npx -y @adrive/mcp-server` with `AGENTDRIVE_AGENT_PLATFORM = "codex"`, plus `approval_mode = "approve"` on the `drive_sessions` and `drive_resume` tools. |
+| `prompts/agentdrive-resume.md`, `prompts/agentdrive-sessions.md` | Custom prompts that call those two tools, left over for older Codex versions. Current Codex no longer loads custom prompts. |
+| `skills/agentdrive/SKILL.md` | The AgentDrive skill. |
+| `AGENTS.md` | With auto-context on (the default), a short block between `agentdrive:auto-context` markers telling Codex when to use the tools. |
+
+The TOML merge works line by line. Tables that aren't AgentDrive's keep their exact text, an old `[[mcp_servers]]` entry from earlier CLIs is removed because it would clash with the new table, and approvals you added for other AgentDrive tools are left alone. The first change to `config.toml` saves your original as `config.toml.bak`.
+
+## Who approves the AgentDrive hooks?
+
+Codex skips any hook you haven't trusted. OpenAI's [hooks docs](https://learn.chatgpt.com/docs/hooks) explain that it records trust against each hook's hash, so a new or edited hook is held for review in `/hooks`.
+
+Init does that review for you. It starts `codex app-server`, asks it for the hook list with Codex's own hashes, and writes trust the same way the `/hooks` screen does. It only trusts hooks whose command is byte-for-byte what init wrote, in your user-level `hooks.json`. Project hooks, or an AgentDrive hook you've edited, still wait for you.
+
+If that handshake fails, say on an older Codex, init's output tells you to open Codex and approve the AgentDrive hooks via `/hooks`. Once is enough.
+
+## Why does every AgentDrive hook use a 3-second timeout?
+
+Because one hook group serves all four events, and `SessionEnd` is the strict one. Per OpenAI's hooks docs, most Codex hooks default to 600 seconds, but `SessionEnd` and `Interrupt` "use `1` second by default and support up to `3` seconds." Init writes a single group with `timeout: 3` and attaches it to `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`, so the same entry is valid on the tightest event.
+
+Three seconds is plenty because the hook barely works. It reads the event, starts a detached `adrive sync`, and exits 0, swallowing any error so a broken hook can't break your Codex session. The sync then reads Codex's rollout files under `$CODEX_HOME/sessions/YYYY/MM/DD/`, compressed `.jsonl.zst` ones included. Rollouts record the working directory, so the project key comes out right without help.
+
+Timing follows the event. `Stop` re-syncs at most every two minutes; `SessionEnd` and `PreCompact` sync regardless. `SessionStart` sweeps for changed sessions across every agent and, with auto-context on, passes Codex up to three recent sessions in this project, the newest from each other agent first.
+
+## How do I resume another agent's session in Codex?
+
+Ask in plain words:
+
+> Resume my last AgentDrive session from Claude Code. Check the files on disk before continuing.
+
+Codex calls `drive_resume`. Without a session id, it loads the latest session in this project from an agent other than Codex. Codex gets the goal, files touched and recent turns, plus an instruction to check the disk before trusting any of it.
+
+To call the AgentDrive skill by name, mention it. OpenAI's [skills docs](https://learn.chatgpt.com/docs/build-skills) say that in Codex CLI or the IDE extension you "run `/skills` or type `$` to mention a skill". Init writes the skill to `skills/agentdrive/SKILL.md` in your Codex home. Codex still loads `$CODEX_HOME/skills` but marks it as a deprecated user skills location, kept for backward compatibility; the documented user location is `~/.agents/skills`. Either way, mention it like this:
+
+```
+$agentdrive resume my last session from Claude Code
+```
+
+To choose a session, ask Codex to list your AgentDrive sessions from one agent, such as Claude Code, then to resume one by its id. Those requests call `drive_sessions` and `drive_resume`. Restart Codex or open a new chat after init so it loads the new skill and MCP server.
+
+Earlier versions of this setup pointed to `/prompts:agentdrive-resume`. OpenAI's [custom prompts page](https://learn.chatgpt.com/docs/custom-prompts) now says: "Custom prompts are deprecated. Use skills for reusable instructions that Codex can invoke explicitly or implicitly." Current Codex releases no longer load them, so init's prompt files only matter on an older Codex.
+
+From a shell, `adrive resume --list` and `adrive resume <session-id>` print the same brief. Codex sets `CODEX_THREAD_ID` on the commands it runs, and AgentDrive reads it, so in local mode an `adrive resume` that Codex runs skips Codex's own sessions.
+
+Coming into Codex from each agent: [Claude Code](/resume/claude-code-to-codex), [Cursor](/resume/cursor-to-codex), [OpenCode](/resume/opencode-to-codex), [Antigravity](/resume/antigravity-to-codex). I wrote up the first of those as [start in Claude Code, pick up in Codex](/blog/start-in-claude-code-pick-up-in-codex).
+
+## Can `codex exec` resume a session?
+
+Yes, and that's what the two `approval_mode = "approve"` lines are for. `codex exec` runs with an approval policy of "never", which refuses any MCP call that isn't pre-approved. Init pre-approves only the two read-only tools, so a scripted run can list and load sessions while its other AgentDrive calls are refused unless you approve them in `config.toml`.
+
+## What if Codex runs out of usage?
+
+[What to do when Codex hits its usage limit](/blog/codex-usage-limit) goes through waiting, paying and switching.
+
+Before you switch, make sure the final turn is in your workspace. A `Stop` may have been skipped inside the two-minute window, so run `adrive sync --force` from the project; `--force` ignores that window for every session the sweep finds. Then go [Codex to Claude Code](/resume/codex-to-claude-code), [Codex to Cursor](/resume/codex-to-cursor), [Codex to OpenCode](/resume/codex-to-opencode) or [Codex to Antigravity](/resume/codex-to-antigravity). The [Codex to Claude Code walkthrough](/blog/codex-to-claude-code-walkthrough) shows that move step by step.
+
+Codex sessions are easy to leave from: the rollouts carry their own directory, so even sessions from before you installed AgentDrive match the project. Signed in, the first sweep looks back 14 days. In local mode, `adrive resume` in another agent reads the rollouts directly.
+
+## FAQ
+
+### Does init respect `CODEX_HOME`?
+
+Yes. Hooks, MCP entry, skill, prompts and `AGENTS.md` all go to `$CODEX_HOME` when it's set. If you keep several Codex homes, run init with the one you use.
+
+### Why don't I see `/prompts:agentdrive-resume`?
+
+Current Codex releases removed custom prompts, so the prompt files init writes only load in older versions. Ask Codex in plain words to resume your last AgentDrive session, or start the request with `$agentdrive`.
+
+### Is re-running init safe?
+
+Yes. It replaces only its own hook entries and TOML tables, and a second run produces the same files.
+
+### Do I have to approve the hooks myself?
+
+Usually not. If init's automatic approval fails, its output says so and you approve them once in `/hooks`.
+
+## Resume your first session in Codex
+
+Run `adrive init`, open Codex in a project another agent already worked in, and ask:
+
+```
+$agentdrive resume my last session from Claude Code
+```
+
+Add `--local` to init to wire Codex without an account; [local mode](/blog/local-mode-no-account) explains what that changes.

@@ -1,0 +1,120 @@
+---
+title: Out of Cursor requests? Keep going in another agent
+description: Ran out of Cursor usage mid-task? Wait for the weekly reset, top up, or move the same task into Claude Code or Codex with a handoff brief from AgentDrive.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Cursor's paid plans share one usage pool that refreshes weekly. On Premium and above, third-party models like Claude and GPT draw on prepaid credit instead, so running out can mean either. If the reset is days away, Claude Code or Codex can continue from a handoff brief, provided AgentDrive's Cursor hook ran during that session.
+
+That hook is the main reason I wrote this post. For Claude Code and Codex you can install AgentDrive after you hit the limit. For Cursor it helps to have it in place beforehand, and I'll explain why below.
+
+## How do Cursor's usage limits work now?
+
+People still say "requests", but Cursor's paid plans now describe usage as a pool. According to Cursor's [Models & Pricing docs](https://cursor.com/docs/account/pricing), each paid plan includes one pool of usage for Cursor models, shared across everything on your subscription, and different models draw from it at different rates. The pool refreshes weekly. The Free plan includes Agent and Chat with limited usage.
+
+Third-party models are billed differently. The same page says models like Claude and GPT aren't part of the included pool: on Premium and above they're available at the model's API list price from the first request, paid from prepaid credit. So if you've been running a third-party model in Cursor, what ran out may be your credit rather than the weekly pool.
+
+Cursor shows your remaining usage and next reset date in the editor settings. The [pricing page](https://cursor.com/pricing) lists the current plans and how much usage each includes relative to the others.
+
+## What are my options when it runs out?
+
+Cursor's docs list three:
+
+1. **Wait for the reset.** The pool refreshes weekly.
+2. **Use prepaid credit.** Top-ups or Auto Top-up keep you working at the same per-model rates. A monthly additional usage limit caps how much paid extra usage you can spend.
+3. **Upgrade your plan** for a larger weekly pool.
+
+A weekly reset can be days away, which is a long time to leave a half-finished change sitting in your working tree. That's where the fourth option comes in: keep going in an agent you already pay for.
+
+## How do I continue a Cursor session in Claude Code or Codex?
+
+Use local mode if you don't want an account. It reads each agent's transcripts on your machine, uploads nothing and needs no network.
+
+```bash
+npm install -g @adrive/cli
+cd ~/code/your-project
+adrive init --local     # wire your agent tools without signing in
+adrive resume --list    # this project's sessions from your other agents
+adrive resume           # handoff brief for the newest one
+```
+
+`adrive init --local` installs the Claude Code plugin when `claude` is on your PATH, and wires Codex with hooks, the MCP server and the AgentDrive skill. Restart the agent you're moving to so it loads the new connection.
+
+**In Claude Code**, run `/agentdrive:resume`, or ask:
+
+> Resume my last AgentDrive session from Cursor. Check the files on disk before continuing.
+
+**In Codex**, ask the same thing in plain words. To call the AgentDrive skill by name, start the request with `$agentdrive`. Codex calls `drive_resume`, which skips sessions from the agent you're in. If you run several agents, name Cursor in the request so it picks the right one.
+
+The brief carries the goal (the first user message), the files the session touched and as many recent turns as fit in 12,000 characters. It ends its first line by telling the agent to verify file state on disk, which matters here: Cursor may have stopped in the middle of an edit.
+
+## Why does the Cursor hook matter?
+
+AgentDrive reads Cursor's agent transcripts from `~/.cursor/projects/`, and the transcript lines carry no working directory and no timestamps. The per-project folder name doesn't settle it either. It treats `/`, `-`, `_` and `.` alike, so `/a/my-app` and `/a/my/app` end up with the same name. From the transcript alone, AgentDrive can't tell which project a Cursor session belongs to.
+
+The hook fills that gap. Setup merges an entry into `~/.cursor/hooks.json` that runs `adrive hook cursor` on `sessionStart`, `stop`, `sessionEnd` and `preCompact`. Cursor's [hooks docs](https://cursor.com/docs/agent/hooks) say every hook receives `conversation_id` and `workspace_roots`. Each time the hook runs, AgentDrive records the first workspace root against that conversation in `~/.config/agentdrive/session-cwd.json`. It records this with or without an account, and the file never leaves your machine.
+
+Reload the Cursor window after setup (Developer: Reload Window) so Cursor loads the hook.
+
+## What about Cursor sessions from before the hook?
+
+They can't be matched to a project. No hook ran, so nothing recorded the directory. In local mode those sessions don't show up in `adrive resume --list` for your project. Signed in, sync files them under an unknown project.
+
+The transcript still exists, though. In local mode you can load one by id: the id is `cursor:` plus the conversation's file or folder name under `~/.cursor/projects/<folder>/agent-transcripts/`.
+
+```bash
+adrive resume cursor:<conversation-id>
+```
+
+The brief will have no working directory, so tell the receiving agent which project it's in. Every session after the hook is installed is matched on its own.
+
+## How do I do it signed in?
+
+Signing in syncs sessions to your workspace. You can then resume from another machine, share a session, and see which agent did what in the timeline.
+
+```bash
+npm install -g @adrive/cli
+adrive init
+```
+
+With the hook in place, Cursor's `sessionEnd` and `preCompact` events always trigger a sync. `stop` fires at the end of each turn, and turn-end syncs happen at most every two minutes per session. If you switch mid-task, end the Cursor session first so the last turn is uploaded.
+
+Then ask Claude Code or Codex to resume your last AgentDrive session from Cursor. Signed in, `drive_resume` prefers the most recent session in this project from a different agent. From a shell, `adrive resume` without an id takes the latest session from any agent, so use `adrive resume --list` and pass the Cursor id.
+
+## Which pairs does this cover?
+
+- [Cursor to Claude Code](/resume/cursor-to-claude-code)
+- [Cursor to Codex](/resume/cursor-to-codex)
+
+The [Cursor integration page](/integrations/cursor) lists every file setup writes. Going the other way, when Claude Code is the one that stopped, see [what to do when Claude Code hits its usage limit](/blog/claude-code-usage-limit).
+
+## FAQ
+
+### Can I install AgentDrive after Cursor runs out and still resume?
+
+You can install it, but a session that ended before the hook was in place has no recorded project. Resume it by id with `adrive resume cursor:<conversation-id>` in local mode, and tell the next agent which project it's in.
+
+### Does the hook slow Cursor down?
+
+The hook records the directory, starts a detached sync and exits. A failing hook never surfaces in your Cursor session.
+
+### Do I need an account?
+
+No. Local mode resumes between agents on one machine with no account, and local resumes are unlimited. The [pricing page](/pricing) lists the cloud resume limits for signed-in plans.
+
+### Can I bring the work back into Cursor after the reset?
+
+Yes. In Cursor, run `/agentdrive-resume` to load the latest session from another agent, such as the Claude Code session that finished the task.
+
+## Set it up before the next reset
+
+Before the next time Cursor runs out, in your project directory:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+```
+
+Then reload the Cursor window and start a new agent session, so the hook records its project from the first turn.

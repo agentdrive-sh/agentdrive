@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { listPosts, source } from '@/lib/source';
 import { COMPETITORS } from './compare/data';
+import { GLOSSARY } from './glossary/glossary';
 import { CAPTURE_HARNESSES } from './integrations/data';
 import { PAIRS } from './resume/data';
 
@@ -29,6 +30,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/resume',
     ...PAIRS.map((p) => `/resume/${p.slug}`),
     ...COMPETITORS.map((c) => `/compare/${c.slug}`),
+    '/glossary',
+    ...GLOSSARY.map((t) => `/glossary/${t.slug}`),
   ];
   return [
     ...paths.map((path) => ({ url: `${SITE}${path === '/' ? '' : path}` })),

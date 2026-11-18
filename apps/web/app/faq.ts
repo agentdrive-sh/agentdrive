@@ -34,7 +34,7 @@ export const HOME_FAQ: FaqItem[] = [
     q: 'What gets uploaded from my machine?',
     a: [
       'With an account, AgentDrive uploads session transcripts and the files an agent wrote that git does not track, after redacting common secret shapes, while `.env` files, keys, SSH and cloud credentials and anything in `.adriveignore` stay local, and `adrive privacy` switches transcript or file sync off.',
-      'Redaction is best-effort, and ignore rules cover files, not text you paste into a conversation. Private Workspace encrypts content on your machine with AES-256-GCM before upload, so the server stores only ciphertext and that content is not searchable by meaning.',
+      'Redaction is best-effort, and ignore rules cover files, not text you paste into a conversation. With Private Workspace on (`adrive privacy --private-workspace on`), the `adrive` CLI encrypts the session transcripts and files it syncs with AES-256-GCM before upload, and that content is not searchable by meaning. Files saved through MCP tools such as `drive_write` are not encrypted, `adrive watch --no-encrypt` and `adrive push --plaintext` skip encryption, and run metadata, storage paths and version messages are stored unencrypted.',
     ],
   },
   {

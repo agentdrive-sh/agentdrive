@@ -1,0 +1,133 @@
+---
+title: Resume across agents with no account
+description: AgentDrive's local mode in depth. What adrive init --local sets up, where each agent's sessions are read from, which agents need hooks, and the limits.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+You can resume one coding agent's session in another without an AgentDrive account. Local mode reads each agent's own transcript store on your machine, builds the same handoff brief the cloud version builds and uploads nothing. Run `adrive init --local` to wire your agents, then `adrive resume` in a shell or `/agentdrive:resume` in Claude Code.
+
+I built local mode because asking for an account before someone has seen a single handoff is backwards. The interesting part, a Codex session turning into a brief that Claude Code can continue, works on one machine with no server at all. This post covers what local mode sets up, where it reads from, which agents need a hook, and what you give up.
+
+## What does `adrive init --local` do?
+
+1. **Skips sign-in.** It prints `[ok] Local mode: no account. Sessions stay on this machine.` and never opens the browser. That holds for as long as you stay in local mode; signing in later uploads past sessions, as described below. In an interactive terminal, plain `adrive init` asks the same question: "Sign in" or "Local mode, no account".
+2. **Wires your agents the same way a signed-in init does.** The Claude Code plugin, Codex hooks and the AgentDrive skill in `~/.codex`, the OpenCode plugin and commands, Cursor hooks and commands, and Antigravity hooks and skills. Each also gets the AgentDrive MCP server.
+3. **Leaves your sync preferences unset,** so if you sign in later, a fresh sign-in still starts with sync on.
+4. **Prints a summary** that includes a `Mode` row reading `local (no account, nothing uploaded)`, then tells you to pick up a session with `/agentdrive:resume` in Claude Code or `adrive resume`.
+
+One catch: if you're already signed in, `--local` doesn't sign you out. Init keeps your account and wires as usual. To read local transcripts while signed in, use `adrive resume --local`, covered below.
+
+## Where does local mode read each agent's sessions?
+
+From each agent's own store, in the format that agent writes:
+
+| Agent | Where sessions are read | Project directory comes from |
+|---|---|---|
+| Claude Code | `~/.claude/projects/<folder>/<session-id>.jsonl` | the transcript |
+| Codex | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`), including compressed older rollouts | the transcript |
+| OpenCode | `opencode session list --format json` and `opencode export <id>` | OpenCode's session info |
+| Cursor | `~/.cursor/projects/<folder>/agent-transcripts/` | the AgentDrive hook |
+| Antigravity | `~/.gemini/<app>/brain/<conversation-id>/` for the CLI, app and IDE | the AgentDrive hook |
+
+Each source has its own parser that turns the session into turns, tool calls and the files it touched. The same parsers feed cloud sync, so a local brief reads exactly like a synced one, and the same redactor scrubs common secret shapes before the brief is printed.
+
+## Which agents need hooks in local mode?
+
+Only two.
+
+- **No setup:** Claude Code, Codex and OpenCode. Their transcripts or session info name the working directory, so AgentDrive can tell which project a session belongs to. The `adrive` CLI alone, with no init at all, already reads their sessions.
+- **Needs the hooks from `adrive init --local`:** Cursor and Antigravity. Their transcripts don't record the project directory. The AgentDrive hook runs at session start and on each turn, sees the directory the agent reports, and writes `<agent>:<session id>` with that directory to `~/.config/agentdrive/session-cwd.json`. That file keeps the latest 500 sessions and never leaves your machine.
+
+The hooks run without an account. They record the directory, and at session start they tell the agent that AgentDrive is in local mode and that it can call `drive_resume` to continue work another agent started. Nothing is synced, because there's nowhere to sync to.
+
+**The consequence: Cursor and Antigravity sessions that ran before the hook was installed can't be matched to a project.** Start a new session after setup.
+
+## How do I resume locally?
+
+1. **Go to the project directory.** Sessions are matched by project key: the normalized git remote when there is one, otherwise the repo root, otherwise the exact folder. It's the same rule as cloud sync.
+
+2. **List sessions.**
+
+   ```bash
+   adrive resume --list
+   ```
+
+   The first line goes to stderr and says where the sessions came from. The rest are session id, agent, last activity and title, newest first (the sessions here are made up):
+
+   ```text
+   From local transcripts on this machine: not synced across machines or recorded in provenance. Run `adrive init` to sync and share sessions.
+   codex:00000000-0000-4000-8000-000000000001  codex  2026-11-19T09:13:58.000Z  Add a due_before filter to GET /todos
+   cursor:00000000-0000-4000-8000-0000000000a1  cursor  2026-11-18T17:40:12.000Z  Tidy up the settings form
+   ```
+
+3. **Print a brief.** `adrive resume` prints one for the newest session. `adrive resume codex:00000000-0000-4000-8000-000000000001` prints one for that session. Use the full id with its agent prefix, as the list shows it. `--max-chars` changes the size budget from the default 12,000 characters.
+
+4. **Or resume from inside an agent.** With no account, the MCP server offers `drive_sessions` and `drive_resume`, and both read local transcripts. So `/agentdrive:resume` and `/agentdrive:sessions` work in Claude Code, `/agentdrive-resume` works in Cursor and OpenCode, and in Codex you ask in plain words or start the request with `$agentdrive`.
+
+Resume leaves out the agent you're running it in. Inside Claude Code you won't get your own Claude Code sessions back. From a plain terminal nothing is left out, so the newest session from any agent wins.
+
+If nothing matches, you'll see `No local sessions from other agents for project <key>.` Check that the key is the project you meant, and for Cursor and Antigravity, that the session ran after setup.
+
+The list looks at the 1,000 newest transcripts across all agents and shows up to 10 matches. If a project's sessions are older than that many sessions elsewhere, pass the id directly.
+
+## Can I use local mode while signed in?
+
+Yes:
+
+```bash
+adrive resume --local --list
+adrive resume --local
+```
+
+`--local` reads this machine's transcripts instead of your workspace. It's handy when a session hasn't synced yet, when you're offline, or when transcript sync is off. The note on stderr drops the "Run `adrive init`" hint, since you already have.
+
+Local resumes are unlimited on every plan and don't count toward the Free plan's 10 cloud resumes a month.
+
+## What can't local mode do?
+
+Local mode stays on one machine. Specifically:
+
+- **No sync across machines.** A session on your laptop isn't visible from your desktop.
+- **No sharing.** Teammates can't resume your sessions, and there are no share links.
+- **No hosted MCP.** claude.ai and ChatGPT reach AgentDrive through the hosted server, which reads your workspace. Local transcripts aren't in it.
+- **No provenance.** Nothing lands in the timeline of which agent did what.
+- **No uploaded files.** A cloud brief can point at copies of untracked files the session wrote. A local brief lists files touched, and you read them from disk.
+- **Only the session tools.** `drive_sessions` and `drive_resume` work locally. The workspace tools, like `drive_write`, `drive_search` and `drive_read`, need an account.
+
+## When should I sign in instead?
+
+When one of those limits bites. Run `adrive init` again and pick "Sign in". The MCP servers your agents already have running check every five seconds for a saved key and switch to the full tool set once they find one.
+
+Signing in uploads sessions you ran in local mode, too. The first sync takes your sessions from the last 14 days, from every agent and every project on this machine. It sends up to 50 per run and picks up the rest on later syncs.
+
+Free covers the whole loop on one machine, with unlimited local resumes and 10 cloud resumes a month. Pro is $20 a month for one developer with unlimited cross-agent resumes. Team is $30 per seat per month, with workspace roles and invites.
+
+## FAQ
+
+### Is anything sent over the network in local mode?
+
+No request goes to AgentDrive's servers. Transcripts are read from disk, or through the `opencode` CLI on your machine, and the brief is printed locally.
+
+### Why can't local mode find my Cursor session?
+
+Cursor transcripts don't record the project directory, so local mode depends on the hook having seen the session. Make sure `adrive init --local` ran, restart Cursor and start a new agent session.
+
+### Do I need init for Claude Code, Codex or OpenCode?
+
+Not for `adrive resume` in a shell, which reads them as they are. You do need it for the in-agent commands, because init installs the MCP server and the resume commands.
+
+### Is the local brief redacted?
+
+Yes. It goes through the same redactor sync uses before upload. It's best-effort, not a security boundary.
+
+## Try local mode
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+[What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) explains what you're looking at. For a pair-by-pair walkthrough, start with [Codex to Claude Code, end to end](/blog/codex-to-claude-code-walkthrough).

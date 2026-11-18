@@ -1,8 +1,10 @@
 import { PLAN_CATALOG } from '@agentdrive/shared';
+import { plainText } from '@/components/marketing/faq';
 import { docLinks, link } from '@/lib/llms';
 import { listPosts } from '@/lib/source';
 import { COMPETITORS } from '../compare/data';
 import { FACTS_DESCRIPTION, ONE_SENTENCE } from '../facts/facts';
+import { GLOSSARY, GLOSSARY_DESCRIPTION } from '../glossary/glossary';
 import { CAPTURE_HARNESSES, INSTALL_COMMAND } from '../integrations/data';
 import { PAIRS } from '../resume/data';
 
@@ -14,7 +16,7 @@ export function GET() {
     '',
     `> ${ONE_SENTENCE}`,
     '',
-    'Hooks in each of those five agents sync sessions in the background: a detached `adrive sync` uploads the redacted transcript, plus files the agent wrote that git does not track, to `sessions/<project>/<harness>/<session>.md` in the workspace. With artifact sync on, `adrive watch` also uploads every file under a folder except .gitignore and .adriveignore matches. Any of them can resume another\'s session through the `drive_sessions` and `drive_resume` MCP tools, `/agentdrive:resume` in Claude Code, or `adrive resume` in a shell. The MCP server exposes 22 tools (18 stable plus 4 experimental sandbox tools) for versioned, content-addressed files, semantic search, run logs and sharing. Cline, Zed and Continue use the workspace tools as plain MCP clients, without sync. Bring your own bucket (R2 or S3) on the Team plan. Private Workspace encrypts content on the client; redaction is best-effort and not a security boundary.',
+    'Hooks in each of those five agents sync sessions in the background: a detached `adrive sync` uploads the redacted transcript, plus files the agent wrote that git does not track, to `sessions/<project>/<harness>/<session>.md` in the workspace. Any of them can resume another\'s session through the `drive_sessions` and `drive_resume` MCP tools, `/agentdrive:resume` in Claude Code, or `adrive resume` in a shell. The MCP server exposes 22 tools (18 stable plus 4 experimental sandbox tools) for versioned, content-addressed files, semantic search, run logs and sharing. Cline, Zed and Continue use the workspace tools as plain MCP clients, without sync. Bring your own bucket (R2 or S3) on the Team plan. Private Workspace encrypts the transcripts and files the CLI syncs before upload (MCP writes are not encrypted); redaction is best-effort and not a security boundary.',
     '',
     `Install: \`${INSTALL_COMMAND}\``,
     '',
@@ -59,6 +61,11 @@ export function GET() {
     '',
     link('Compare', '/compare', 'How AgentDrive differs from the alternatives'),
     ...COMPETITORS.map((c) => link(`AgentDrive vs ${c.name}`, `/compare/${c.slug}`, c.tagline)),
+    '',
+    '## Glossary',
+    '',
+    link('Glossary', '/glossary', GLOSSARY_DESCRIPTION),
+    ...GLOSSARY.map((t) => link(t.term, `/glossary/${t.slug}/index.md`, plainText(t.definition))),
     '',
     '## Blog',
     '',

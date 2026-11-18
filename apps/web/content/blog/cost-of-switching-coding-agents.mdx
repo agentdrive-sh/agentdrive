@@ -1,0 +1,121 @@
+---
+title: The real cost of switching coding agents
+description: Switching coding agents costs you the re-explaining. The goal, the files touched, the decisions and the dead ends. What a handoff should carry and leave out.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+The real cost of switching coding agents is the re-explaining. The new agent starts with your repo and its rule files, but not the task: what you're trying to do, which files are half-edited, what you decided and what already failed. You either type that out again or watch the new agent rediscover it the slow way.
+
+I switch between Claude Code, Codex, OpenCode, Cursor and Antigravity most days. A usage limit, a model that's better at one kind of bug, a teammate's setup. The switch itself takes seconds. The context is what costs, and it costs in ways that are easy to miss because nobody bills you for them.
+
+## What does the new agent already know?
+
+More than people assume, and less than they need.
+
+It knows the repo, because the files are on disk. It knows the rules, because it loads AGENTS.md or CLAUDE.md at startup. It can read git history and see uncommitted changes.
+
+What it doesn't know is anything that lived only in the old session. That's the gap you pay for. I find it breaks into four parts.
+
+## What is the goal, right now?
+
+The goal you started with is rarely the goal you stop with.
+
+Say I open Claude Code with "add rate limiting to the search endpoint". Partway in, we find the limiter is keyed wrong for agents behind one IP, and the task becomes "key the limiter on the API key principal, then add it to search and context". Claude Code hits its limit. I open Codex.
+
+If I type the original sentence, Codex does the original task, and probably keys on IP, because that's the obvious first approach. The current goal lives in a turn halfway through the old session, in my words and the agent's, not in any file.
+
+## Which files are touched, and in what state?
+
+`git status` tells the new agent which files changed. It doesn't say why, or whether the change is finished.
+
+A file can be:
+
+- done and tested,
+- edited but not yet tested,
+- half-edited because the session stopped mid-change,
+- changed by a step that was later abandoned.
+
+Those look identical in a diff. The old session knew which was which. The new agent has to work it out by reading the code and running the tests, which is fine, as long as it knows to do that instead of assuming the diff is a finished plan.
+
+## What was decided?
+
+Decisions are the most expensive thing to lose, because a fresh agent will often reopen them in good faith.
+
+In the rate-limit example, keying on the principal instead of IP was a decision with a reason. Without the reason, a new agent reviewing the code may well suggest IP-based limiting as an "improvement", or ask which one you want. Now you're re-arguing a settled question, and if you're tired, you might accept the wrong answer.
+
+The same goes for smaller choices: "keep the existing cursor format", "don't touch the migration, it's already deployed", "tests for this live in the integration suite, not unit tests".
+
+## What already failed?
+
+Dead ends are invisible on disk. If the first approach was tried and reverted, the files show nothing. The new agent sees a clean slate and, reasonably, tries the most obvious approach first, which is often the one that already failed.
+
+This is where the cost is clearest to me. It's not the minute I spend typing an explanation. It's the time the new agent spends rediscovering a failure I already paid for, plus the tokens it burns doing it.
+
+## What should a handoff carry?
+
+From those four gaps, a good handoff carries:
+
+1. **The current goal**, in one or two sentences. Not the first message if the task drifted.
+2. **The files touched**, so the agent reads them instead of guessing.
+3. **Decisions, with the reason.** One line each.
+4. **Dead ends, with the reason.** "Tried X, failed because Y."
+5. **The next step.** What you would have done in the next five minutes.
+6. **An instruction to check the disk.** The handoff is history. The files are the present.
+
+## What should a handoff leave out?
+
+As much as it can. A handoff the agent has to wade through is a cost too.
+
+- **Tool output.** Test logs and file dumps from an hour ago are stale. The agent can rerun the test.
+- **The whole transcript.** Most of a session is exploration. The recent turns matter far more than the first hour.
+- **Standing rules.** "Run tests with pnpm" belongs in AGENTS.md, where every session gets it. Repeating it in every handoff spends the budget.
+- **The old model's reasoning.** It can't be moved anyway; providers return it summarized or encrypted. [Why one model can't continue another's hidden state](/blog/why-model-state-doesnt-transfer) goes through why.
+- **Secrets.** Transcripts pick up tokens and keys from pasted errors and env dumps. They shouldn't travel.
+
+## How much of this does AgentDrive carry?
+
+I'd rather be exact here than oversell it.
+
+AgentDrive syncs each session from the agent's hooks, and `drive_resume` or `adrive resume` builds a brief from it. The brief carries:
+
+- an instruction to verify file state on disk before assuming anything,
+- the goal, taken from the first user message,
+- every file the session edited or wrote, up to 50,
+- the most recent turns that fit in the budget (12,000 characters by default), including one line per tool call.
+
+It leaves out tool output, the model's reasoning and older turns that don't fit, with a marker saying how many were omitted. It runs transcripts through the same redactor sync uses, which replaces common secret shapes. That's best-effort, not a guarantee.
+
+What it doesn't do is judge. The goal is the first message even if the task drifted. Decisions and dead ends are in the brief only if they're in the recent turns. So, of my six items, AgentDrive handles the files and the instruction for free. The goal, decisions, dead ends and next step arrive only if they were said near the end of the session.
+
+## How do I cover the rest?
+
+Two habits, both cheap:
+
+- **Before you stop on purpose, ask the agent to state the current goal, what it decided, what failed and the next step.** That turn becomes the last one in the brief, so all six items arrive together.
+- **When you resume after an unplanned stop, say the current goal in your first message.** One sentence fixes the drift problem.
+
+When the stop isn't planned, a usage limit or a crash, the brief still has the files and the latest turns. That's usually enough for the new agent to read the code, run the tests and get back to where the old one was, instead of starting from the first message. The [usage limit post](/blog/claude-code-usage-limit) walks through that case.
+
+## FAQ
+
+### Isn't git enough?
+
+Git carries the files and committed history. It doesn't carry the goal, uncommitted intent, decisions or anything that was tried and reverted.
+
+### Why not paste the whole transcript into the new agent?
+
+It's long, most of it is stale exploration, and it pushes out the recent turns that matter. A budgeted brief keeps the end of the session and the goal.
+
+### Does switching back to the original agent have the same cost?
+
+Yes, if work happened in between. The original agent's session doesn't know what the other one did. `drive_resume` by default prefers the latest session from a different agent, so it picks up the work you did elsewhere.
+
+### Does this work across machines?
+
+When you're signed in, yes: sessions sync to your workspace, and untracked files the agent wrote are uploaded with them. In local mode, it's one machine.
+
+## Make your next switch cheaper
+
+The cheapest fix costs nothing to install: before you leave an agent, ask it to state the goal, the decisions, what failed and the next step. When you want that turn delivered to the next agent for you, the [resume guides](/resume) cover each agent-to-agent pair.

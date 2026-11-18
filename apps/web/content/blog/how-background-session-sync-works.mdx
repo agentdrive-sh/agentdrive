@@ -30,7 +30,7 @@ The `npx` fallback exists because agents launched from a GUI often don't have th
 
 ## 2. The hook returns fast, and sync runs detached
 
-Hooks run inline with the agent. Codex caps hook timeouts at 3 seconds, so `adrive hook` does almost nothing itself. It reads the event payload (session id, working directory, transcript path), records which directory the session belongs to, starts a detached `adrive sync` process and exits 0. A hook failure is swallowed, so it can't block or break your session.
+Hooks run inline with the agent. Codex allows a `SessionEnd` hook at most 3 seconds, and AgentDrive uses that timeout for every Codex event, so `adrive hook` does almost nothing itself. It reads the event payload (session id, working directory, transcript path), records which directory the session belongs to, starts a detached `adrive sync` process and exits 0. A hook failure is swallowed, so it can't block or break your session.
 
 On a session-start event, if auto-context is on, the hook also asks AgentDrive for this project's recent sessions. It puts the newest session from each other agent first and returns up to three as extra context for the agent, with a hint to call `drive_resume`. OpenCode's plugin API has no way to inject context, so OpenCode skips this step.
 
@@ -102,7 +102,7 @@ Turn it on with `adrive privacy --private-workspace on`, and the sync changes in
 
 The trade-off is that server-side features can't read encrypted content. That's the point.
 
-## Try it
+## Check it on your machine
 
 ```bash
 curl -fsSL agentdrive.sh/install | sh

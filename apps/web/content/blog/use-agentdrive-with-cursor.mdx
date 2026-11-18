@@ -1,0 +1,104 @@
+---
+title: How to use AgentDrive in Cursor
+description: What adrive init merges into ~/.cursor, why Cursor needs a hook to know your project, and how to resume a Claude Code or Codex session with /agentdrive-resume.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Install the CLI with `npm install -g @adrive/cli`, run `adrive init`, and reload the Cursor window. Init merges sync hooks into `~/.cursor/hooks.json` and the MCP server into `~/.cursor/mcp.json`. Then `/agentdrive-resume` in Agent chat loads a handoff brief from your Claude Code, Codex, OpenCode or Antigravity session in the same project.
+
+In Cursor, those hooks do a second job besides sync: they're the only record of which folder a chat ran in. That's the part worth understanding first, and it's why I tell people to set this up before they need it. I wrote this against CLI 1.4.0 and MCP server 1.3.0, and a condensed copy lives on the [Cursor integration page](/integrations/cursor).
+
+## Why should I install AgentDrive in Cursor before I need it?
+
+Cursor stores Agent chats under `~/.cursor/projects/<path-slug>/agent-transcripts/`. The lines in those files carry no timestamps and no working directory. AgentDrive groups sessions by project, a key derived from the folder (or its git remote), so a transcript without a folder can't be matched to "this repo".
+
+The hook supplies it. Each time it fires, it takes the first entry of `workspace_roots` from Cursor's payload and saves it against the chat's `conversation_id` in `~/.config/agentdrive/session-cwd.json`. Sync and local resume both read that file.
+
+What follows from that:
+
+- A chat that ended before the hooks existed has no folder on record. Signed in, it syncs under an unknown project; in local mode, `adrive resume` can't place it. You can still load it by id.
+- In a multi-root workspace, only the first folder counts. Put the repo you'll hand off from first.
+- The mapping is written whether or not you're signed in, and whether or not sync is on. It stays on your machine.
+
+None of this matters when Cursor is the agent you're moving to. It only matters when you're leaving Cursor, which is usually the day it runs out.
+
+## What does `adrive init` change in `~/.cursor`?
+
+Nothing, unless `~/.cursor` exists. If it does:
+
+| File | Change |
+|---|---|
+| `hooks.json` | `adrive hook cursor` with a 10-second timeout on `sessionStart`, `stop`, `sessionEnd` and `preCompact`. Adds `"version": 1` only if the file had no version. |
+| `mcp.json` | An `agentdrive` server under `mcpServers`: `npx -y @adrive/mcp-server` with `AGENTDRIVE_AGENT_PLATFORM=cursor`. |
+| `commands/agentdrive-resume.md`, `commands/agentdrive-sessions.md` | The two slash commands. |
+| `skills/agentdrive/SKILL.md` | The AgentDrive skill. |
+| `rules/agentdrive.mdc` | With auto-context on (the default), an always-applied rule telling the agent when to reach for the AgentDrive tools. |
+
+The JSON files are merged. In each event list, init swaps only its own entry and leaves your other hooks in their order; run it twice and you get the same file. On the first change it keeps your original as `hooks.json.bak` or `mcp.json.bak`. The commands carry an `agentdrive-` prefix because Cursor's commands share one namespace with built-ins like `/resume`.
+
+Then reload the window (Cmd-Shift-P, Developer: Reload Window) so Cursor picks up the hooks and the MCP server.
+
+## How do I pick up a Claude Code session in Cursor?
+
+Open Agent chat in the same project and run:
+
+```
+/agentdrive-resume
+```
+
+Cursor calls `drive_resume`, which prefers the newest session in this project from an agent other than Cursor and returns its goal, files touched and recent turns, with a reminder to read the files on disk before acting.
+
+For a particular session, list first. Whatever you type after the command is passed along, a harness name as an agent filter and anything else as a project:
+
+```
+/agentdrive-sessions claude-code
+/agentdrive-resume <session-id>
+```
+
+Asking in plain words also works. Through the skill, "continue my last Codex session from AgentDrive" ends up as a `drive_resume` call with that platform.
+
+Cursor's terminal gets `adrive resume --list` and `adrive resume <session-id>`. Cursor sets `CURSOR_AGENT` on the commands its agent runs, so when the Agent runs `adrive resume` in local mode, AgentDrive leaves Cursor's own chats out.
+
+One page per direction: [Claude Code to Cursor](/resume/claude-code-to-cursor), [Codex to Cursor](/resume/codex-to-cursor), [OpenCode to Cursor](/resume/opencode-to-cursor), [Antigravity to Cursor](/resume/antigravity-to-cursor). I run Cursor next to Claude Code most days; [here's how I split the work](/blog/cursor-and-claude-code).
+
+## When does a Cursor chat sync?
+
+The hook records the folder, starts a detached `adrive sync` and exits. Cursor reads hook output as JSON on every event, so the hook prints `{}` whenever it has nothing to add.
+
+`stop` re-syncs the chat at most once every two minutes. `sessionEnd` and `preCompact` sync regardless of that window. `sessionStart` triggers a sweep for changed sessions across all agents and, with auto-context on, returns up to three recent sessions from your other agents as `additional_context`, so Cursor's agent knows about them before you ask.
+
+AgentDrive reads Agent chat transcripts only. Tab completions and inline edits aren't in those files, so they don't sync.
+
+## Cursor ran out. How do I carry the chat elsewhere?
+
+[What to do when Cursor hits its usage limit](/blog/cursor-usage-limit) has the full set of options. For the switch itself:
+
+First, confirm the chat has a project. If it started before you installed the hooks, find it with `adrive resume --list` from another agent's terminal and resume it by id instead.
+
+Second, flush the latest turn. Because `stop` can be skipped inside its two-minute window, run `adrive sync --force` in the project, which uploads every changed session without waiting.
+
+Then open the next agent in the same folder: [Cursor to Claude Code](/resume/cursor-to-claude-code), [Cursor to Codex](/resume/cursor-to-codex), [Cursor to OpenCode](/resume/cursor-to-opencode) or [Cursor to Antigravity](/resume/cursor-to-antigravity).
+
+## FAQ
+
+### Will init overwrite my Cursor hooks or MCP servers?
+
+No. It adds or replaces only its own entries and keeps the originals as `.bak` files the first time.
+
+### Can I change what `/agentdrive-resume` does?
+
+The command file is plain markdown that init rewrites on every run. Put your own version in a differently named file in `~/.cursor/commands/`.
+
+### A Cursor chat never shows up. Where do I look?
+
+`~/.config/agentdrive/sync.log` has the hook-started syncs. `adrive sync --dry-run` in the project shows what a sync would pick up without uploading. Check, too, that the chat started after setup.
+
+### Do I need to restart Cursor?
+
+A window reload is enough. A full restart works too.
+
+## Wire Cursor before the chat that matters
+
+The hooks are the only record of where a chat ran, so run `adrive init` and reload the window now, not when you're about to switch agents. `adrive init --local` does the same with no account; [local mode](/blog/local-mode-no-account) lists the trade-offs.

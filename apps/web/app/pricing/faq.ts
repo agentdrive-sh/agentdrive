@@ -52,7 +52,7 @@ export const PRICING_FAQ: FaqItem[] = [
   {
     q: 'Do you train on my data?',
     a: [
-      'No: Roushan Inc does not train any model on your data; standard workspace content is embedded only so semantic search works, and Private Workspace encrypts content on your machine before upload, so its plaintext never reaches the server and is not available to server-side search.',
+      'No: Roushan Inc does not train any model on your data; standard workspace content is embedded only so semantic search works, and Private Workspace encrypts the transcripts and files the CLI syncs on your machine before upload, so their plaintext never reaches the server and is not available to server-side search. Files saved through MCP tools are not encrypted.',
       'See the privacy policy at https://agentdrive.sh/legal/privacy.',
     ],
   },

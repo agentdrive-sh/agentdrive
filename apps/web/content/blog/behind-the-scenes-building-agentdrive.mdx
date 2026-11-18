@@ -1,0 +1,102 @@
+---
+title: 'Behind the scenes: how AgentDrive is built'
+description: 'The stack and the decisions behind AgentDrive: KV and R2 with no Postgres, MCP first, an AGPL server, and the one founder building it with parallel agents.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive is a TypeScript monorepo: a Cloudflare Worker on Hono with KV, R2, Vectorize and Workers AI, a Next.js web app, and Apache-2.0 client packages for the CLI, MCP server and SDK. The server is AGPL and open source. I build it alone, with a fleet of coding agents running in parallel in FlareCode.
+
+I'm Rakesh Roushan. Everything below can be checked: the code is public, and every decision has a written record in the repo.
+
+## What is it built with?
+
+The whole thing is one repo, with pnpm workspaces and Turborepo, written in TypeScript throughout.
+
+| Piece | Path | Stack | License |
+|---|---|---|---|
+| API | `apps/worker` | Cloudflare Worker, Hono, Zod | AGPL-3.0 |
+| Web app, docs and dashboard | `apps/web` | Next.js on Cloudflare via OpenNext, Fumadocs for docs and this blog | AGPL-3.0 |
+| CLI | `packages/cli` | Node, published as `@adrive/cli` | Apache-2.0 |
+| MCP server | `packages/mcp-server` | MCP TypeScript SDK, published as `@adrive/mcp-server` | Apache-2.0 |
+| SDK | `packages/sdk-ts` | Published as `@adrive/sdk` | Apache-2.0 |
+| Shared types | `packages/shared` | Types, ids, token signing, Zod schemas | Apache-2.0 |
+| Installer | `apps/installer` | POSIX shell | Apache-2.0 |
+
+On Cloudflare, the Worker uses KV for metadata, R2 for file content, Vectorize for embeddings, Workers AI for the embedding model, Durable Objects for sign-in codes and an optional sandbox, and Workers rate limiting. Tests run on Vitest with Cloudflare's Workers pool, so worker tests run in the Workers runtime rather than plain Node.
+
+[AgentDrive architecture](/blog/agentdrive-architecture) walks through how the pieces talk to each other.
+
+## Why is there no Postgres?
+
+This is the decision people ask about first, and it's [ADR-0001](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0001-kv-and-r2-as-storage-substrate.md). All metadata lives in Cloudflare KV under prefixed keys. All file content lives in R2. There's no Postgres, no Neon and no D1.
+
+What that buys: one vendor, no egress between metadata and storage, no managed database bill, no schema migrations and very little to operate. Adding a field means writing the new shape and letting readers handle a missing one.
+
+What it costs: no joins, so every query shape needs a secondary index planned ahead of time, and backfilled when it's new. No ad-hoc analytics. KV listings are eventually consistent, so code that needs to read its own write uses the key it wrote. The ADR is honest about all of this, and it names a trigger for revisiting: one workspace past 100,000 files, or a paying customer who needs relational queries no index can answer.
+
+Its partner is [ADR-0008](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0008-content-addressed-storage.md): file content is keyed by its SHA-256, so the same bytes are stored once and re-syncing an unchanged session costs nothing.
+
+## Why MCP first?
+
+[ADR-0003](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0003-mcp-first-integration-surface.md). The product only works if every agent can reach the same workspace, and by the time I made the decision, MCP was the protocol the agents I cared about already spoke. So the stdio MCP server is the primary surface, and a capability ships as a tool before it ships anywhere else. It has 22 tools today: 18 stable and 4 experimental sandbox tools.
+
+The hedge is that the CLI and the SDK sit on the REST API, not on MCP. If a host ever dropped MCP, they'd keep working over plain HTTPS.
+
+The same ADR is where the identity headers come from. Every request carries `X-Agent-Platform` and `X-Agent-Role`, and [ADR-0007](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0007-cross-agent-identity-principal-plus-platform.md) explains why one API key stands for a person or team, while the header says which agent is acting. That's what lets the timeline say Codex wrote a file and Claude Code read it, with one key.
+
+## Why Hono on Workers?
+
+[ADR-0002](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0002-hono-on-cloudflare-workers.md). The API runs on Cloudflare Workers next to the storage it uses, with Hono for routing and Zod validating every request body. Routes are split into one module per domain under `apps/worker/src/routes/`. The house rule that falls out of it is short: Hono for routing, Zod for validation, the MCP SDK for tools, and nothing else in their place.
+
+## Why is the server AGPL?
+
+[ADR-0009](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0009-agpl-server-license.md), accepted on November 17, 2026. The server used to be under the Business Source License, which isn't open source. When I decided to publish the repo, I moved the server to AGPL-3.0 and kept everything you install or import under Apache-2.0.
+
+The reasoning is simple. Anyone can self-host, audit and modify the server. Anyone who runs a modified version as a service has to publish their changes, so a closed hosted fork isn't possible. And the clients stay embeddable anywhere, because they talk to the server over HTTP and MCP and never import its code. [Why the server is AGPL and the clients are Apache](/blog/why-agpl-server-apache-clients) goes into the trade-offs, including the companies that ban AGPL outright.
+
+External contributions need a signed contributor license agreement (`CLA.md`), which keeps a commercial license possible for organizations that can't use AGPL. The name and logo are covered separately in `TRADEMARKS.md`, so forks rebrand.
+
+## Is it really open source?
+
+Yes. The code is at [github.com/agentdrive-sh/agentdrive](https://github.com/agentdrive-sh/agentdrive): the Worker, the web app, the CLI, the MCP server, the SDK and the installer. The architecture overview and every decision record are in [docs/tech](https://github.com/agentdrive-sh/agentdrive/tree/main/docs/tech). `LICENSING.md` explains the split in plain terms and `CONTRIBUTING.md` has the house rules.
+
+You can also run it yourself. `pnpm selfhost` deploys the server to your own Cloudflare account. [Self-host AgentDrive on Cloudflare](/blog/self-host-agentdrive-on-cloudflare) lists exactly what it creates.
+
+## Who builds it?
+
+One person. I'm a solo founder, and AgentDrive is built by me working with a fleet of coding agents running in parallel. I run that fleet with [FlareCode](https://flarecode.sh).
+
+The voices in the launch videos were made with [AudioPod](https://audiopod.ai).
+
+## What decisions are still open?
+
+The decision records say what's parked, so nobody fixes it by accident:
+
+- **Real-time collaboration.** A Durable Object class for it is bound but not implemented. Several agents editing the same file at the same moment isn't a v1 goal.
+- **The sandbox tools.** The four `drive_sandbox_*` tools are experimental and need Cloudflare Containers. Without it they return a clean 503.
+- **Server-side envelope encryption.** [ADR-0006](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0006-envelope-encryption-versioned-kek.md) designs it and the code exists, but ordinary storage doesn't call it. The encryption that's live today is Private Workspace, which runs on your machine before upload.
+- **A relational database.** Not until the trigger in ADR-0001 fires.
+
+## FAQ
+
+### Can I read the code before I install anything?
+
+Yes. Everything is on GitHub, and the client code that runs on your machine, including the hooks and the sync, is in `packages/cli` and `packages/mcp-server`.
+
+### Which decision record should I read first?
+
+ADR-0001, on KV and R2. Most of the other choices follow from running everything on Cloudflare with no relational database.
+
+### Can I contribute?
+
+Yes. Open a pull request on the public repo. External contributions need a signed CLA, which a bot handles on the pull request.
+
+### Does self-hosting cost anything?
+
+AgentDrive charges nothing for it. You need a Cloudflare account on the Workers Paid plan, and self-hosting is community-supported, with no SLA.
+
+## Read it, then run it
+
+Start with [docs/tech](https://github.com/agentdrive-sh/agentdrive/tree/main/docs/tech) if you want the reasoning first. [The architecture post](/blog/agentdrive-architecture) walks the same code file by file, and [self-hosting](/blog/self-host-agentdrive-on-cloudflare) covers running the server yourself.

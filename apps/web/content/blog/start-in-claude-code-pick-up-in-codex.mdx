@@ -46,7 +46,7 @@ Cline, Zed and Continue get the workspace tools as plain MCP clients. They don't
 Syncing transcripts means uploading what you and your agents said, so you control all of it with `adrive privacy`:
 
 - **Auto-context:** at session start, list recent sessions from your other agents in this project.
-- **Artifact sync:** upload files your agents wrote that git doesn't track, and allow `adrive watch` to upload a whole folder (except `.gitignore` and `.adriveignore` matches).
+- **Artifact sync:** upload files your agents wrote that git doesn't track, and allow `adrive watch`, which is meant to upload a whole folder. In CLI 1.4.0 watch uploads nothing, because of a bug fixed in the next release, so use hook sync or `adrive push` meanwhile.
 - **Transcript sync:** upload session transcripts.
 - **Private Workspace:** encrypt transcripts and files on your machine before upload. Synced project and file storage paths are hashed too. Account and session metadata remain managed; direct MCP writes are not encrypted by this CLI setting.
 

@@ -1,0 +1,250 @@
+---
+title: Reading five coding agents' transcript formats
+description: How AgentDrive parses Claude Code, Codex, OpenCode, Cursor and Antigravity sessions into one TranscriptDoc, and how hooks fill in what each format leaves out.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Five coding agents write their sessions to disk in five different shapes. AgentDrive reads all of them: Claude Code, Codex, OpenCode, Cursor and Antigravity. Each one gets a small adapter that turns its format into the same `TranscriptDoc`. Two never record where a session ran, and one can only be read through its own CLI.
+
+The adapters live in [`packages/mcp-server/src/transcripts/`](https://github.com/agentdrive-sh/agentdrive/tree/main/packages/mcp-server/src/transcripts) and are Apache-2.0. If you want the whole sync pipeline (hooks, redaction, storage, the handoff brief), [How background session sync works](/blog/how-background-session-sync-works) covers it end to end. What follows stays at the parsing layer, which is where most of the surprises were.
+
+## What does every adapter have to produce?
+
+The contract is two functions. `enumerate` finds candidate sessions on disk, and `parseSession` turns one of them into a document. From [`transcripts/types.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/types.ts):
+
+```ts
+export interface TranscriptDoc {
+  entry: TranscriptEntry;
+  turns: TranscriptTurn[];
+  cwd?: string;
+  title?: string;
+  // As written by the agent: absolute, or relative to `cwd`.
+  filesTouched: string[];
+}
+
+// ...
+
+export interface TranscriptSource {
+  platform: TranscriptPlatform;
+  enumerate(opts: EnumerateOptions): Promise<TranscriptEntry[]>;
+  parseSession(entry: TranscriptEntry): Promise<TranscriptDoc | null>;
+}
+```
+
+A turn is a role, a text, an optional timestamp and an optional list of tool calls. A tool call is a name plus either a path or a one-line summary. Everything else (redaction, encryption, upload, the run record) happens once in [`packages/cli/src/lib/sync.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/sync.ts), so a new adapter can't get those wrong.
+
+Two shared helpers in [`transcripts/util.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/util.ts) do most of the work. The first is a JSONL reader that never fails a parse:
+
+```ts
+export function jsonLines(raw: string): Json[] {
+  const out: Json[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = asObj(JSON.parse(line));
+      if (parsed) out.push(parsed);
+    } catch {
+      // Permissive: a torn last line or unknown record never fails a parse.
+    }
+  }
+  return out;
+}
+```
+
+That matters because sync reads transcripts while the agent is still writing them. The last line is often half there.
+
+The second is `DocBuilder`. Most agents log a tool call as its own record, separate from the assistant text around it. Turned straight into turns, that gives you a run of empty assistant turns. `addTurn` folds them into the turn they belong to:
+
+```ts
+addTurn(role: string, text: string, ts?: string, tools: TranscriptTool[] = []): void {
+  const last = this.turns[this.turns.length - 1];
+  if (!text.trim()) {
+    if (tools.length === 0) return;
+    // Harnesses log tool calls as separate records; fold them into the
+    // turn they belong to instead of emitting empty turns.
+    if (last && last.role === role) {
+      last.tools = [...(last.tools ?? []), ...tools];
+      return;
+    }
+  }
+  // ...
+}
+```
+
+Tool summaries are built from a fixed allow-list of input keys (`command`, `file_path`, `path`, `pattern`, `query`, `url` and a few more). The comment explains why: "file bodies (`content`, `new_string`, ...) never reach a tool line." A `Write` call shows up as `> tool: Write src/app.ts`, never as the file it wrote.
+
+## Claude Code: the easy one
+
+Claude Code keeps one JSONL file per session at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Every `user` and `assistant` line carries `message.content`, plus `cwd` and `timestamp`. It's the most complete format of the five, and [`transcripts/claude.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/claude.ts) is short because of it.
+
+File edits come from `tool_use` parts. Only four tools count as edits:
+
+```ts
+const FILE_TOOLS: Record<string, string> = {
+  Write: 'file_path',
+  Edit: 'file_path',
+  MultiEdit: 'file_path',
+  NotebookEdit: 'notebook_path',
+};
+```
+
+The parser takes `cwd` from the first line that has one (`cwd ??= asStr(obj.cwd)`), skips lines marked `isMeta`, and drops `tool_result` parts on purpose: a tool result is the output of `cat` or a test run, it can be enormous, and the next agent can rerun the command.
+
+The one wrinkle is titles. A session's title is its first user message, but Claude Code records a slash command and its local output as user turns wrapped in tags like `<command-name>` and `<local-command-stdout>`. A session that opens with `/model` would get a title of tag soup. `DocBuilder.build` strips those wrappers (and `<system-reminder>`) before it picks the first prompt.
+
+## Codex: versioned, compressed and forked
+
+Codex writes rollouts under `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`, with `CODEX_HOME` defaulting to `~/.codex`. Older rollouts get compressed to `.jsonl.zst`. The reader handles both, using Node's built-in zstd:
+
+```ts
+export async function readText(path: string): Promise<string | null> {
+  try {
+    const buf = await fs.readFile(path);
+    return (path.endsWith('.zst') ? zstdDecompressSync(buf) : buf).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+```
+
+Because a session can exist as both a `.jsonl` and a `.jsonl.zst`, `enumerate` keys entries by the UUID in the filename and keeps the one with the newest mtime.
+
+Each line is `{ timestamp, type, payload }`. The `session_meta` record carries the session id and `cwd`. Forked rollouts repeat their parents' `session_meta` after their own, so the parser keeps the first one it sees and ignores the rest:
+
+```ts
+// Forked rollouts repeat their parents' session_meta after their own.
+if (obj.type === 'session_meta') {
+  cwd ??= asStr(payload.cwd);
+  metaId ??= asStr(payload.id);
+  continue;
+}
+```
+
+File edits arrive two ways. The older one is an `apply_patch` custom tool call whose input is patch text. A shared `patchPaths` helper pulls the paths out with one regex over the `*** Add File:`, `*** Update File:` and `*** Delete File:` headers. The newer one is an `event_msg` of type `item_completed` whose item is a `FileChange` with a map of paths. The header comment of [`transcripts/codex.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/codex.ts) calls that "the 0.160 file-edit signal" and adds: "The format shifts between CLI versions, so unknown records are ignored."
+
+The other Codex quirk is boilerplate. Codex injects its environment context and the contents of `AGENTS.md` into the conversation as user messages. Left alone, every Codex session's goal would be a dump of your instructions file. The parser drops any message part that is one whole `<tag>...</tag>` block or starts with `# AGENTS.md instructions`:
+
+```ts
+const BOILERPLATE_RE = /^\s*(?:<([a-z][\w-]*)[\s>][\s\S]*<\/\1>\s*$|# AGENTS\.md instructions)/i;
+```
+
+That's a heuristic. If you open a Codex session by pasting a single XML block, it gets dropped too. Losing that rare case beats titling every session "AGENTS.md instructions".
+
+## OpenCode: no files, so ask the CLI
+
+OpenCode keeps sessions in its own store, and I didn't want to depend on its internal layout. So [`transcripts/opencode.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/opencode.ts) shells out to the OpenCode CLI: `opencode session list --format json` to enumerate and `opencode export <id>` to read one session. Every call adds `--pure`, which skips plugins, including AgentDrive's own hook plugin. Each call has a 15-second timeout.
+
+Since there's no transcript file, `TranscriptEntry.path` holds the session id instead. A comment in the types file records that, because it's the kind of thing that bites a second implementation.
+
+Spawning a CLI costs far more than reading a file, so `enumerate` checks for OpenCode's data directory first (`$XDG_DATA_HOME/opencode`, defaulting to `~/.local/share/opencode`):
+
+```ts
+// Without a data dir OpenCode was never used, and the CLI would cost up to 15s and create its config dir.
+if (!(await mtimeOf(opencodeDataDir(env, home)))) return [];
+```
+
+There's a real limitation here, and the code marks it as a shortcut: `opencode session list` only lists sessions for the project of the working directory it runs in. A background sweep therefore sees OpenCode sessions for the directory the hook fired in, not for every project. Reading OpenCode's storage directly would fix it, at the cost of tracking its internals.
+
+The export itself is pleasant to parse. Messages have `info.role` and `info.time.created` in milliseconds. Parts are typed `text` or `tool`, and parts marked `synthetic` are skipped. `write` and `edit` tools carry `filePath`, and `patch` or `apply_patch` reuse the same patch-header regex as Codex. The session info also has `directory` and `title`, which makes OpenCode the only one of the five that hands us a title instead of making us guess one.
+
+## Cursor: no cwd, no timestamps
+
+Cursor's agent stores transcripts at `~/.cursor/projects/<path-slug>/agent-transcripts/<conv>/<conv>.jsonl`, or as a flat `<conv>.jsonl` in the same folder. Lines look like `{ role, message: { content: [...] } }`. There's no `cwd` and there are no timestamps anywhere.
+
+The obvious fix for the missing `cwd` is to decode the folder name, since it's derived from the project path. It doesn't work. A comment in [`local.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/local.ts) explains why:
+
+> Cursor's per-project dir name maps '/', '-', '_' and '.' alike, so it cannot tell /a/my-app from /a/my/app and Cursor sessions place only through the hook.
+
+So for Cursor, the working directory comes only from the hook (more on that below). The missing timestamps have a simpler fallback: a session's last activity is the transcript file's mtime.
+
+The user's prompt is wrapped in `<user_query>` tags, which the parser unwraps. Edits come from `Write`, `StrReplace` and `Delete`, which carry `input.path`, and from `ApplyPatch`, which carries patch text and goes through `patchPaths` like Codex.
+
+## Antigravity: JSON inside JSON
+
+Antigravity's CLI, app and IDE each have their own directory under `~/.gemini/`: `antigravity-cli`, `antigravity` and `antigravity-ide`. In each, a session lives at `brain/<conversationId>/.system_generated/logs/transcript.jsonl`, one step per line. The adapter keeps `USER_INPUT` and `PLANNER_RESPONSE` steps and ignores the rest. There's no `cwd` here either.
+
+Two details took a while. First, the prompt is wrapped in `<USER_REQUEST>` next to metadata blocks such as local time and settings changes, so the parser extracts just the request. Second, tool-call arguments are JSON-encoded one value at a time, so a string argument arrives with its quotes still on it:
+
+```ts
+// agy JSON-encodes each arg value: {"CommandLine":"\"git status\"","WaitMsBeforeAsync":"5000"}.
+function argsOf(raw: unknown): Json | undefined {
+  const obj = asObj(raw);
+  if (!obj) return undefined;
+  const out: Json = {};
+  for (const [key, value] of Object.entries(obj)) {
+    try {
+      out[key] = typeof value === 'string' ? JSON.parse(value) : value;
+    } catch {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+```
+
+This adapter has one weak spot. The file-edit tool names (`write_to_file`, `replace_file_content`, `multi_replace_file_content`) and the `TargetFile` argument come from Antigravity's documentation, not from a transcript I've seen. A `shortcut:` comment marks this, with a note to recheck after a session that edits files. Until then, Antigravity's "files touched" list may come back empty even when files changed.
+
+## How do the hooks fill the gaps?
+
+Two of the five formats can't say where a session ran: Cursor and Antigravity never record a `cwd`. Without a `cwd` there's no project key, and without a project key a session can't be filed next to the other agents' sessions for the same repo.
+
+The hooks see what the transcripts don't. Every lifecycle event hands `adrive hook` a payload, and each agent puts the useful fields under different names. From [`packages/cli/src/commands/hook.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/commands/hook.ts):
+
+```ts
+const roots = h === 'cursor' ? payload.workspace_roots : h === 'antigravity' ? payload.workspacePaths : undefined;
+const root = Array.isArray(roots) ? asStr(roots[0]) : undefined;
+const sessionId = asStr(
+  h === 'cursor' ? payload.conversation_id ?? payload.session_id : h === 'antigravity' ? payload.conversationId : payload.session_id,
+);
+const knownCwd = root ?? asStr(payload.cwd);
+// Antigravity runs hooks from ~/.gemini/config, so its process cwd is never the project.
+const cwd = knownCwd ?? (h === 'antigravity' ? undefined : process.cwd());
+```
+
+The hook then writes `<harness>:<session id> -> cwd` to `session-cwd.json` in the AgentDrive config directory, before it does anything else. It does this with or without an account, because local resume needs the same map. The file is capped at 500 entries and written through a temp file plus `rename`, so two hooks racing can lose an update but can't leave a half-written file ([`transcripts/session-cwd.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/session-cwd.ts)).
+
+At sync time the working directory is resolved in a fixed order: the transcript's own `cwd`, then the `cwd` from the last time this session synced, then the hook's map. A session with none of the three is filed under `local__unknown` rather than guessed.
+
+Antigravity has one more gap. Its hook payloads carry no event name at all, so `adrive init` registers a separate command per event with `--event SessionStart` or `--event Stop` appended.
+
+Here's the whole picture:
+
+| Agent | Where sessions live | Where the cwd comes from | Timestamps | File-edit signal |
+|---|---|---|---|---|
+| Claude Code | `~/.claude/projects/<encoded-cwd>/*.jsonl` | every line | per line | `Write`, `Edit`, `MultiEdit`, `NotebookEdit` |
+| Codex | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl[.zst]` | `session_meta` | per line | `apply_patch`, `FileChange` items |
+| OpenCode | its own store, via `opencode export` | session `directory` | per message, in ms | `write`, `edit`, `patch` |
+| Cursor | `~/.cursor/projects/<slug>/agent-transcripts/` | hook only | none, file mtime | `Write`, `StrReplace`, `Delete`, `ApplyPatch` |
+| Antigravity | `~/.gemini/<app>/brain/<id>/.system_generated/logs/` | hook only | per step | documented tool names, unverified |
+
+## What does normalising cost?
+
+The common format is small on purpose. The adapters read text parts and tool calls and nothing else, so tool output and reasoning blocks never reach the document. What survives is what a person skimming the session would want: what was asked, what was said, which commands ran and which files changed. The [handoff brief post](/blog/what-goes-into-a-handoff-brief) explains how that gets cut down to fit a budget.
+
+The other cost is that every adapter is tracking a format its vendor can change without notice. The defence is boring: unknown records are ignored, a torn line is skipped, a session with no usable turns returns `null` instead of an empty document, and [`packages/mcp-server/test/transcripts.test.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/test/transcripts.test.ts) builds fixture transcripts for each agent. Supporting a new record type is usually one more `if` block in one adapter.
+
+A cheap trick helps local mode too. Claude Code and Codex name the `cwd` in their first records, so when you run `drive_sessions` without an account, [`local.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/local.ts) reads only the first 64 KB of each transcript and matches `"cwd"` with a regex. Sessions from other projects get skipped without a full parse.
+
+## FAQ
+
+### Why not use each agent's export command everywhere?
+
+Only OpenCode has one that covers every session, and it costs a process spawn per session. Reading files is faster and works when the agent isn't installed on the machine doing the reading. OpenCode is the exception because it has no stable file layout to read.
+
+### What happens when a vendor changes its format?
+
+The parser ignores records it doesn't recognise, so a change usually means fewer turns or missing file edits, not a crash. The fixture tests catch it once there's a new sample to add.
+
+### Does AgentDrive read sessions from projects I never opened with a hook?
+
+Mostly. The sweep finds every recently changed Claude Code, Codex, Cursor and Antigravity session on disk. Claude Code and Codex sessions carry their own `cwd`; Cursor and Antigravity need the hook to have run once for that session. OpenCode is narrower: the sweep only sees sessions for the directory the hook fired in.
+
+### Are tool outputs ever uploaded?
+
+No. The adapters drop tool results entirely, and tool lines carry only a path or a summary built from allow-listed input keys.
+
+## Try it on your own sessions
+
+Follow the [quick start](/docs/quick-start), then run `adrive sync --dry-run`. It runs every adapter over the sessions on your machine that changed since the last sweep, or the last 14 days on a first run, and reports what it found, uploading nothing. If a format trips a parser, a fixture for `transcripts.test.ts` in [the repo](https://github.com/agentdrive-sh/agentdrive) is the most useful bug report.

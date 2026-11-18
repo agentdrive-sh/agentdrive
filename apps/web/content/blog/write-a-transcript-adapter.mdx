@@ -1,0 +1,192 @@
+---
+title: Write a transcript adapter for a new agent
+description: A contributor guide to AgentDrive transcript adapters, from the TranscriptSource interface and the Claude Code reference to registration, tests and hooks.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+A transcript adapter teaches AgentDrive to read one agent's sessions from disk. You implement `TranscriptSource`, which has two methods: `enumerate()` finds sessions and `parseSession()` turns one into turns, a working directory, a title and the files it touched. You register it in three places and add fixture tests. Redaction, encryption and upload are already handled for you.
+
+Adapters are the best first contribution to AgentDrive, and the one I most want help with. Every adapter makes one more agent's sessions resumable in all the others. The steps follow [CONTRIBUTING.md](https://github.com/agentdrive-sh/agentdrive/blob/main/CONTRIBUTING.md), plus one registration step it doesn't list yet, and the adapters live in [`packages/mcp-server/src/transcripts/`](https://github.com/agentdrive-sh/agentdrive/tree/main/packages/mcp-server/src/transcripts), under Apache-2.0.
+
+## What does an adapter have to do?
+
+Less than you might expect. Both the CLI (for `adrive sync`) and the MCP server (for local resume with no account) call the same adapters. Everything that has to behave the same for every agent lives outside them:
+
+- `packages/cli/src/lib/sync.ts` redacts, encrypts, uploads and records the run.
+- `packages/mcp-server/src/local.ts` lists and resumes sessions locally.
+
+An adapter only reads files and returns plain data. It never touches the network and never needs to know about privacy settings.
+
+## What is the `TranscriptSource` interface?
+
+It's in [`types.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/types.ts):
+
+```ts
+export interface TranscriptSource {
+  platform: TranscriptPlatform;
+  enumerate(opts: EnumerateOptions): Promise<TranscriptEntry[]>;
+  parseSession(entry: TranscriptEntry): Promise<TranscriptDoc | null>;
+}
+```
+
+**`enumerate(opts)`** gets `home`, an optional `since` date, and optionally `configDir`, `cwd` and `env`. It returns one `TranscriptEntry` per session: a `sessionId`, the absolute `path` of the transcript, its `mtime`, and a `cwd` if you already know it from somewhere other than the transcript. Skip anything whose mtime is at or before `since`, so a sweep only sees changed sessions, and sort newest first. If the agent's folder doesn't exist, return an empty list. Don't throw.
+
+**`parseSession(entry)`** returns a `TranscriptDoc`: the turns, the `cwd` if the transcript records one, a `title`, and `filesTouched`, the paths of files the agent wrote, either absolute or relative to `cwd`. Return `null` when there's nothing usable.
+
+## How does the Claude Code adapter work?
+
+[`claude.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/claude.ts) is the reference, and it's under 100 lines. Claude Code writes one JSONL file per session under `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`.
+
+Its `enumerate` reads every project folder, keeps the `.jsonl` files newer than `since` and uses the file name as the session id.
+
+Its `parseSession` walks the lines with three helpers from [`util.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/transcripts/util.ts):
+
+- **`jsonLines(raw)`** splits the file and parses each line, silently dropping a torn last line or a record it can't parse. Parsing stays permissive on purpose: a format change should cost a turn, not the whole session.
+- **`DocBuilder`** collects turns. `addTurn(role, text, ts, tools)` folds a tool-only record into the turn before it, so you don't end up with empty turns. `touch(path)` records a touched file. `build(entry, cwd, title)` returns `null` if there are no turns, and otherwise titles the session from the first real user prompt when you don't pass one.
+- **`toolSummary(input)`** turns tool input into one line from a fixed set of keys such as `command`, `path`, `query` and `url`. File bodies never reach a tool line.
+
+The Claude adapter takes `cwd` from the first line that has one, keeps only `user` and `assistant` records that aren't meta, reads text parts, and maps file-writing tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) to the input field that holds the path. Tool results are skipped.
+
+## What does a new adapter look like?
+
+Here's a skeleton for a made-up agent that writes `~/.example/sessions/<id>.jsonl`, one `{ role, text, ts, tool }` object per line. The format is invented, so adapt the parsing to whatever your agent really writes:
+
+```ts
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
+import type { EnumerateOptions, TranscriptDoc, TranscriptEntry, TranscriptSource } from './types.js';
+import { DocBuilder, asObj, asStr, jsonLines, mtimeOf, readText, toolSummary } from './util.js';
+
+export const exampleSource: TranscriptSource = {
+  platform: 'example',
+
+  async enumerate({ home, since }: EnumerateOptions): Promise<TranscriptEntry[]> {
+    const dir = join(home, '.example', 'sessions');
+    let files: string[];
+    try {
+      files = await fs.readdir(dir);
+    } catch {
+      return [];
+    }
+    const out: TranscriptEntry[] = [];
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      const path = join(dir, f);
+      const mtime = await mtimeOf(path);
+      if (!mtime || (since && mtime <= since)) continue;
+      out.push({ sessionId: f.slice(0, -'.jsonl'.length), path, mtime });
+    }
+    return out.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  },
+
+  async parseSession(entry: TranscriptEntry): Promise<TranscriptDoc | null> {
+    const raw = await readText(entry.path);
+    if (raw === null) return null;
+    const doc = new DocBuilder();
+    for (const obj of jsonLines(raw)) {
+      const role = asStr(obj.role);
+      if (role !== 'user' && role !== 'assistant') continue;
+      const tool = asObj(obj.tool);
+      const name = asStr(tool?.name);
+      const path = name === 'write_file' ? asStr(asObj(tool?.input)?.path) : undefined;
+      doc.touch(path);
+      const tools = name ? [path ? { name, path } : { name, summary: toolSummary(tool?.input) }] : [];
+      doc.addTurn(role, asStr(obj.text) ?? '', asStr(obj.ts), tools);
+    }
+    return doc.build(entry);
+  },
+};
+```
+
+## Where do I register it?
+
+Three places make it a harness, and TypeScript points at the second one for you:
+
+1. **Add the id to `SessionHarness`** in `packages/mcp-server/src/session.ts`.
+2. **Add it to `HARNESSES` and `SOURCES`** in [`packages/mcp-server/src/local.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/local.ts). `SOURCES` is typed `Record<SessionHarness, TranscriptSource>`, so once step 1 is done `pnpm typecheck` fails until your adapter is in it.
+
+   ```ts
+   export const HARNESSES: SessionHarness[] = ['claude-code', 'codex', /* ... */ 'example'];
+
+   export const SOURCES: Record<SessionHarness, TranscriptSource> = {
+     'claude-code': claudeSource,
+     // ...
+     example: exampleSource,
+   };
+   ```
+
+3. **Add it to the `AgentPlatform` union and the `AGENT_PLATFORMS` array** in `packages/shared/src/types.ts`, and to the matching list in `packages/mcp-server/src/tools/drive-search.ts`. The array is typed `readonly AgentPlatform[]`, so the union comes first. CONTRIBUTING.md doesn't mention this step yet. The server checks the `X-Agent-Platform` header against `AGENT_PLATFORMS` and records anything it doesn't know as `unknown`, so without this step your agent's sessions still sync, but provenance can't name it.
+
+Because `adrive sync` imports `HARNESSES` and `SOURCES` from the same module, registering there is enough for the CLI to sweep your agent's sessions too.
+
+## How should I test it?
+
+Add a `describe` block to `packages/mcp-server/test/transcripts.test.ts`. Each test gets a fresh temp folder as `home`, and the file has a `put(path, content)` helper and a `jsonl(lines)` helper for building fixtures. The Claude block covers the cases worth copying:
+
+- it returns no entries when the agent's folder doesn't exist
+- it enumerates newest first and honors `since`
+- it parses turns, tools, files touched, cwd and title from a small fixture
+- it returns `null` when no usable turns are found
+
+Build fixtures by hand from a real session, with secrets, file contents and personal data taken out. Run the tests with:
+
+```bash
+pnpm --filter @adrive/mcp-server test
+```
+
+If your agent places sessions through a hook-recorded cwd (see below), `packages/mcp-server/test/local.test.ts` has tests for Cursor and Antigravity that show how to cover that.
+
+## What if the agent doesn't record its working directory?
+
+Some agents don't write the cwd into the transcript. Cursor and Antigravity are two of them. Without a cwd, AgentDrive can't tell which project a session belongs to.
+
+The fix is the hook. Every agent's lifecycle hook runs `adrive hook <harness>` with the event JSON on stdin, and [`hook.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/commands/hook.ts) reads the session id and cwd from that payload. Whenever it gets both, it records `<harness>:<session-id> -> cwd` in `session-cwd.json` in the AgentDrive config folder. It does this with or without an account, and the file never leaves the machine. Sync and local resume both fall back to that map when `doc.cwd` and `entry.cwd` are empty.
+
+So for an agent like that, also wire a session-start hook:
+
+- `adrive hook` accepts any id in `HARNESSES`. By default it reads `session_id`, `cwd`, `transcript_path` and `hook_event_name` from the payload. If your agent uses different field names, add a branch the way Cursor and Antigravity have one.
+- Event names map to start, turn-end and session-end through three sets at the top of `hook.ts`. Add your agent's names if they differ.
+- Writing the hook into the agent's own config file happens in `packages/cli/src/lib/harness-wiring.ts`. Follow the closest existing agent.
+
+Hooks run inline with the agent, so `adrive hook` must stay fast. It records the cwd, starts a detached sync and exits. Don't add work there.
+
+## Which adapters do I want next?
+
+Cline, Zed and Continue. All three already reach AgentDrive as MCP clients, so they can call `drive_sessions` and `drive_resume` and pick up a Claude Code or Codex session. None of them syncs its own sessions, so nothing started there can be resumed anywhere else. Each has an open issue:
+
+- [Harness adapter: Cline](https://github.com/agentdrive-sh/agentdrive/issues/2)
+- [Harness adapter: Zed](https://github.com/agentdrive-sh/agentdrive/issues/3)
+- [Harness adapter: Continue](https://github.com/agentdrive-sh/agentdrive/issues/4)
+
+Comment there to claim one. For any other agent, open an issue with the [harness adapter template](https://github.com/agentdrive-sh/agentdrive/issues/new?template=harness-adapter.md). It asks where the agent stores transcripts on each OS, the file format, how a session is identified, whether the cwd is recorded, which tools write files, and a short redacted sample. Most of the work is answering those questions. The code that follows is usually small.
+
+## FAQ
+
+### Do I need an AgentDrive account to build or test an adapter?
+
+No. The tests run against fixtures in a temp folder, and `adrive resume --local` reads transcripts on your machine with no account.
+
+### Does my adapter need to handle redaction or encryption?
+
+No. Sync redacts and, with Private Workspace on, encrypts every transcript centrally after your adapter returns. Keep the adapter to reading and parsing.
+
+### What license does my adapter ship under?
+
+Apache-2.0, like the rest of `packages/mcp-server`. Before your first pull request merges, a bot asks you to sign the [CLA](https://github.com/agentdrive-sh/agentdrive/blob/main/CLA.md) once. You keep the copyright in your work.
+
+### What if the agent stores sessions in a database rather than files?
+
+Set `path` to whatever identifies the session. The `TranscriptEntry` type allows that already: the OpenCode adapter has no transcript file, uses the session id as its path, and reads sessions through the `opencode` CLI.
+
+## Start here
+
+```bash
+git clone https://github.com/agentdrive-sh/agentdrive.git
+cd agentdrive
+pnpm install
+pnpm --filter @adrive/mcp-server test
+```
+
+Read `claude.ts`, pick an issue, and open a pull request against `main` on [GitHub](https://github.com/agentdrive-sh/agentdrive). The [MCP tools reference](/docs/mcp-tools) and the [sessions docs](/docs/concepts/sessions) explain what your adapter's sessions turn into once they sync.

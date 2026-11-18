@@ -1,0 +1,112 @@
+---
+title: How to use AgentDrive in Claude Code
+description: Install the AgentDrive plugin in Claude Code, see what it syncs, resume a Codex or Cursor session with /agentdrive:resume, and keep going when you hit a limit.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+In Claude Code, AgentDrive is a plugin. Add the marketplace with `/plugin marketplace add agentdrive-sh/agentdrive-mcp`, install with `/plugin install agentdrive@agentdrive`, and sign in with `/agentdrive:login`. From then on every session syncs in the background, and `/agentdrive:resume` loads a handoff brief from your Codex, Cursor, OpenCode or Antigravity work.
+
+The plugin in `plugins/agentdrive/` is what this guide covers, as of CLI 1.4.0 and MCP server 1.3.0. For one screen of it, see the [Claude Code integration page](/integrations/claude-code).
+
+## Should I install the plugin or run `adrive init` first?
+
+Either order ends in the same place.
+
+**Plugin first.** Run the two `/plugin` commands above inside Claude Code, then `/agentdrive:login`. That command runs `npx -y @adrive/cli init --yes` in the background, shows you a sign-in URL and a code, and once you type the code on that page it wires your other agents too: Codex, OpenCode, Cursor and Antigravity.
+
+**Installer first.** `npm install -g @adrive/cli` and then `adrive init`. Init never edits Claude Code's files by hand. If `~/.claude` exists and `claude` is on your PATH, it runs `claude plugin install agentdrive@agentdrive -s user`, adding the `agentdrive-sh/agentdrive-mcp` marketplace first if it's missing. If `claude` isn't found or the install fails, init prints the two `/plugin` commands for you to paste.
+
+Once the plugin is in, init also deletes `~/.claude/skills/agentdrive/SKILL.md` if CLI 1.0.0 left one there. The plugin carries that skill now, and OpenCode reads `~/.claude/skills` as well, so the stale copy showed up twice.
+
+## What's inside the plugin?
+
+| Part | Detail |
+|---|---|
+| Hooks (`hooks/hooks.json`) | `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`, each running `adrive hook claude-code` with a 10-second timeout. `Stop`, `SessionEnd` and `PreCompact` are marked async. If `adrive` isn't on your PATH, the hook falls back to `npx -y @adrive/cli@1.4.0`. |
+| MCP server (`.mcp.json`) | `npx -y @adrive/mcp-server@1.3.0` with `AGENTDRIVE_AGENT_PLATFORM=claude-code`, so every tool call is stamped as Claude Code. |
+| Commands | `/agentdrive:resume [session-id]`, `/agentdrive:sessions [platform or project]`, `/agentdrive:login`. |
+| Skill | `agentdrive`, which tells Claude when to call `drive_resume`, `drive_sessions`, `drive_context` and `drive_write` on its own. |
+
+The MCP server and the hook's `npx` fallback are pinned, so they change when the plugin updates, not when npm publishes something new. A globally installed `adrive` is used as-is.
+
+## What happens on each Claude Code event?
+
+Every hook does the same small job: read the event, start a detached `adrive sync`, exit. The upload never runs inside Claude Code's process. What differs is timing.
+
+- **`SessionStart`** matches `startup|resume|clear|compact`, so it fires on a new session, `--resume`, `/clear` and after a compaction. It triggers a sweep of every agent's recent sessions. With auto-context on (the default), it also hands Claude up to three recent sessions in this project from your other agents, waiting at most 1.5 seconds for that list. If you never signed in, it tells Claude that AgentDrive is running in local mode instead.
+- **`Stop`** fires at the end of each turn and re-syncs the session at most once every two minutes.
+- **`SessionEnd`** and **`PreCompact`** ignore that two-minute limit, so the last state lands when you exit and nothing is lost to compaction.
+
+The sync reads the transcript Claude Code already writes to `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Each line carries the working directory, which is why Claude Code, unlike Cursor or Antigravity, needs no help working out the project. Worktree sessions file under their parent repo. The redacted markdown ends up at `sessions/<project>/claude-code/<session-id>.md` in your workspace. [How background session sync works](/blog/how-background-session-sync-works) has the locking and redaction details.
+
+## How do I load a Codex or Cursor session in Claude Code?
+
+From the same project directory:
+
+```
+/agentdrive:resume
+```
+
+The command asks Claude to call `drive_resume`, summarize the handoff in three to five bullets (goal, done, left, open questions), check the files it names on disk, then continue the work.
+
+With no id, signed in, `drive_resume` takes the newest session in this project from an agent other than Claude Code, and if there is none, the newest session of any kind. To choose one yourself:
+
+```
+/agentdrive:sessions codex
+/agentdrive:resume <session-id>
+```
+
+The sessions command treats a harness name (`codex`, `cursor`, `opencode`, `antigravity`) as an agent filter and anything else as a project. You can also skip the commands and say "pick up my last Cursor session": the skill steers Claude to `drive_resume`, which accepts a platform.
+
+In a terminal, `adrive resume --list` and `adrive resume <session-id>` print the same brief. Signed in, a bare `adrive resume` takes the newest session from any agent, Claude Code's own included.
+
+Each direction has its own page: [Codex](/resume/codex-to-claude-code), [Cursor](/resume/cursor-to-claude-code), [OpenCode](/resume/opencode-to-claude-code) and [Antigravity](/resume/antigravity-to-claude-code) into Claude Code. For the Codex direction there's also [a full walkthrough](/blog/codex-to-claude-code-walkthrough).
+
+## Does it work before I sign in?
+
+Yes, with one behavioural difference. Without an account, `drive_sessions` and `drive_resume` read the other agents' transcripts on this machine, so `/agentdrive:resume` works on day one. The other MCP tools need an account.
+
+The difference is the fallback. Local resume never hands you a Claude Code session when you didn't name one. If no other agent has a session for this project on this machine, you get "No local sessions from other agents for project ..." rather than your own last session. Pass an id if you want a specific one. [Local mode](/blog/local-mode-no-account) covers what else stays on the machine.
+
+## Claude Code hit its usage limit. Now what?
+
+I wrote this one up separately: [What to do when Claude Code hits its usage limit](/blog/claude-code-usage-limit). You can wait, pay for more, or move the task.
+
+To move it, exit Claude Code first. `SessionEnd` syncs right away, so the turn you were in when the limit landed doesn't wait out the two-minute window. Then open the next agent in the same project: [to Codex](/resume/claude-code-to-codex), [to Cursor](/resume/claude-code-to-cursor), [to OpenCode](/resume/claude-code-to-opencode) or [to Antigravity](/resume/claude-code-to-antigravity).
+
+When your limit resets, `/agentdrive:resume` brings back whatever the other agent did in the meantime.
+
+## What does AgentDrive keep from my Claude Code sessions?
+
+Signed in, a redacted copy of each transcript and the untracked files the session wrote. That copy outlives Claude Code's own: by default Claude Code deletes local transcripts after 30 days, through the [`cleanupPeriodDays` setting](https://code.claude.com/docs/en/settings-reference#cleanupperioddays).
+
+Be careful with what you expect the privacy toggles to do. In CLI 1.4.0, `--capture-transcripts off` stops transcript uploads, but it doesn't keep a session off the server:
+
+- With artifact sync still on, each session's run record is still posted: its title (the first message, redacted), working directory and touched paths.
+- With both toggles off, nothing goes up at the time, but the next sync after you turn them back on uploads the sessions from the off period.
+
+Redaction catches common secret shapes, not everything. So the reliable rules are: keep secrets out of the chat, and run `adrive privacy --private-workspace on` if you want synced content encrypted on your machine before upload. With Private Workspace on, `drive_resume` can't decrypt, so Claude is told to run `adrive resume <session-id>`, which decrypts locally.
+
+## FAQ
+
+### Do I need the `adrive` CLI if I have the plugin?
+
+No. Without it, each hook runs `npx -y @adrive/cli@1.4.0`, which works but starts slower. `npm install -g @adrive/cli` makes hooks faster and gives you `adrive resume` in a terminal.
+
+### Will the plugin slow Claude Code down?
+
+Three of the four hooks are async. The session-start hook waits up to 1.5 seconds for the recent-sessions list and is capped at 10 seconds. Uploads always happen in a detached process.
+
+### Why did `/agentdrive:resume` skip my last Claude Code session?
+
+It prefers another agent's session because that's the usual handoff. Run `/agentdrive:sessions claude-code` and pass the id you want.
+
+### How do I get a longer brief?
+
+The default is 12,000 characters. Ask Claude to call `drive_resume` with `max_chars` up to 50,000, or run `adrive resume <session-id> --max-chars 30000`.
+
+## Install the plugin
+
+Three commands inside Claude Code: `/plugin marketplace add agentdrive-sh/agentdrive-mcp`, `/plugin install agentdrive@agentdrive`, `/agentdrive:login`. After a session in another agent, come back and run `/agentdrive:resume`. [Getting started](/blog/getting-started-with-agentdrive) walks a first handoff, and the [quick start](/docs/quick-start) covers the CLI route and local mode.

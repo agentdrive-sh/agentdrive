@@ -1,0 +1,146 @@
+---
+title: How Private Workspace encrypts your sessions
+description: How AgentDrive's Private Workspace encrypts synced sessions with AES-256-GCM on your machine, what the server still sees, and how to back up your keys.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Private Workspace encrypts your synced sessions on your machine before they upload. The CLI redacts each transcript and synced file, then seals it with AES-256-GCM under a random 256-bit data key that never leaves your computer. The server stores ciphertext and hashed paths. You give up server-side search, and backing up the key is your job.
+
+"Encrypted" gets used loosely, so here are the specifics. The implementation is two Apache-2.0 files in the CLI, [`crypto.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/crypto.ts) and [`keychain.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/keychain.ts), plus the sync code that calls them.
+
+## How do I turn it on?
+
+```bash
+adrive privacy --private-workspace on
+adrive privacy --show
+```
+
+The sync keeps a record of what it has already uploaded, scoped to your account, workspace and privacy mode. Changing Private Workspace changes that scope, so the next sync starts over like a first sweep and re-uploads sessions from the last 14 days, encrypted this time.
+
+It doesn't touch what's already there. Plaintext copies uploaded before you turned it on stay where they are, under their old paths. If they shouldn't exist, delete them.
+
+## What algorithm does it use?
+
+AES-256-GCM, from Node's built-in `crypto` module. For every upload the CLI:
+
+1. Runs the redactor over the text first, so encryption seals the redacted version.
+2. Picks a fresh random 12-byte IV.
+3. Encrypts with the data key and keeps the 16-byte GCM authentication tag.
+4. Packs the ciphertext, IV and tag as base64 in a small JSON object, base64-encodes that and adds the prefix `agentdrive-encrypted:v0:`.
+
+GCM is authenticated, so a ciphertext that was changed in storage fails to decrypt instead of producing garbage. Decryption checks the IV and tag lengths before it tries.
+
+## Where does the key live?
+
+The data key is 32 random bytes, generated on your machine the first time the CLI needs it. It is stored, wrapped, in two files in your AgentDrive config folder, `~/.config/agentdrive/` (or `$XDG_CONFIG_HOME/agentdrive/` if you set that):
+
+- **`keychain.bin`** holds the data key, encrypted with AES-256-GCM under a key-encryption key.
+- **`keychain.bin.protector`** holds 32 random bytes, also generated locally.
+
+The key-encryption key comes from scrypt (N = 2^14) over three inputs: your machine's hostname, your OS username and the protector, with a fresh random 16-byte salt. Both files are written with mode 0600 inside a 0700 folder.
+
+What that is and isn't:
+
+- **It's a software keychain, not the macOS Keychain or a hardware key store.** Someone with your user's files and your machine identity can recover the key. It protects against the server and against a copied workspace, not against your own account being compromised.
+- **The hostname and username are part of the key.** The CLI on a machine with a different hostname or username can't open the keychain, and if you rename your machine or your user account, it can't open it until the old names are back. That's a portability limit, not a protection: a hostname and a username aren't secrets.
+- **Your login isn't part of the current key.** Logging out never deletes the keychain, and logging in as a different account keeps the same data key.
+- **There's a second copy for older clients.** For compatibility with older CLI versions, `keychain.bin` also keeps the data key wrapped under a key derived from your hostname, your username and the API key that was current when the keychain was created. That copy doesn't need the protector. The API key normally sits in `config.json` in the same folder, and revoking it on the server doesn't change anything here, because the wrap uses the key string itself. Ciphertext written by much older versions, whose key came straight from the API key, stays readable because those derived keys are kept in the keyring too.
+
+## What does the server store?
+
+| Encrypted on your machine | Readable by the server |
+|---|---|
+| The transcript body, including its title, working directory, turns and files list | The storage path: `sessions/p-<hash>/<harness>/<session-id>.md` |
+| The content of each synced file | Synced file names, hashed: `sessions/p-<hash>/files/<hash>` |
+| | The run record: task "Private session", status, workspace id, the hashed project key, transcript path, the ids of the uploaded files, turn count, number of files uploaded, last activity time and session id |
+| | Which agent made each request and in what role, from the `X-Agent-Platform` and `X-Agent-Role` headers |
+| | Each upload's version message, which lists the redacted kinds and counts, for example `github-token×1` |
+| | The size of each ciphertext, which tracks the size of the content |
+
+The project key is `p-` plus the first 16 hex characters of a SHA-256 of the normal project key, and synced file names use the first 16 hex characters of a SHA-256 of their relative path. Those hashes aren't keyed. They keep repo and file names out of storage paths at a glance, but anyone who can guess a name, such as a public repo's remote, can compute its hash and check.
+
+## What isn't encrypted?
+
+Private Workspace is a CLI preference, so it covers what the CLI uploads:
+
+- **Hook sync:** transcripts and synced files, as above.
+- **`adrive watch`:** file contents, unless you pass `--no-encrypt`. Watch keeps each file's real relative path, so paths aren't hashed there. In CLI 1.4.0 it uploads nothing, because of a bug fixed in the next release.
+- **`adrive push`:** the file's content, unless you pass `--plaintext`. The remote path is whatever you name, in plain text.
+
+It doesn't cover:
+
+- **Direct MCP writes.** When an agent calls `drive_write`, the MCP server uploads the content as given. The CLI preference doesn't reach it.
+- **Uploads made before you turned it on.**
+- **The metadata in the right-hand column above.**
+
+## What do I give up?
+
+Anything that needs the server to read content:
+
+- **Semantic search.** The server builds search embeddings from what it stores, and for a private file that's ciphertext, so `drive_search` can't find it by meaning. Asking the server to rebuild the index for an encrypted file returns `encrypted_content`.
+- **Resume through MCP.** `drive_resume` can't decrypt, so for an encrypted session it tells the agent to run `adrive resume <id>` in a shell. That command decrypts locally and prints the brief. The brief leaves out the uploaded file ids, because `drive_read` can't decrypt those either. `adrive pull` decrypts a single file locally.
+- **Other machines and other people.** Only a CLI that can unwrap your keychain can read your content. A teammate can't, and neither can another computer of yours unless its CLI can unwrap your keychain, as described above.
+
+That's the trade: the server can't help you with content it can't read. If you need search more than you need the server kept out, leave Private Workspace off. It's a setting on your machine's CLI, not on the workspace.
+
+## How do I back up `keychain.bin` and `keychain.bin.protector`?
+
+The CLI needs both files, from the same backup, to open your keychain. The bytes are less strict than the CLI, though. Because of the compatibility copy above, anyone who has `keychain.bin` and the original API key can recover your data key without the protector. The current CLI refuses to do that, but nothing in the file format prevents it, and the API key usually lives right next to `keychain.bin` in `config.json`.
+
+So treat `config.json`, `keychain.bin` and `keychain.bin.protector` as one secret set:
+
+- Back all three up together.
+- Keep the backup encrypted, somewhere you trust as much as the machine itself.
+- Never leave a copy of `keychain.bin` next to `config.json` anywhere less protected, such as a synced folder or an unencrypted disk.
+
+```bash
+cd ~/.config/agentdrive
+tar -czf ~/agentdrive-keys.tgz config.json keychain.bin keychain.bin.protector
+```
+
+Move that archive into encrypted storage and delete the copy in your home folder.
+
+To restore, put the files back in the config folder on a machine with the same hostname and OS username, with mode 0600.
+
+A few things the CLI does to keep you from losing the key by accident:
+
+- If `keychain.bin` is damaged or unreadable, the CLI stops and tells you to restore a backup. It won't overwrite it or create a new key.
+- If the protector is missing, it tells you to restore it with `keychain.bin` from the same backup.
+- If `keychain.bin` is missing but the protector is still there, the CLI does not stop. The next time it needs a key, it quietly generates a new data key, and anything encrypted under the old one stays unreadable unless you restore the old `keychain.bin`. Restore it before the next sync runs.
+- Logout and re-login never delete either file.
+
+Don't delete these files to "fix" an error. AgentDrive has no copy of your data key, so if `keychain.bin` is gone and you have no backup, nobody can decrypt what you uploaded under it, including me.
+
+## FAQ
+
+### Can AgentDrive read my Private Workspace sessions?
+
+Not their content. The server has ciphertext and no key. It can read the run metadata, storage paths and version messages listed above.
+
+### What happens if I lose my keychain files?
+
+Everything encrypted under that data key stays unreadable. There is no recovery through the hosted service. Back up `config.json`, `keychain.bin` and `keychain.bin.protector` together.
+
+### Does it encrypt what my agent writes through MCP tools?
+
+No. `drive_write` and the other MCP tools upload content as the agent sends it. Private Workspace covers hook sync, `adrive push` and `adrive watch`, though watch uploads nothing in CLI 1.4.0 because of a bug fixed in the next release.
+
+### Can I resume an encrypted session on another computer?
+
+Only if the CLI there can unwrap your keychain, which needs both files and the same hostname and username as the machine that created them.
+
+### Does turning it on encrypt my old uploads?
+
+No. It applies to new uploads. The next sync re-uploads the last 14 days of sessions encrypted, and the earlier plaintext copies stay until you delete them.
+
+## Next step
+
+If you already sync sessions, turn it on before your next sensitive one, then back up the three files:
+
+```bash
+adrive privacy --private-workspace on
+```
+
+The [security page](/security) lists the same guarantees in reference form, and the [quick start](/docs/quick-start) covers setup from scratch, including local mode, where nothing is uploaded at all.

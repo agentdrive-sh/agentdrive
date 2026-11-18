@@ -1,0 +1,120 @@
+---
+title: Best practices for coding with more than one agent
+description: 'Practical habits for moving a task between coding agents: a clear first message, commit before switching, check files after resuming, and when to stay put.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Coding with more than one agent goes well when the handoff carries the task and the repo carries the truth. Write a clear first message, commit before you switch, keep each project in one folder or behind one remote, check files on disk after resuming, keep secrets out of chat and put durable rules in AGENTS.md.
+
+I keep coming back to these habits when I move a task from one agent to another. Most of them help without AgentDrive too. Where one matters because of how a handoff brief is built, the reason comes from the code.
+
+## Why does the first message matter so much?
+
+Because it becomes the goal. When another agent resumes your session, the brief's `## Goal` section is the first user message of that session, cut to 1,500 characters. It's placed before the recent turns, so it survives even when older turns are dropped to fit the budget.
+
+A first message like "fix the thing" gives the next agent nothing. One like this gives it the task:
+
+> Add an optional due_date to todos. Store it as an ISO date, validate it in the create and update handlers, and add a due_before filter to the list endpoint. Keep the existing tests passing.
+
+That's four sentences. It names the change, the constraints and the definition of done. Write it as if a stranger will read it, because the next agent is one.
+
+If the task drifted halfway through, the brief still shows the original message. Say the current goal in your resume prompt.
+
+## What should I do before I switch on purpose?
+
+Two things.
+
+**Ask the agent for the next step.** Something like "summarize where we are and what you'd do next." That answer becomes the newest turn, and the newest turns are what the brief keeps first. You can't do this when a usage limit cuts you off, which is exactly why the brief exists, but when you choose to stop, it's the best sentence the next agent will read.
+
+**Commit.** The brief lists the files a session touched. It doesn't include their contents, and it can't tell the next agent which of your hand edits came after the last turn. A commit gives the next agent a clean `git diff` to look at, and a point to return to if its first move is wrong. If you're switching machines, push too: sync uploads files your agents wrote that git doesn't track, but tracked files come from your remote.
+
+A work-in-progress commit is fine. You can squash it later.
+
+## Why keep a project in one folder or behind one remote?
+
+Because that's how agents find each other's sessions. AgentDrive files every session under a project key, and the key comes from where you work, not from the agent:
+
+- In a repo with an `origin` remote, the key is that remote's URL, normalized. Other remotes aren't used. Two clones of `github.com/acme/api` share it, on any machine.
+- In a repo without an `origin` remote, it's the folder name plus a short hash of its path. A copy of that folder somewhere else is a different project.
+- Outside a repo, it's the folder itself. Open the next agent in the same folder.
+
+Claude Code worktrees file under their parent repo, so a worktree session is findable from the main checkout. If you resume and nothing shows up, the first thing to check is whether both agents were opened in the same project. `adrive resume --list` shows what's filed under the current one.
+
+## What should the next agent do first?
+
+Read the files. The brief is history, and the disk is the present. Between the last turn and the resume, you may have edited something by hand, switched branches or stashed work. The session may also have stopped in the middle of an edit, which is common when an agent hits a limit.
+
+The brief's first line tells the agent to verify file state on disk, and the resume commands say the same. I add it to my resume prompt anyway:
+
+> Resume my last AgentDrive session from Claude Code. Check the files on disk and run the tests before continuing.
+
+Running the tests is the cheapest way for the new agent to learn what state the code is actually in.
+
+## How do I keep secrets out of a handoff?
+
+Don't paste them into chat. Background sync skips secret-looking files, through a built-in deny list (`.env`, `.dev.vars`, `.ssh/`, `*.pem` and more) and your `.adriveignore`. That's a path rule. It does nothing for text in the conversation.
+
+Transcripts do go through a redactor that replaces known secret shapes, such as API tokens, private keys and `NAME_KEY=value` assignments, with markers. It's best-effort. A secret that doesn't match a pattern goes through as written.
+
+So keep secrets in env files your agents read, not in messages you type. Turning transcript sync off doesn't keep a session off the server: in CLI 1.4.0 the session's run record, with its title, working directory and touched paths, is still uploaded, and sessions from a period with sync fully off are uploaded once it's back on. When a session's content is sensitive, turn on Private Workspace with `adrive privacy --private-workspace on`, so the synced transcript is encrypted on your machine before upload. [Secrets in agent transcripts](/blog/secrets-in-agent-transcripts) goes further.
+
+## Where do rules that apply to every session go?
+
+In AGENTS.md, not in the session. Codex and OpenCode read AGENTS.md. Claude Code reads CLAUDE.md, which can pull in AGENTS.md with an `@AGENTS.md` line, so one file can serve them both.
+
+Put the things that don't change from task to task there: how to run the tests, the package manager, which directories not to touch, the code style. A brief is about one session and goes stale as soon as the next one starts. Repeating your conventions in every first message wastes the goal's 1,500 characters on rules the agent should already have.
+
+AgentDrive itself uses this split. With auto-context on, `adrive init` adds a short block to Codex's and OpenCode's global AGENTS.md, to `~/.gemini/GEMINI.md` and to a Cursor rule. It tells the agent to call `drive_resume` when you want to continue earlier work. [AGENTS.md, CLAUDE.md and session history](/blog/agents-md-claude-md-session-history) compares the three.
+
+## When should I not switch agents?
+
+Switching has a cost. The new agent rebuilds context from a brief, and it can't see tool output or the old model's reasoning. Stay where you are when:
+
+- **The limit resets soon.** If the wait is short and the task is subtle, waiting can cost less than a cold start.
+- **You're nearly done.** The end of a task is often the part that depends most on what was just tried.
+- **You're deep in debugging.** The brief keeps each tool call as one line, not its output. A session that's been reading stack traces loses those traces in the handoff.
+- **Two agents would edit the same files at once.** AgentDrive doesn't merge simultaneous edits. Hand the task over, or split it so each agent owns different files. [Two agents, one task](/blog/two-agents-one-task) covers how to split one.
+- **The reason is novelty.** Switching because another agent is better at the next part is a good reason. Switching to see what happens usually isn't.
+
+[The cost of switching coding agents](/blog/cost-of-switching-coding-agents) looks at this trade-off in more detail.
+
+## How do I pick the right session when there are several?
+
+By default, resume picks the latest session in this project from a different agent. When that's not the one you want, list them first:
+
+- In any agent, the sessions command (`/agentdrive:sessions` in Claude Code, `/agentdrive-sessions` in OpenCode and Cursor) or a plain "list my AgentDrive sessions".
+- In a shell, `adrive resume --list`.
+
+Then resume by id. For a long session, ask for a bigger brief: `drive_resume` takes `max_chars` up to 50,000, and `adrive resume` takes `--max-chars`. The default is 12,000.
+
+## FAQ
+
+### Does the receiving agent need the same model?
+
+No. The brief is text. That's why it works between agents built on different models, and also why nothing from inside the old model carries over.
+
+### Should I commit even for a quick switch?
+
+On the same machine the files are already on disk, so it's optional. I still do it, because a clean diff tells the new agent exactly what changed.
+
+### What if I forgot to write a clear first message?
+
+State the goal in your resume prompt, and say that it replaces the goal in the brief. The new agent sees both, so tell it which one to follow.
+
+### Can I resume my own agent's session?
+
+Yes. Pass its session id, or pass `platform` to `drive_resume` so it only considers that agent's sessions. The default prefers a different agent because that's the common case.
+
+## Practice one handoff
+
+Pick a small task, start it in one agent with a clear first message, commit, then resume it in another. Local mode is enough:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+[Getting started](/blog/getting-started-with-agentdrive) walks through the first resume step by step, and the [quick start](/docs/quick-start) covers signed-in setup.

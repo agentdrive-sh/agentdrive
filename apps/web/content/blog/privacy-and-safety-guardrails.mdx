@@ -1,0 +1,154 @@
+---
+title: Privacy and safety guardrails in AgentDrive
+description: 'Every AgentDrive privacy control, from local mode and the deny list to redaction, encryption, roles, share links and rate limits, and what each one misses.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive's guardrails are layered. Local mode uploads nothing. When you sync, `adrive privacy` decides what goes up, a deny list and `.adriveignore` keep secret files out, a redactor scrubs secret-shaped text, and Private Workspace encrypts the transcripts and files the CLI syncs on your machine. On the server, roles, signed share links and rate limits control access.
+
+None of these is perfect, and where each one stops matters as much as what it does. The behavior below is CLI 1.4.0 and the current hosted Worker.
+
+## What does local mode keep on my machine?
+
+Everything. `adrive init --local` wires your agents without signing in. Resume then reads each agent's own transcripts from disk, applies the same redaction sync uses, and prints a brief. No account exists, nothing is uploaded and no network call is needed.
+
+Beyond the agent configs and its own config file, local mode keeps one small record: which directory each session started in, because Cursor and Antigravity transcripts don't store it. That map stays in your AgentDrive config folder and never leaves the machine.
+
+The trade-off is that sessions don't follow you to another machine, can't be shared, and don't show up in a provenance timeline. [Local mode, no account](/blog/local-mode-no-account) walks through it.
+
+## What can I turn on and off?
+
+Once signed in, `adrive privacy` controls five settings. `adrive privacy --show` prints them, running it bare steps through each one, and each has a flag:
+
+| Flag | Effect |
+|---|---|
+| `--auto-context on\|off` | At session start, the hook lists up to three recent sessions from your other agents. Turning it off also removes the instructions block init added to agent instruction files. |
+| `--capture-artifacts on\|off` | Uploads files your agents wrote that git doesn't track, and allows `adrive watch`. |
+| `--capture-transcripts on\|off` | Uploads session transcripts. |
+| `--private-workspace on\|off` | Encrypts synced content on your machine before upload. |
+| `--auto-wire on\|off` | Wires agents you install later at their next session. |
+
+Signing in on a fresh install turns both sync settings on without asking, and prints a notice saying so. The first sync then looks back 14 days and uploads the recent sessions of every supported agent on this machine, whether or not you wired it, not just the one you're in. For OpenCode it sees only the current project. If an earlier config already had preferences, init keeps them.
+
+Turning sync off is not a way to keep a session off the server. In CLI 1.4.0, two things to know:
+
+- **With both sync settings off**, nothing new is uploaded, but the sweep doesn't move forward either. When you turn sync back on, the next sync uploads the sessions from the period it was off.
+- **With only transcript sync off**, the transcript isn't uploaded, but each session's run record still is: its title (often the first message, redacted), its working directory and the paths it touched.
+
+A fix for both is in progress. Until it ships, keep secrets out of the conversation, and use Private Workspace when a session's content needs to be encrypted before it leaves your machine.
+
+## Which files never get uploaded?
+
+Artifact sync only considers files the agent touched in that session. A file is skipped unless every check passes:
+
+1. It's inside your home directory or the session's project.
+2. It doesn't match the built-in deny list. That covers `.env` and `.env.*`, `.dev.vars`, `.ssh/`, `.aws/`, `.kube/`, `.npmrc`, `.netrc`, `*.pem`, `*.key`, `credentials.json`, `auth.json`, shell history, SQLite databases, `node_modules/`, `dist/` and more.
+3. It doesn't match the `.adriveignore` in the session's working directory. The syntax is a gitignore subset: `#` comments, `!` negation, `/` anchoring, `*` and `**`.
+4. It's untracked and not ignored by git, or it sits outside any repository. If `git status` fails for another reason, the file is skipped.
+5. It's 1 MB or smaller and not binary.
+
+In hook sync, the deny list is a separate hard gate. A project's `.adriveignore` comes from the repo, so the code treats it as untrusted, and a `!` rule in it can't bring a denied file back.
+
+`adrive watch [path]` is different, and needs artifact sync on. It's meant for uploading a folder, tracked files included. In CLI 1.4.0 it uploads nothing, because of a bug fixed in the next release; use hook sync or `adrive push` meanwhile. Its filter merges the deny list with that folder's `.adriveignore` and `.gitignore`, and the last matching rule wins, so a `!` rule there can re-include a denied file. Don't point it at a folder that holds secrets.
+
+## How does redaction work?
+
+Transcripts and every synced file go through a pattern-based redactor on your machine. It replaces these with markers like `[redacted:github-token]`:
+
+- AWS access key ids and secret assignments
+- GCP service-account private keys
+- Stripe secret and restricted keys
+- GitHub classic and fine-grained tokens
+- Anthropic, OpenAI, Slack and AgentDrive keys
+- JWTs and PEM private-key blocks
+- `NAME_KEY=value`-style assignments, where the name ends in `KEY`, `SECRET`, `TOKEN`, `PASSWORD` or similar
+
+The version message records which kinds were redacted, never the values.
+
+**Redaction is best-effort and is not a security boundary.** It matches shapes. A password that looks like a word, a token from a vendor not on the list, or a connection string with an embedded credential can pass through. [Secrets in agent transcripts](/blog/secrets-in-agent-transcripts) covers how secrets end up in sessions in the first place.
+
+## What does Private Workspace encrypt?
+
+Turn it on with `adrive privacy --private-workspace on`. From the next sync:
+
+- Transcripts and synced files are encrypted on your machine with AES-256-GCM. The data key is generated locally and stored wrapped in `~/.config/agentdrive/`. The server stores ciphertext.
+- The project key is replaced with `p-` plus a 16-character hash, and synced files get hashed names, so repo and file names don't appear in storage paths.
+- Run metadata leaves out the working directory, the title and the touched paths, and the session shows up as "Private session".
+- `drive_resume` can't decrypt, so it tells the agent to run `adrive resume <id>`, which decrypts locally and prints the brief.
+
+Turning it on, or switching account or workspace, makes the next sync start over and re-upload recent sessions under the new settings. [Private Workspace encryption](/blog/private-workspace-encryption) goes into the key handling.
+
+## Who can read a workspace?
+
+Every request resolves to one principal: an API key, a share link or a signed-in human. Access to a workspace is a role on a strict ladder: `view < comment < edit < owner`. The Worker compares roles with one function, `hasPermission`, rather than comparing strings, and each route states the role it needs. Writing a file needs `edit`.
+
+API keys are stored as SHA-256 hashes. The full key is shown once, when it's minted, and never stored in clear.
+
+## How do share links work?
+
+A share link carries a token: a payload and an HMAC-SHA256 signature, signed with a server secret. The payload names the workspace, optionally a single file, the permission and optional limits. On every use, the Worker:
+
+- verifies the signature and the expiry,
+- checks the stored token record and refuses it if it has been revoked,
+- refuses it once its use count reaches `max_uses`, if one was set,
+- refuses it if the key or member who issued it has since been revoked or removed,
+- and, for an email-gated link, requires a signed-in session for that exact email.
+
+A link can grant `view`, `comment` or `edit`, never `owner`. Rotating the signing secret invalidates every outstanding link at once.
+
+## What are the rate limits?
+
+Each principal gets 100 requests per 10 seconds. Search and context get 20 per 10 seconds per principal. Registration is limited to 5 a minute per IP, and sign-in code requests to 10 a minute per IP. A limited request gets a 429 with a `Retry-After` header.
+
+## What does the server store?
+
+| Kind | Where | Standard workspace | Private Workspace |
+|---|---|---|---|
+| Transcripts and synced files | R2, keyed by SHA-256 | Redacted plaintext | Ciphertext |
+| Embeddings for search | Vectorize | Made from content | None usable, the server only has ciphertext |
+| File paths, versions, comments, activity | KV | Readable | Session and file paths hashed |
+| Run records (one per session) | KV | Title, working directory, touched paths, platform, timing | Platform, session id, timing and counts, without title, directory or paths |
+| Account, org, roles, API key hashes, share-token records | KV | Stored | Stored |
+
+Tracked files in your repo never go through sync. They stay in git.
+
+## What don't these guardrails protect against?
+
+Plainly:
+
+- **Secrets that don't look like secrets.** The redactor matches patterns. Anything it doesn't recognize is uploaded as written.
+- **Text you paste into chat.** Path rules exclude files, not conversation text. If you paste a `.env` into a session, it's in the transcript. Keep secrets out of the conversation, and use Private Workspace so synced content is encrypted before upload.
+- **Sessions from while sync was off.** With both sync settings off, the sweep doesn't advance in CLI 1.4.0, so turning sync back on uploads the sessions from that period.
+- **Run metadata with transcript sync off.** The run record for each session, with its title, working directory and touched paths, is still uploaded when only transcript sync is off.
+- **Metadata under Private Workspace.** Your account, the agent platform, session ids, timing and counts stay readable to the service.
+- **Earlier uploads.** Turning on Private Workspace doesn't encrypt or delete what was uploaded before.
+- **Direct tool writes.** Content an agent writes with `drive_write` isn't encrypted by the CLI's Private Workspace setting.
+- **A lost key.** The Private Workspace data key lives in a local software key store, not an OS keychain. If you lose it, the hosted service can't recover your encrypted sessions.
+- **A stolen API key.** It has the full access of its principal until you revoke it. The platform and role headers are labels the client supplies, not an authentication layer.
+- **Bursts against `max_uses`.** Concurrent uses can each pass the check before the count lands, so a limit can be overshot under concurrency.
+- **A rate-limiter outage.** The limiters fail open, so the API stays up if the limiter doesn't.
+- **Your own machine.** Local mode and encryption protect what leaves your laptop. They don't protect the transcripts your agents already keep on disk from anything else running there.
+
+## FAQ
+
+### What gets uploaded when I sign in?
+
+On a fresh install, signing in turns transcript and artifact sync on without a prompt and prints a notice. The first sync uploads the last 14 days of sessions from every supported agent on this machine, whether or not you wired it (for OpenCode, only the current project). If you don't want that, use local mode, which never uploads.
+
+### Can a repo's .adriveignore make AgentDrive upload my .env?
+
+Not in hook sync, which checks the deny list separately. In `adrive watch` the rules are merged, so a `!.env` line can re-include it.
+
+### Does AgentDrive upload my source code?
+
+Hook sync uploads only untracked files your agents touched. Tracked source stays in git. `adrive watch` is the command meant for uploading a folder with tracked files, but in CLI 1.4.0 it uploads nothing, so use `adrive push` meanwhile.
+
+### Where do I report a vulnerability?
+
+Email security@agentdrive.sh with a reproducer. The [security page](/security) has the details.
+
+## Start with nothing uploaded
+
+Local mode is the most private way to try it, because nothing leaves your machine: run `adrive init --local`. When you sign in later, set each control with `adrive privacy` before the first sync. The [sessions docs](/docs/concepts/sessions) list every control in reference form.

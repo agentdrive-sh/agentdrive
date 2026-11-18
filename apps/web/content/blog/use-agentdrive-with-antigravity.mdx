@@ -1,0 +1,102 @@
+---
+title: How to use AgentDrive in Antigravity
+description: What adrive init writes under ~/.gemini/config for the agy CLI, app and IDE, the 30-minute idle rule, and how to resume another agent's session in Antigravity.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Antigravity's CLI, app and IDE share one config folder, `~/.gemini/config`, so one `adrive init` (after `npm install -g @adrive/cli`) wires all three: a sync hook, the MCP server and an `agentdrive-resume` skill. Type `/agentdrive-resume` in chat, or ask for your last AgentDrive session in plain words, to load a handoff brief from another agent.
+
+Antigravity has no command files, only skills, and its transcripts don't say where a session ran or when it ended. Those three gaps decide most of what follows. Each detail is as of CLI 1.4.0 and MCP server 1.3.0. If you'd rather skim, the [Antigravity integration page](/integrations/antigravity) summarizes it.
+
+## One setup, three products: what goes into `~/.gemini/config`?
+
+The `agy` CLI, the Antigravity app and the IDE all read this folder. If it exists, init writes:
+
+| File | Contents |
+|---|---|
+| `hooks.json` | A top-level `agentdrive` entry with two handlers: `adrive hook antigravity --event SessionStart` and `adrive hook antigravity --event Stop`, each with `timeout: 10`. |
+| `mcp_config.json` | An `agentdrive` server under `mcpServers`: `npx -y @adrive/mcp-server` with `AGENTDRIVE_AGENT_PLATFORM=antigravity`. |
+| `skills/agentdrive-resume/SKILL.md`, `skills/agentdrive-sessions/SKILL.md` | The resume and sessions skills. |
+| `skills/agentdrive/SKILL.md` | The general AgentDrive skill. |
+
+The event name rides on the command line because Antigravity's hook payloads don't include one. If you put `"enabled": false` on the `agentdrive` entry, re-running init leaves it that way.
+
+## What else changes under `~/.gemini`?
+
+Init also touches files one level up, because `~/.gemini` exists once Antigravity is installed:
+
+- `~/.gemini/settings.json` gets hooks on `SessionStart`, `AfterAgent`, `SessionEnd` and `PreCompress`, plus the MCP server.
+- `~/.gemini/commands/agentdrive/` gets `resume.toml` and `sessions.toml`.
+- `~/.gemini/GEMINI.md` gets a short block between `agentdrive:auto-context` markers when auto-context is on, which it is by default. Turning auto-context off with `adrive privacy --auto-context off` removes the block.
+
+Sync also reads sessions from `~/.gemini/tmp`. These files are separate from `~/.gemini/config`; I list them so a diff of your home folder after init isn't a surprise.
+
+## How do I resume another agent's session in Antigravity?
+
+Skills double as slash commands. Antigravity's [skills docs](https://antigravity.google/docs/migration/workflows-to-skills) say you invoke one "by typing `/<name>` in chat", and global skills live in `~/.gemini/config/skills/<skill-name>/SKILL.md`, which is exactly where init puts them. So in the same project:
+
+```
+/agentdrive-resume
+```
+
+or, in words:
+
+> Resume my last AgentDrive session from Claude Code. Check the files on disk before continuing.
+
+Either way the skill calls `drive_resume`. Because the MCP server runs as `antigravity`, a call without an id prefers the newest session in this project from some other agent. Antigravity then gets that session's goal, touched files and latest turns.
+
+Listing works the same way. `/agentdrive-sessions`, or "list my AgentDrive sessions from Codex", calls `drive_sessions` with that agent as the filter and shows ids. Resume one by giving its id: "resume AgentDrive session `<session-id>`".
+
+`adrive resume --list` and `adrive resume <session-id>` work from a terminal too, with one catch. AgentDrive tells which agent it's running in from an environment variable each agent sets on its commands, and there's no Antigravity variable it relies on. So in local mode, `adrive resume` run from Antigravity can hand you Antigravity's own latest session. The skill doesn't have this problem, and neither does passing an id.
+
+From each agent into Antigravity: [Claude Code](/resume/claude-code-to-antigravity), [Codex](/resume/codex-to-antigravity), [Cursor](/resume/cursor-to-antigravity), [OpenCode](/resume/opencode-to-antigravity).
+
+## Why does a finished Antigravity session still say in progress?
+
+Antigravity hooks fire on `SessionStart` and `Stop`, and there's no session-end event. The other agents mark a session finished when it ends. Antigravity can't, so AgentDrive goes by the transcript: once a session marked in progress hasn't changed for 30 minutes, the next sweep syncs it a final time and marks it finished.
+
+So a conversation you closed a few minutes ago still shows as in progress in `drive_sessions` and the timeline for up to half an hour. Resuming it works the whole time; only the status lags.
+
+Meanwhile `Stop` re-syncs at most every two minutes, and `SessionStart` triggers a sweep across all agents. With auto-context on, it also injects up to three recent sessions from your other agents into the conversation as a system message.
+
+## Which project does an Antigravity session belong to?
+
+Sync reads each conversation from `~/.gemini/<app>/brain/<conversationId>/.system_generated/logs/transcript.jsonl`, where `<app>` is `antigravity-cli`, `antigravity` or `antigravity-ide`. Those steps carry no working directory. Antigravity also runs hooks from `~/.gemini/config`, so the hook's own directory tells you nothing.
+
+What the hook does get is `workspacePaths`. It stores the first path against the `conversationId` in `~/.config/agentdrive/session-cwd.json`, on this machine only, signed in or not. Sync and local resume rely on that. A conversation from before you installed the hooks has no path recorded, so it syncs under an unknown project, and local resume can't match it. With several workspace folders open, the first one wins.
+
+## Can I turn sync off for Antigravity alone?
+
+Not completely. Setting `"enabled": false` on the `agentdrive` entry in `~/.gemini/config/hooks.json` stops Antigravity's own hooks and nothing else. Every sweep reads all agents' transcripts, Antigravity's included, so a session start in Claude Code, Codex or Cursor, or a manual `adrive sync`, still picks up Antigravity conversations from the folders above.
+
+The global switch isn't a privacy guarantee either. In CLI 1.4.0, `adrive privacy --capture-transcripts off` stops transcript uploads, but with artifact sync on, each session's run record still goes up with its redacted title, its folder and its touched paths. With both toggles off, the next sync after you switch them back on uploads what happened in between. Keep secrets out of the conversation, and use `adrive privacy --private-workspace on` to have synced content encrypted on your machine before it leaves.
+
+## Antigravity hit its limit. How do I move the conversation?
+
+[What to do when Antigravity hits its usage limit](/blog/antigravity-usage-limit) covers when to wait and when to move. If you move, there's no end event to flush the last turn, so run `adrive sync --force` in the project first; it drops the two-minute wait. If the conversation started before setup, find it with `adrive resume --list` in the next agent and resume it by id.
+
+Then: [Antigravity to Claude Code](/resume/antigravity-to-claude-code), [to Codex](/resume/antigravity-to-codex), [to Cursor](/resume/antigravity-to-cursor) or [to OpenCode](/resume/antigravity-to-opencode).
+
+## FAQ
+
+### Does one setup really cover the CLI, the app and the IDE?
+
+Yes. They share `~/.gemini/config`, and sync reads all three transcript folders.
+
+### Is there an `/agentdrive-resume` command file?
+
+No. Antigravity has no custom command files, only skills, and a skill named `agentdrive-resume` runs as `/agentdrive-resume`.
+
+### Why did files outside `~/.gemini/config` change?
+
+Init wires `~/.gemini/settings.json`, `~/.gemini/commands/agentdrive/` and, with auto-context on, `~/.gemini/GEMINI.md` whenever `~/.gemini` exists. If `settings.json` already existed, the first change keeps your original as `settings.json.bak`.
+
+### Where do I look when a conversation doesn't sync?
+
+`~/.config/agentdrive/sync.log`. Also check it started after setup, so it has a project.
+
+## Start a conversation after setup
+
+Run `adrive init` once for the CLI, app and IDE together. A conversation needs to start after that so the hook records its folder, then `/agentdrive-resume` in chat picks up where another agent left off. `--local` skips the account and uploads nothing; [local mode](/blog/local-mode-no-account) explains the limits.

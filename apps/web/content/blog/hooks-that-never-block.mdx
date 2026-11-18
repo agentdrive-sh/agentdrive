@@ -1,0 +1,242 @@
+---
+title: Hooks that never block the agent
+description: How AgentDrive's sync hooks fit inside the 3 seconds Codex allows a SessionEnd hook, with a detached sync, a lock file, a two-minute debounce and failures that retry quietly.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive syncs sessions from lifecycle hooks that run inline with your coding agent. A hook that hangs, prints the wrong thing or exits non-zero breaks the session it's watching. So the hook does almost nothing: it records one fact, starts a detached sync and exits 0. Everything slow happens in that sync, where a failure only costs time.
+
+The high-level tour is in [How background session sync works](/blog/how-background-session-sync-works). The details below come from [`packages/cli/src/commands/hook.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/commands/hook.ts) and [`packages/cli/src/lib/sync.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/sync.ts). Both are Apache-2.0.
+
+## What does a hook have to survive?
+
+Every agent runs hooks differently, and the strictest one sets the budget. Codex lets a `SessionEnd` hook run for at most three seconds, and AgentDrive registers one hook group for all four Codex events, so every Codex hook gets that budget. The wiring code in [`packages/cli/src/lib/harness-wiring.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/cli/src/lib/harness-wiring.ts) registers exactly that. Its comment overstates the Codex limit:
+
+```ts
+export function codexHookGroups(): Record<string, Json> {
+  // Codex clamps hook timeouts above 3s and reports it as an error item on every run.
+  const group = { hooks: [{ type: 'command', command: hookCommand('codex'), timeout: 3 }] };
+  return { SessionStart: group, Stop: group, SessionEnd: group, PreCompact: group };
+}
+```
+
+OpenAI's [hooks docs](https://learn.chatgpt.com/docs/hooks) say most Codex hooks default to 600 seconds, and only `SessionEnd` and `Interrupt` cap at 3. Init uses 3 seconds for all four events because they share one group.
+
+Cursor and Antigravity entries get a 10-second timeout. The Claude Code plugin's [`hooks.json`](https://github.com/agentdrive-sh/agentdrive/blob/main/plugins/agentdrive/hooks/hooks.json) uses 10 seconds too, and marks `Stop`, `SessionEnd` and `PreCompact` as `"async": true` so Claude Code doesn't wait on them at all. `SessionStart` stays synchronous, because it's the one event where the hook has something to say back.
+
+That's the second constraint: stdout belongs to the agent. Claude Code and Codex read a JSON object from a start hook to inject context. Cursor and Antigravity parse stdout as JSON on every event, so the hook must print `{}` when it has nothing to say. One stray log line breaks the protocol. The header comment of `hook.ts` sums up the rules, with the same overstated Codex note:
+
+```ts
+// Entry point for every harness lifecycle hook. Hooks run inline with the
+// agent (Codex clamps hook timeouts to 3s), so this answers fast, hands the real
+// work to a detached `adrive sync`, never throws, and always exits 0. stdout
+// is reserved for the harness's JSON protocol.
+```
+
+## What does the hook do in its three seconds?
+
+Four things, each with a cap:
+
+```ts
+const STDIN_TIMEOUT_MS = 1000;
+const CONTEXT_TIMEOUT_MS = 1500;
+const MAX_CONTEXT_SESSIONS = 3;
+const CONTEXT_FETCH = 20;
+```
+
+1. **Read the payload.** The agent writes a JSON payload to the hook's stdin. `readStdin` resolves on end-of-input or after one second, whichever comes first, and a payload that doesn't parse becomes `{}`.
+2. **Record the working directory.** Cursor and Antigravity transcripts never say where a session ran, but their hook payloads do. The hook writes `<harness>:<session id> -> cwd` to `session-cwd.json` before anything else, with or without an account.
+3. **On session start only, fetch context.** If you're signed in with auto-context on, it asks the API for up to 20 recent runs in this project and returns at most three, with a 1.5-second timeout. A failed fetch becomes an empty list (`.catch(() => [])`), which means no context, not an error.
+4. **Spawn the sync and exit.**
+
+Every other event classifies and returns without touching the network:
+
+```ts
+export function classifyEvent(name: string): HookEvent {
+  if (START_EVENTS.has(name)) return 'start';
+  if (FORCE_EVENTS.has(name)) return 'force';
+  if (TURN_EVENTS.has(name)) return 'turn';
+  if (name === 'afterFileEdit') return 'file-edit';
+  return 'other';
+}
+```
+
+The exit is explicit, and the reason took a while to find:
+
+```ts
+// Exit explicitly: an aborted context fetch keeps its socket connecting for
+// ~10s, and harnesses wait for the hook process to exit.
+process.stdout.write(out ? `${out}\n` : '', () => process.exit(0));
+```
+
+Aborting a `fetch` with a timeout doesn't close the socket that's still connecting. Node keeps the process alive until it gives up. The hook had already printed its answer, but the agent was still waiting for the process to end. `process.exit(0)` in the write callback fixes that, and the callback makes sure stdout is flushed first.
+
+## How does the sync get out of the way?
+
+The real work runs in a separate process that the hook doesn't wait for:
+
+```ts
+function spawnDetachedSync(args: string[]): void {
+  const child = spawn(process.execPath, [process.argv[1]!, 'sync', ...args], { detached: true, stdio: 'ignore' });
+  child.on('error', () => undefined);
+  child.unref();
+}
+```
+
+`process.execPath` and `process.argv[1]` re-run the same Node and the same CLI script that's already running, so there's no second `PATH` lookup and no `npx`. `detached: true` puts the child in its own process group, so it isn't tied to the hook's. `stdio: 'ignore'` means the child can't write to the agent's stdout. `unref()` lets the hook exit without waiting. The `error` listener exists because an unhandled `error` event on a child process throws.
+
+The hook passes what it learned as flags: `--harness`, `--session`, `--transcript` when the payload has a transcript path, `--cwd`, and `--force` or `--start` depending on the event.
+
+OpenCode is different. Its hooks are plugins in its own Bun runtime, so `adrive init` writes a small TypeScript plugin to `~/.config/opencode/plugins/`. It uses the same trick from the other side:
+
+```ts
+function send(payload: Record<string, unknown>): void {
+  try {
+    const child = spawn(${JSON.stringify(hookCommand('opencode'))}, { shell: true, stdio: ['pipe', 'ignore', 'ignore'], detached: true });
+    child.on('error', () => {});
+    child.stdin?.on('error', () => {});
+    child.stdin?.end(JSON.stringify(payload));
+    child.unref();
+  } catch {}
+}
+```
+
+(That `${...}` is filled in when `init` generates the file.) The plugin writes the payload to the child's stdin and never awaits it, so a missing or slow `adrive` can't stall OpenCode.
+
+## Why a lock file, and what if it goes stale?
+
+Hooks fire in bursts. A `Stop` is often followed within a second by a `SessionEnd`. You may have two agents open in the same repo. Without coordination you'd get two syncs reading and rewriting the same manifest at once.
+
+The lock is a file, `sync.lock` in the AgentDrive config directory (`~/.config/agentdrive` unless `XDG_CONFIG_HOME` is set), created with `O_EXCL`:
+
+```ts
+async function acquireLock(path: string, waitMs: number): Promise<boolean> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      const handle = await fs.open(path, 'wx', 0o600);
+      await handle.writeFile(String(process.pid));
+      await handle.close();
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      const st = await fs.stat(path).catch(() => null);
+      if (!st) continue;
+      if (Date.now() - st.mtimeMs >= LOCK_STALE_MS) {
+        await fs.rm(path, { force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) return false;
+      await new Promise((r) => setTimeout(r, LOCK_POLL_MS));
+    }
+  }
+}
+```
+
+A sync waits up to 30 seconds for the lock, polling every 300 ms. The constant's comment gives the reason: "Hook events fire in bursts; a detached sync waits its turn instead of dropping." A lock older than 10 minutes is treated as abandoned and removed. The lock is released in a `finally` block after the manifest is written, and the manifest itself is written to a temp file and renamed, so a crash can't leave it half written.
+
+This lock has a real gap, in three parts:
+
+- **Nothing stops a sync from running past 10 minutes.** The lock's mtime is set once, when it's created, and never refreshed. A sweep is capped at 50 sessions (`SWEEP_CAP`), but that's a count, not a time limit, and the uploads themselves have no request timeout. On a slow connection a sync can outlive its lock, and the next one deletes it and starts.
+- **Release doesn't check ownership.** The `finally` block runs `fs.rm(lockPath, { force: true })` unconditionally. When the first sync finishes, it deletes the second sync's lock, so a third can start while the second is still running.
+- **Concurrent uploads of the same session aren't just duplicate work.** Two syncs writing the same transcript path at once hit the version-number race described in the [storage post](/blog/content-addressed-storage-r2-kv): both read version n, both write version n+1, and one version record is lost. Both writes also add their size to the storage meter, so it counts that version twice. The content itself is safe, because it's content-addressed, and the run record is an upsert.
+
+The fix is known: refresh the lock's mtime while a sync runs, and only remove a lock that holds our own pid.
+
+## How does debouncing work?
+
+A turn-end event (`Stop` in Claude Code, Codex and Antigravity, `stop` in Cursor) fires after every agent reply. Uploading the full transcript each time would be wasteful, so a session re-syncs at most once every two minutes:
+
+```ts
+const DEBOUNCE_MS = 120_000;
+```
+
+```ts
+if (!opts.force && now - (manifest.sessions[sessionRunId(c.harness, c.entry.sessionId)]?.synced_at ?? 0) < DEBOUNCE_MS) {
+  return 'debounced';
+}
+```
+
+Session-end and compaction events (`SessionEnd`, `sessionEnd`, `PreCompact`, `preCompact`) pass `--force` and skip the debounce, so the final state lands for Claude Code, Codex and Cursor. A forced sync also marks the session `success` instead of `in_progress`. Antigravity is the exception: it's wired only for `SessionStart` and `Stop`, so it never sends a forced event. Its last turn lands on the next sweep, and the session is marked finished after 30 minutes idle.
+
+OpenCode needed special handling. It has no session-end event, only `session.idle`, which fires each time the agent stops working. That event is in the force set too, and the comment explains why:
+
+```ts
+// OpenCode has no end event and its idle often lands within the debounce of
+// session.created, so a debounced idle would leave a one-shot session empty.
+```
+
+The OpenCode plugin also ignores `session.created` for sessions with a `parentID`, so child sessions don't each trigger a sync of their own.
+
+There's a second, coarser debounce on the sweep. Each sync also scans every agent for sessions that changed since the last sweep, but a hook-triggered sync only does that once the last sweep is more than two minutes old, or when the event is a start or a forced one. A busy session doesn't trigger a full scan on every turn.
+
+A `shortcut:` comment records what the debounce loses:
+
+```ts
+// shortcut: no trailing-edge debounce; a debounced last turn with no end event after it (a killed agent) syncs on the next sweep from any harness. Add a delayed re-sync if that lag matters.
+```
+
+If you kill an agent within two minutes of its last sync, that last turn waits for the next sweep, which happens the next time any agent fires a hook. The sweep also finalises abandoned sessions: an `in_progress` session whose transcript hasn't changed in 30 minutes is synced once more and marked `success`.
+
+## How do failures stay silent but recoverable?
+
+Silent is easy. `runHook` wraps everything in a `try` whose `catch` is empty, with one comment: "A hook failure must never surface in, or block, the agent session." The spawned sync has nowhere to print, so it logs to `sync.log` next to the lock. The logger has its own guard:
+
+```ts
+function makeLogger(quiet: boolean, dir: string): (msg: string) => Promise<void> {
+  if (!quiet) return async (msg) => void process.stdout.write(`${msg}\n`);
+  const path = join(dir, 'sync.log');
+  return async (msg) => {
+    try {
+      const st = await fs.stat(path).catch(() => null);
+      const line = `${new Date().toISOString()} ${msg}\n`;
+      if (st && st.size > LOG_CAP_BYTES) await fs.writeFile(path, line, { mode: 0o600 });
+      else await fs.appendFile(path, line, { mode: 0o600 });
+    } catch {
+      // Logging must never break a hook-spawned sync.
+    }
+  };
+}
+```
+
+Once the log passes 1 MB it starts over rather than rotating. It's for debugging the last few runs, not for keeping history.
+
+Recoverable is the harder part. The sweep remembers when it last ran (`last_sweep_at` in the manifest) and next time looks only at sessions modified after that. If a session fails to upload, advancing `last_sweep_at` past it would lose it for good. So failed sessions are deferred, and the sweep time is pulled back to just before the oldest one:
+
+```ts
+if (sweep && !dryRun) manifest.last_sweep_at = deferredMin === undefined ? now : Math.min(now, deferredMin - 1);
+```
+
+The same mechanism covers every reason a session doesn't upload this time:
+
+- **A network or server error** on one session counts as `failed`, gets logged and is deferred. The other sessions carry on.
+- **A plan limit** stops all uploads for the run, since every later one would get the same refusal. The remaining sessions are deferred, and the message is saved as a usage notice. The next session-start hook reads it and passes it to the agent as context, so you find out in the place you're looking.
+- **A rate limit**, after one retry in the API client, also stops the run and defers the rest.
+- **Too much to do.** A sweep handles at most 50 sessions, oldest first. The rest are deferred to the next run. The first sweep looks back 14 days.
+- **One agent's store failing to enumerate** is logged and skipped, and the other agents are still swept.
+
+None of this is visible in your agent. All of it is visible if you run the sync yourself: `adrive sync` without `--quiet` prints per-agent counts plus synced, unchanged, debounced and failed totals, and `adrive sync --dry-run` parses everything and uploads nothing.
+
+## FAQ
+
+### Can a hook slow my agent down?
+
+Briefly. On session start, reading stdin can take up to 1 second and the context fetch up to 1.5 seconds more, and the fetch only runs if you're signed in with auto-context on. Turn-end, session-end and compaction events read stdin, write one small JSON file and spawn a sync. Any other event records the working directory and returns without spawning anything.
+
+### Where do I look when sessions aren't syncing?
+
+`~/.config/agentdrive/sync.log`. Then run `adrive sync` in the project to see the same run in the foreground.
+
+### What happens if I kill the agent mid-session?
+
+The session's last synced state stays. The next sweep, from any agent's hook, picks up turns written since. After 30 minutes without changes it's marked finished.
+
+### Does the hook do anything without an account?
+
+It still records the working directory, because local resume needs it. It doesn't spawn a sync. On session start it tells the agent that AgentDrive is in local mode and that `drive_resume` works without an account.
+
+## Wire it up
+
+One `adrive init` from the [quick start](/docs/quick-start) installs these hooks in every agent you have. Then tail `~/.config/agentdrive/sync.log` while you work to see each sync as it runs. The tests that pin all of this are `packages/cli/test/hook.test.ts` and `sync.test.ts` in [the repo](https://github.com/agentdrive-sh/agentdrive).

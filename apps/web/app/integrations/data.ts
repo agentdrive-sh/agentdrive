@@ -86,12 +86,12 @@ export const INTEGRATION_PAGES: Record<string, IntegrationPage> = {
   },
   codex: {
     title: 'Connect Codex to AgentDrive',
-    description: 'Wire AgentDrive into Codex with one command: session sync hooks, the MCP server and resume prompts, so Codex picks up work other agents started.',
-    answer: `To connect Codex to AgentDrive, run ${INSTALL}. It signs you in, adds session sync hooks to \`~/.codex/hooks.json\`, the MCP server to \`~/.codex/config.toml\` and the \`agentdrive-resume\` prompt, then approves the hooks. Codex sessions sync in the background, and Codex can resume sessions your other agents started.`,
+    description: 'Wire AgentDrive into Codex with one command: session sync hooks, the MCP server and the AgentDrive skill, so Codex picks up work other agents started.',
+    answer: `To connect Codex to AgentDrive, run ${INSTALL}. It signs you in, adds session sync hooks to \`~/.codex/hooks.json\`, the MCP server to \`~/.codex/config.toml\` and the AgentDrive skill, then approves the hooks. Codex sessions sync in the background, and Codex can resume sessions your other agents started.`,
     files: [
       { path: '`~/.codex/hooks.json`', what: 'A hook on `SessionStart`, `Stop`, `SessionEnd` and `PreCompact` running `adrive hook codex`, with a 3-second timeout.' },
       { path: '`~/.codex/config.toml`', what: 'The AgentDrive MCP server. The original file is kept as `config.toml.bak` the first time.' },
-      { path: '`~/.codex/prompts/agentdrive-resume.md`, `agentdrive-sessions.md`', what: 'Custom prompts that call `drive_resume` and `drive_sessions`.' },
+      { path: '`~/.codex/prompts/agentdrive-resume.md`, `agentdrive-sessions.md`', what: 'Custom prompts left over for older Codex versions. Current Codex no longer loads custom prompts, so ask in plain words or mention `$agentdrive`.' },
       { path: '`~/.codex/skills/agentdrive/SKILL.md`', what: 'The AgentDrive skill.' },
       { path: 'Codex hook approval', what: 'Set through `codex app-server`, the way the `/hooks` screen does, for the exact hook commands init wrote.' },
     ],
@@ -106,11 +106,11 @@ export const INTEGRATION_PAGES: Record<string, IntegrationPage> = {
       },
       {
         q: 'How do I resume another agent\'s session in Codex?',
-        a: 'Run the `agentdrive-resume` custom prompt, or ask Codex to resume your last AgentDrive session from a named agent. Both call `drive_resume`. From a shell, `adrive resume` prints the same brief.',
+        a: 'Ask Codex to resume your last AgentDrive session from a named agent, for example "Resume my last AgentDrive session from Claude Code". Codex calls `drive_resume`. To call the AgentDrive skill by name, start the request with `$agentdrive`. From a shell, `adrive resume` prints the same brief.',
       },
       {
         q: 'Why does the Codex hook return so quickly?',
-        a: 'Codex caps hook time at 3 seconds, so the hook only starts a detached `adrive sync` and returns. The upload finishes in the background.',
+        a: 'Codex allows a `SessionEnd` hook at most 3 seconds, and one AgentDrive hook serves all four events, so it only starts a detached `adrive sync` and returns. The upload finishes in the background.',
       },
     ],
   },

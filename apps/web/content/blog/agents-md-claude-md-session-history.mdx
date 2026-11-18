@@ -1,0 +1,117 @@
+---
+title: 'AGENTS.md, CLAUDE.md and session history: what each is for'
+description: AGENTS.md holds repo rules for every agent, CLAUDE.md and auto memory hold Claude Code's own, and session history holds the task. What goes in each layer.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AGENTS.md is for repo rules every coding agent should follow. CLAUDE.md is Claude Code's own instruction file, and with auto memory it forms the per-tool layer. Session history is the record of one task: what was asked, what changed and where it stopped. Rules change rarely, memory belongs to one tool, and history is new every session.
+
+I use Claude Code, Codex, OpenCode, Cursor and Antigravity on the same repos, so I've had to work out which fact goes where. Put a fact in the wrong layer and it either reaches the wrong agents or goes stale in a file every session loads. Here is how I think about the three layers, with the official docs for each.
+
+## What is AGENTS.md for?
+
+[AGENTS.md](https://agents.md/) describes itself as "a simple, open format for guiding coding agents" and as "a README for agents". It's plain markdown with no required fields. The site suggests build and test commands, code style, testing instructions and security notes: the "build steps, tests, and conventions that might clutter a README."
+
+Two properties make it the right home for repo rules:
+
+- **Many agents read it.** The site lists Codex, Cursor, opencode, Zed, GitHub Copilot's coding agent and many others. One file reaches most of the tools on your team.
+- **It nests.** "Agents automatically read the nearest file in the directory tree, so the closest one takes precedence." A monorepo can have a root file and a more specific one in `apps/worker/`.
+
+Codex's [AGENTS.md docs](https://learn.chatgpt.com/docs/agent-configuration/agents-md) add the details for that agent: it builds its instruction chain once per run, reads a global file from `~/.codex` and then one file per directory from the project root down to where you are, and stops adding files at 32 KiB by default (`project_doc_max_bytes`).
+
+## What is CLAUDE.md for?
+
+The same job, for Claude Code specifically, with more layers. [Anthropic's memory docs](https://code.claude.com/docs/en/memory) list where the files live:
+
+- a managed policy file for an organization,
+- `~/.claude/CLAUDE.md` for your preferences in every project,
+- `./CLAUDE.md` or `./.claude/CLAUDE.md` for the team, through version control,
+- `./CLAUDE.local.md` for your own notes on one project, kept out of git.
+
+Claude reads them at the start of every session, and the docs are clear that it treats them "as context, not enforced configuration". To block an action, they point to a hook instead. They recommend under 200 lines per file.
+
+## How do AGENTS.md and CLAUDE.md work together?
+
+This is the part that trips people up. By default, Claude Code reads AGENTS.md only when there is no CLAUDE.md or CLAUDE.local.md in your working directory or above it. Add a CLAUDE.md and, unless you change the setting, Claude stops reading your AGENTS.md.
+
+The fix the docs describe is an import. Keep the shared rules in AGENTS.md, and make CLAUDE.md:
+
+```markdown
+@AGENTS.md
+
+## Claude Code only
+- Use plan mode for changes under apps/worker/src/services/.
+```
+
+Claude reads the imported file first, then the lines below. Codex, Cursor and the rest keep reading AGENTS.md directly. One source of truth, and the Claude-only lines stay out of every other agent's context.
+
+The docs also mention a **Project instructions** setting in `/config` if you'd rather have Claude read both files without an import.
+
+## What is per-tool memory?
+
+The second layer is what one agent keeps for itself, for you. In Claude Code that's `~/.claude/CLAUDE.md` plus auto memory. In Codex, it's the global `~/.codex/AGENTS.md` plus [Memories](https://learn.chatgpt.com/docs/customization/memories), which is off by default: once you turn it on, Codex turns useful context from earlier chats into local memory files under `~/.codex`.
+
+Auto memory is worth understanding, because it looks like it might cover task history. Per the docs, Claude writes the notes itself: your role and preferences, corrections you gave it, project context like "ongoing work, deadlines, and decisions", and pointers to outside resources. They live in `~/.claude/projects/<project>/memory/`, and the first 200 lines or 25KB of `MEMORY.md` load into every session.
+
+Two limits keep it from being a handoff layer:
+
+- **It's per tool.** Codex doesn't read Claude Code's memory directory, and Claude Code doesn't read Codex's memories.
+- **It's per machine.** The docs say auto memory is machine-local and "not shared across machines or cloud environments."
+
+That's fine. It was built to make Claude Code better for you over time, not to move a task between agents.
+
+## What is session history for?
+
+The third layer is the task itself. Every agent records each session as a transcript in its own store and format. Claude Code writes JSONL files under `~/.claude/projects`. Codex writes rollout files under `~/.codex/sessions`. They hold the goal you typed, every answer, every tool call.
+
+This layer has the opposite properties from the other two. It's written by the agent as it works, not by you. It's new every session. It's specific to one task. And without help, it's locked in the agent that wrote it.
+
+AgentDrive is the piece I built for that layer. Hooks in each agent sync the session in the background to `sessions/<project>/<harness>/<session-id>.md` in your workspace, redacted for common secret patterns. Any other agent can call `drive_resume` and get a brief with the goal, the files touched and the most recent turns, cut to 12,000 characters by default. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) shows one in full.
+
+## Where should each kind of fact go?
+
+The rule I use: ask who needs it and for how long.
+
+| Fact | Layer | File |
+|---|---|---|
+| `pnpm test` runs the suite | Repo rules | AGENTS.md |
+| Don't edit generated files in `dist/` | Repo rules | AGENTS.md |
+| Use plan mode for risky Claude Code edits | Repo rules, one tool | CLAUDE.md, below `@AGENTS.md` |
+| My local sandbox URL | Per-tool, personal | CLAUDE.local.md |
+| I prefer small diffs in every project | Per-tool, personal | `~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md` |
+| The migration is on step three, the cursor bug is fixed | Task history | The session, resumed with AgentDrive |
+| The offset approach failed, don't retry it | Task history | Say it in the session before you stop |
+
+The common mistake is the second-to-last row ending up in AGENTS.md. It's true for a day, then every agent in every task loads a stale status report. Anthropic's docs recommend reviewing instruction files periodically to remove outdated or conflicting instructions. Keeping task state out of them means there's less to remove.
+
+## FAQ
+
+### Do I need both AGENTS.md and CLAUDE.md?
+
+Not necessarily. If only AGENTS.md exists, Claude Code reads it. Add CLAUDE.md when you have Claude-specific instructions, and import AGENTS.md from it.
+
+### Does AgentDrive write to my AGENTS.md?
+
+Not to your repo's. With auto-context on, `adrive init` adds a marked instructions block to Codex's and OpenCode's global AGENTS.md, to `~/.gemini/GEMINI.md`, which Antigravity loads as a global rule, and a Cursor rule, telling the agent when to call `drive_resume`. Running it again updates the same block.
+
+### Is session history the same as auto memory?
+
+No. Auto memory is notes Claude Code chooses to keep for later sessions, on one machine. Session history is the full record of each session, from every agent.
+
+### Can I keep session history only on my machine?
+
+Yes. `adrive init --local` reads each agent's transcripts on disk and uploads nothing. You lose cross-machine resume and the provenance timeline. If you sign in later, the first sync uploads your sessions from the last 14 days, from every agent and every project on this machine, including those from local mode: up to 50 per run, with the rest on later syncs.
+
+## Try the third layer
+
+No account needed:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+The [comparison with CLAUDE.md and handoff notes](/compare/claude-md-handoff-notes) sets the layers side by side.

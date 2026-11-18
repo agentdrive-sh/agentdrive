@@ -1,0 +1,112 @@
+---
+title: 'AgentDrive architecture: the pieces and how they fit'
+description: 'The CLI and hooks, the stdio MCP server, one Hono Worker on KV, R2, Vectorize and Workers AI, the hosted MCP with OAuth, and the web app, end to end.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive has five pieces. On your machine, the `adrive` CLI runs from agent hooks and syncs sessions, and a stdio MCP server gives agents their tools. On Cloudflare, one Hono Worker serves the API on KV, R2, Vectorize and Workers AI. A hosted MCP endpoint with OAuth and a Next.js web app sit beside it.
+
+The public architecture overview and the decision records behind it are in [docs/tech on GitHub](https://github.com/agentdrive-sh/agentdrive/tree/main/docs/tech). Where the code and an older decision record disagree, what follows matches the code.
+
+## What runs on my machine?
+
+Two npm packages, both Apache-2.0.
+
+**The CLI, `@adrive/cli`.** This is the `adrive` command. `adrive init` signs you in (or sets up local mode) and wires each installed agent: hooks, MCP config and resume commands. After that, the CLI mostly runs without you:
+
+- Each agent's lifecycle hook calls `adrive hook <harness>`. The hook reads the event payload, records which directory the session belongs to, starts a detached `adrive sync` and exits 0. A hook failure is swallowed.
+- `adrive sync` reads the agent's transcript from its own store, normalizes it into turns, tool calls and touched paths, applies the path rules and the redactor, and uploads the result. One sync runs at a time, coordinated by a lock file in `~/.config/agentdrive/`.
+- Private Workspace encryption happens here too. With it on, the CLI encrypts transcripts and files with AES-256-GCM before upload, using a data key generated and kept on your machine.
+
+The CLI talks to the API over plain HTTPS REST. It does not go through MCP. [How background session sync works](/blog/how-background-session-sync-works) is the detailed version of this section, and [five agent transcript formats](/blog/five-agent-transcript-formats) covers the parsers.
+
+**The stdio MCP server, `@adrive/mcp-server`.** This is what agents call. It exposes 22 tools: 18 stable ones (`drive_write`, `drive_read`, `drive_search`, `drive_context`, `drive_sessions`, `drive_resume` and the rest) and 4 experimental sandbox tools. Each tool wraps a REST call. The server reads the API key that `adrive init` saved and stamps every request with `X-Agent-Platform` and `X-Agent-Role` headers, which is how the server knows that a write came from Codex and not Claude Code.
+
+With no account, `drive_sessions` and `drive_resume` read local transcripts instead, so resume works in local mode. The other tools need an account.
+
+## Why is MCP the main integration surface?
+
+Because every agent I care about already speaks it. [ADR-0003](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0003-mcp-first-integration-surface.md) records the decision: MCP first, with the REST API as the universal fallback, and the CLI and TypeScript SDK (`@adrive/sdk`) built on REST rather than on MCP. The hedge is in that last part. If a host ever drops MCP, the CLI and SDK keep working over HTTPS.
+
+## What runs on Cloudflare?
+
+**One Worker, `apps/worker`, at `app.agentdrive.sh`.** It's built on Hono, validates every request body with Zod, and mounts one route module per domain: files, workspaces, shares, comments, activity, runs, search, context, auth, billing and a few more. [ADR-0002](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0002-hono-on-cloudflare-workers.md) covers why Hono on Workers.
+
+A request goes through the same steps every time:
+
+1. **Auth.** `flexAuth` checks an API key first, then a share token, then a human session, and builds one `AuthContext`.
+2. **Rate limit.** Each principal gets 100 requests per 10 seconds. Search and context get 20 per 10 seconds. Registration and sign-in codes are limited per IP.
+3. **Permission.** The route checks the caller's role on the workspace against what the action needs, on the ladder `view < comment < edit < owner`.
+4. **Storage.** The handler reads or writes through the storage service.
+
+The Worker reads everything through Cloudflare bindings:
+
+| Binding | What it holds |
+|---|---|
+| KV | All metadata: orgs, workspaces, file records, versions, comments, activity, runs, share-token records, API key hashes, sessions |
+| R2 | File content, keyed by its SHA-256 |
+| Vectorize | Embeddings for semantic search, 768 dimensions, cosine |
+| Workers AI | The `@cf/baai/bge-base-en-v1.5` embedding model |
+| Durable Objects | Sign-in codes (one object per email), the optional per-workspace sandbox, and a parked real-time collaboration class |
+| Rate limiting | The four limiters above |
+
+## Why KV and R2, and no database?
+
+[ADR-0001](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0001-kv-and-r2-as-storage-substrate.md) is the long answer. The short one: one vendor, no egress between metadata and storage, no schema migrations and almost nothing to operate. The cost is real. There are no joins, so every query shape needs a secondary index key planned in advance, and KV is eventually consistent for listings. The ADR names when to revisit: a single workspace past 100,000 files, or a paying customer who needs relational queries no index can answer.
+
+Content addressing is the partner decision, in [ADR-0008](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0008-content-addressed-storage.md). A write hashes the content, checks whether `content/<sha256>` already exists, and only uploads when it doesn't. Re-syncing an unchanged session or file costs nothing. Deleting a file removes its metadata, but not the blob. [Content-addressed storage on R2 and KV](/blog/content-addressed-storage-r2-kv) goes further.
+
+## How does a write flow through the system?
+
+Take `drive_write` from Claude Code:
+
+1. The stdio MCP server POSTs to `/v1/workspaces/:wid/files` with the API key and `X-Agent-Platform: claude-code`.
+2. `flexAuth` resolves the key, then the rate limiter and the `edit` permission check run.
+3. The storage service hashes the content, picks the bucket driver (the shared R2 bucket by default, or a team's own R2 or S3-compatible bucket), skips the upload if that hash already exists, and writes the file record, a version record and an activity event to KV.
+4. Embedding runs after the response, through `waitUntil`, so a slow model call never delays the write.
+
+Reads route by the storage locator recorded on the file, writes by the workspace's current bucket config. That way switching buckets never strands old files.
+
+## How do search and context work?
+
+Content is split into up to 16 chunks of 1,500 characters with a 200-character overlap, embedded with Workers AI and stored in Vectorize. `POST /v1/search` runs a nearest-neighbor query filtered to your org, with a keyword fallback. `POST /v1/context`, which backs `drive_context`, ranks artifacts by `0.7 × semantic score + 0.3 × exp(-age_days / 30)`, so recent work wins ties. Encrypted Private Workspace content can't be searched, because the server only has ciphertext.
+
+## What is the hosted MCP, and how does OAuth fit?
+
+Some clients can't run a local process. claude.ai and ChatGPT connect to remote MCP servers over HTTP. For them, the same Worker serves a hosted MCP endpoint at `https://mcp.agentdrive.sh/mcp`. It speaks stateless Streamable HTTP and serves the same 22 tools from the same registry as the stdio server, so the two can't drift.
+
+Access goes through OAuth 2.1, implemented with Cloudflare's `workers-oauth-provider` library and stored in its own KV namespace. When you approve a client on the consent page, the Worker mints an AgentDrive API key and stores it in the grant. Each tool call then reaches the REST API with that key, through the same auth path as any other client. OAuth adds no new trusted route into the API, and revoking that key on the keys page disconnects the client. [One MCP server, local and hosted](/blog/mcp-server-local-and-hosted) covers the two transports side by side.
+
+## Where does the web app fit?
+
+`apps/web` is a Next.js app deployed to Cloudflare with OpenNext, at `agentdrive.sh`. It serves the marketing site, these docs and the dashboard: files, runs, shares, agents, keys, buckets, billing and team pages. Its server code calls the API Worker through a service binding instead of the public internet. Human sign-in (email codes, Google or GitHub) creates a session record in KV, and the web app passes it to the API as a header.
+
+## How is the code licensed?
+
+The split follows the pieces. The server (`apps/worker` and `apps/web`) is AGPL-3.0. Everything you install or import, meaning the CLI, the MCP server, the SDK, the shared package and the installer, is Apache-2.0. [ADR-0009](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0009-agpl-server-license.md) explains why, and [why the server is AGPL and the clients are Apache](/blog/why-agpl-server-apache-clients) puts it in plain terms. Calling the server over its API doesn't make your code AGPL.
+
+You can run the whole server side yourself with `pnpm selfhost`. [Self-host AgentDrive on Cloudflare](/blog/self-host-agentdrive-on-cloudflare) lists what it creates on your account.
+
+## FAQ
+
+### Is there a database anywhere?
+
+No relational one. Metadata is in KV, content in R2 and embeddings in Vectorize. That's a deliberate choice with a written trigger for revisiting it.
+
+### Does the server see my code?
+
+It sees what sync uploads: redacted transcripts and files your agents wrote that git doesn't track. With Private Workspace on, it stores only ciphertext for those. Tracked files never go through sync.
+
+### Can I use AgentDrive without MCP?
+
+Yes. The REST API at `app.agentdrive.sh/v1/*` is the fallback, and the CLI and SDK are built on it. The [REST API docs](/docs/rest-api) list the endpoints.
+
+### Where do I start reading the code?
+
+`docs/tech/architecture.md` for the overview, then `apps/worker/src/index.ts` for the routes and `apps/worker/src/services/storage.ts` for every KV key shape. On the client side, `packages/cli/src/lib/sync.ts` and `packages/mcp-server/src/registry.ts`.
+
+## Run the Worker yourself
+
+The [self-hosting guide](/docs/self-hosting) deploys this Worker to your own Cloudflare account, and the CLI can then point at your deployment instead of the hosted one. The client half needs no server: in local mode, `adrive resume` builds a brief straight from a transcript on disk.

@@ -1,0 +1,176 @@
+---
+title: Getting started with AgentDrive
+description: 'Install the adrive CLI, run adrive init signed in or in local mode, then make your first sync and your first resume between two coding agents.'
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+To get started with AgentDrive, install the `adrive` CLI with the one-line installer or npm, then run `adrive init`. Init either signs you in or sets up local mode, and wires session sync and resume into every coding agent it finds. After that you work as usual, and resume a session from another agent when you switch.
+
+## What do I need before I install?
+
+- **Node.js 22.15 or newer.** The installer checks this before it does anything else, because the CLI uses a zlib feature that landed in that release.
+- **At least one supported agent.** Session sync and resume work in Claude Code, Codex, OpenCode, Cursor and Antigravity. Claude Desktop, Zed, Cline and Continue get the MCP server only, so they can read sessions but their own sessions don't sync.
+- **Two agents, if you want to see a handoff.** One agent is enough to install, but the point is to move a task from one to another.
+
+## How do I install AgentDrive?
+
+The one-line installer is the usual path:
+
+```bash
+curl -fsSL agentdrive.sh/install | sh
+```
+
+It checks your Node version, installs `@adrive/cli` globally with npm (or pnpm or yarn when npm isn't there), confirms `adrive` is on your `PATH` and then runs `adrive init` for you. If there's no terminal to prompt in, for example in CI, it skips init and tells you to run it later.
+
+If you'd rather not pipe a script into a shell, install the package yourself:
+
+```bash
+npm install -g @adrive/cli
+adrive init
+```
+
+If Claude Code is the only agent you use, you can also install the plugin from inside Claude Code:
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+Then run `/agentdrive:login` to sign in and wire your other agents.
+
+## Should I sign in or use local mode?
+
+When you run `adrive init` in a terminal, it asks how you want to use AgentDrive. There are two answers:
+
+| | Sign in | Local mode |
+|---|---|---|
+| Command | `adrive init` | `adrive init --local` |
+| Account | Yes, through the browser | None |
+| Where sessions live | Synced to your workspace | Only in each agent's own transcript store on this machine |
+| Resume on another machine | Yes | No |
+| Share a session, hosted MCP, provenance timeline | Yes | No |
+| Resume limit | Free plan: 10 cross-agent resumes a month | Unlimited |
+
+**Signing in** opens the browser, where you enter the code the CLI prints. The API key is saved to `~/.config/agentdrive/config.json`, never into your agent configs. On a fresh install, signing in turns on transcript and artifact sync without a separate prompt and prints a notice saying so. The first sync looks back 14 days and uploads the recent sessions of every supported agent on this machine, whether or not you wired it (for OpenCode, only the current project's), so if you'd rather start with nothing uploaded, pick local mode. If you have no workspace yet, it creates one called Personal and makes it the default.
+
+**Local mode** uploads nothing and needs no network. Resume reads the transcripts each agent already keeps on disk. Claude Code, Codex and OpenCode need no setup for this. Cursor and Antigravity need the hooks that `adrive init --local` installs, because their transcripts don't record the project directory, so the hook records it each time it fires. A session that ended before the hooks were installed has no recorded directory, so it can't be matched to a project. The [local mode walkthrough](/blog/local-mode-no-account) goes deeper.
+
+You can start in local mode and sign in later by running `adrive init` again.
+
+Pricing, from the plan catalog: Free is $0 forever and covers the whole loop on one machine. Pro is $20 a month with unlimited cross-agent resumes. Team is $30 per seat a month with a 3-seat minimum. The [pricing page](/pricing) has the full limits.
+
+## What does adrive init wire into each agent?
+
+Init detects which agents you have installed and wires each one. It merges its entries into your existing config files, keeps any hooks you already have, and produces the same files if you run it again.
+
+| Agent | What init adds |
+|---|---|
+| Claude Code | The `agentdrive@agentdrive` plugin, installed through the `claude` CLI, with sync hooks, the MCP server and `/agentdrive:resume`, `/agentdrive:sessions` and `/agentdrive:login`. If `claude` isn't on your `PATH`, init prints the two `/plugin` commands to run instead. |
+| Codex | Hooks in `~/.codex/hooks.json`, the MCP server in `~/.codex/config.toml` and an AgentDrive skill. Init also writes `agentdrive-resume` and `agentdrive-sessions` custom prompts, which only older Codex versions load. Init also approves the hooks for you; on an older Codex you approve them once via `/hooks`. |
+| OpenCode | A plugin at `~/.config/opencode/plugins/agentdrive.ts`, the MCP server in `opencode.json` and the `/agentdrive-resume` and `/agentdrive-sessions` commands. |
+| Cursor | Hooks in `~/.cursor/hooks.json`, the MCP server in `~/.cursor/mcp.json` and the `/agentdrive-resume` and `/agentdrive-sessions` commands. |
+| Antigravity | A hook in `~/.gemini/config/hooks.json`, the MCP server in `~/.gemini/config/mcp_config.json` and `agentdrive-resume` and `agentdrive-sessions` skills. One setup covers the `agy` CLI, the app and the IDE. |
+| Claude Desktop, Zed, Cline, Continue | The MCP server only. |
+
+When auto-context is on, which it is by default, init also adds a short instructions block to `~/.codex/AGENTS.md`, OpenCode's global `AGENTS.md`, `~/.gemini/GEMINI.md` and a Cursor rule at `~/.cursor/rules/agentdrive.mdc`. The block tells the agent to call `drive_resume` when you want to continue earlier work.
+
+Init ends with a summary of every agent and whether it was wired, skipped or needs a manual step. Restart your agents afterwards so they load the new hooks and MCP server. The per-agent guides cover each one in detail: [Claude Code](/blog/use-agentdrive-with-claude-code), [Codex](/blog/use-agentdrive-with-codex), [Cursor](/blog/use-agentdrive-with-cursor), [OpenCode](/blog/use-agentdrive-with-opencode) and [Antigravity](/blog/use-agentdrive-with-antigravity).
+
+## How do I make my first sync?
+
+If you signed in, you don't run anything. Open one of your agents in a project and work on a small task. Write a clear first message, because the brief will use it as the goal.
+
+The agent's hooks do the rest. On a turn end, a session end or a compaction, the hook starts a detached `adrive sync` and exits right away, so it never blocks the agent. Turn-end events re-sync a session at most every two minutes; session-end and compaction events always sync. [How background session sync works](/blog/how-background-session-sync-works) covers locking, the sweep, redaction and the storage layout.
+
+To see what sync would pick up without uploading anything, or to sync right now:
+
+```bash
+adrive sync --dry-run   # parse local sessions and report, upload nothing
+adrive sync             # upload now
+adrive resume --list    # this project's synced sessions, newest first
+```
+
+Hook-started syncs write their output to `~/.config/agentdrive/sync.log`, which is the first place to look if a session doesn't show up.
+
+In local mode there is nothing to sync. Resume reads each agent's transcripts straight from disk.
+
+## How do I resume a session in another agent?
+
+Open a different agent in the **same project directory**. Sessions are grouped by project, and the project key comes from the repo's `origin` remote, so any clone of the same repo works too.
+
+Then either use the command your agent has, or ask in plain words:
+
+- **Claude Code:** `/agentdrive:resume`
+- **Codex:** ask in plain words, or start the request with `$agentdrive` to call the AgentDrive skill
+- **OpenCode and Cursor:** `/agentdrive-resume`
+- **Antigravity:** `/agentdrive-resume`, which runs the `agentdrive-resume` skill, or ask it to resume your last AgentDrive session
+- **Any shell:** `adrive resume`, or `adrive resume <id>` for one session from the list
+
+A good resume prompt is short:
+
+> Resume my last AgentDrive session from the other agent. Check the files on disk before continuing.
+
+The agent calls `drive_resume`, which picks the latest session in this project from a different agent and returns a handoff brief: the source agent and session, the goal, the files touched and as many recent turns as fit in 12,000 characters. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) shows a full example, and [the handoff brief format](/blog/handoff-brief-format) documents every field.
+
+The brief is history, not state. Files may have changed since that session ended, so the agent is told to check them on disk before relying on what the transcript says.
+
+## How do I check what AgentDrive is syncing?
+
+When you're signed in, `adrive privacy --show` prints your five settings, each on or off:
+
+```bash
+adrive privacy --show
+```
+
+Each setting has a flag to change it directly:
+
+| Flag | What it controls |
+|---|---|
+| `--auto-context on\|off` | The list of recent sessions from your other agents at session start |
+| `--capture-artifacts on\|off` | Uploading files your agents wrote that git doesn't track, and allowing `adrive watch` |
+| `--capture-transcripts on\|off` | Uploading session transcripts |
+| `--private-workspace on\|off` | Encrypting synced content on your machine before upload |
+| `--auto-wire on\|off` | Wiring agents you install later at their next session |
+
+Run `adrive privacy` with no flags to step through them one at a time. In local mode the command tells you to run `adrive init` first, since there is no account and nothing is uploaded.
+
+Before anything is uploaded, sync skips secret-looking files (a built-in deny list plus your `.adriveignore`) and runs a best-effort redactor over the content. [Privacy and safety guardrails](/blog/privacy-and-safety-guardrails) explains every control and what each one does not protect against.
+
+## Where should I go next?
+
+- [How AgentDrive works](/blog/how-agentdrive-works), the short overview of the whole loop.
+- [Best practices for coding with more than one agent](/blog/multi-agent-coding-best-practices), the habits that make a resume land well.
+- [The sessions docs](/docs/concepts/sessions), the same ground in reference form.
+- [The quick start](/docs/quick-start), including a manual MCP config if the installer can't run on your machine.
+
+## FAQ
+
+### Do I need an account to try AgentDrive?
+
+No. `adrive init --local` wires your agents without signing in, and resume reads local transcripts. You need an account for sync across machines, sharing and the hosted MCP.
+
+### Will the hooks slow my agent down?
+
+The hook reads the event, starts a detached sync and exits. A failing hook is swallowed, so it can't break your session.
+
+### I installed another agent after running init. Do I run it again?
+
+Not if `--auto-wire` is on, which is the default. Agents installed later are connected at their next session. Running `adrive init` again also works and leaves already-wired agents unchanged.
+
+### Can I see which agent wrote what?
+
+Yes, when signed in. Every sync request is stamped with the agent as its platform, so the provenance timeline shows which agent wrote each file. `adrive timeline` prints it in a terminal.
+
+## The short version
+
+Three commands get you from nothing to a first resume, with no account:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+Run the last one in a project where you've already used another agent. The [quick start](/docs/quick-start) has the same steps with every fallback.

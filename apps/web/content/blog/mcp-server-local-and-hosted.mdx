@@ -1,0 +1,213 @@
+---
+title: One MCP server, with and without an account
+description: How @adrive/mcp-server answers drive_sessions and drive_resume from local transcripts with no API key, and serves the same tool registry over hosted OAuth MCP.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+AgentDrive's MCP tools run three ways: as a stdio server with an API key, as the same stdio server with no account at all, and as a hosted endpoint behind OAuth. All three are built from one tool registry. The interesting parts are mode selection and why hosted OAuth sits on ordinary API keys.
+
+The stdio server is [`@adrive/mcp-server`](https://github.com/agentdrive-sh/agentdrive/tree/main/packages/mcp-server), Apache-2.0. The hosted endpoint lives in the AGPL worker, in [`apps/worker/src/routes/mcp.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/apps/worker/src/routes/mcp.ts) and [`apps/worker/src/routes/oauth-server.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/apps/worker/src/routes/oauth-server.ts). Why MCP is the main integration surface at all is in [ADR-0003](https://github.com/agentdrive-sh/agentdrive/blob/main/docs/tech/adr/0003-mcp-first-integration-surface.md).
+
+## What is in the tool registry?
+
+Every tool is one entry in [`packages/mcp-server/src/registry.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/registry.ts): a name, a description, a Zod schema, annotations and a handler that takes an API client.
+
+```ts
+export interface ToolDef {
+  name: string;
+  description: string;
+  schema: z.ZodRawShape;
+  annotations: ToolAnnotations;
+  // args is validated against `schema` by the transport layer before this runs,
+  // so each handler can safely treat it as its declared shape.
+  handler: (client: ApiClient, args: any) => Promise<ToolResult>;
+}
+```
+
+There are 22 tools: 18 stable ones and 4 experimental sandbox tools that answer 503 unless the worker has Cloudflare Containers. The handlers know nothing about transports. They call the AgentDrive REST API through `ApiClient`, and the transport decides how that client gets built.
+
+Annotations are two small helpers, and the reason one of them is stricter than you'd expect is in the comment:
+
+```ts
+const reads = (title: string): ToolAnnotations => ({ title, readOnlyHint: true, destructiveHint: false });
+// The spec reserves destructiveHint false for purely additive tools, so an overwrite
+// counts as destructive even though file versions keep the old content.
+const writes = (title: string, destructiveHint = false): ToolAnnotations => ({ title, readOnlyHint: false, destructiveHint });
+```
+
+`drive_write` is marked destructive even though every write is versioned. Hosts use these hints to decide what needs a confirmation, and asking once too often is the cheaper mistake.
+
+Each handler is wrapped by `withUsage`. A plan-limit refusal becomes a tool result marked `isError: true` whose text ends "Tell the user this, including the upgrade link", and a usage warning from the API rides along on a successful tool's output. The agent gets a message it can relay instead of a stack trace.
+
+## How does the stdio server pick a mode?
+
+At startup, [`packages/mcp-server/src/index.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/index.ts) looks for a key in two places:
+
+```ts
+function buildClient(): ApiClient | undefined {
+  const fileConfig = readCliConfig();
+  const cliConfig = process.env.AGENTDRIVE_API_KEY ? {} : fileConfig;
+  const apiKey = process.env.AGENTDRIVE_API_KEY || cliConfig.api_key;
+  if (!apiKey) return undefined;
+  return new ApiClient({
+    baseUrl: process.env.AGENTDRIVE_API_URL || cliConfig.api_url || 'https://app.agentdrive.sh',
+    apiKey,
+    agentPlatform: process.env.AGENTDRIVE_AGENT_PLATFORM || 'unknown',
+    agentRole: process.env.AGENTDRIVE_AGENT_ROLE || '',
+    project: scopeProjectKey(projectKeyFor(process.cwd()), !!fileConfig.preferences?.private_workspace),
+  });
+}
+```
+
+An environment variable wins. Otherwise it reads `config.json` from the CLI's config directory, so a key saved by `adrive auth login` works without exporting anything. When the env var is set, the file's `api_url` is ignored too, so a key from the environment is never sent to a URL from the config file. The project key is computed once, from the directory the agent started the server in.
+
+With a key, the server registers all 22 tools and the full `SERVER_INSTRUCTIONS`. Without one, it goes into local mode.
+
+## What does local mode serve?
+
+Local mode registers three tools: `drive_connect`, plus `drive_sessions` and `drive_resume` with local handlers. The local tools reuse the registry's own names, descriptions and schemas:
+
+```ts
+const localCtx: LocalToolContext = { cwd: process.cwd(), exclude: process.env.AGENTDRIVE_AGENT_PLATFORM, configDir: CONFIG_DIR };
+const localHandlers: Record<string, typeof driveSessionsLocal | typeof driveResumeLocal> = { drive_sessions: driveSessionsLocal, drive_resume: driveResumeLocal };
+const localTools = TOOLS.filter((tool) => tool.name in localHandlers).map((tool) =>
+  server.registerTool(
+    tool.name,
+    { title: tool.annotations.title, description: tool.description, inputSchema: tool.schema, annotations: tool.annotations },
+    (args) => localHandlers[tool.name]!(localCtx, args),
+  ),
+);
+```
+
+That reuse is the point. The agent sees the same `drive_resume` with the same arguments in both modes. A skill, a slash command or a line in your instructions file that says "call `drive_resume`" works whether or not you've signed up.
+
+The local handlers live in [`packages/mcp-server/src/local.ts`](https://github.com/agentdrive-sh/agentdrive/blob/main/packages/mcp-server/src/local.ts), which starts with a constraint:
+
+```ts
+// Local mode: sessions read straight from each harness's transcript store on
+// this machine, with no account and no network. Not imported by the registry,
+// so the hosted worker never bundles filesystem code.
+```
+
+`drive_sessions` runs every transcript adapter (Claude Code, Codex, OpenCode, Cursor, Antigravity), leaves out the calling agent's own sessions when `AGENTDRIVE_AGENT_PLATFORM` says which agent that is, and keeps the sessions whose project key matches the current directory's. The [transcript formats post](/blog/five-agent-transcript-formats) covers how each adapter reads its agent's files. `drive_resume` with no id takes the newest match.
+
+The brief is built by the same code the cloud path uses: `renderSession` turns the parsed session into markdown, `redact` scrubs it, and `buildHandoff` cuts it to the budget. A local brief reads exactly like a cloud one, with one line on top: "From local transcripts on this machine: not synced across machines or recorded in provenance."
+
+Local mode has real limits. It only sees this machine. It writes nothing, so there's no timeline. And it scans at most the newest 1,000 transcripts across all agents, a `shortcut:` comment in `local.ts` admits, so a project's older sessions can be hidden behind a lot of newer work elsewhere. To keep the scan cheap, it reads only the first 64 KB of each Claude Code or Codex transcript to find its `cwd`, and skips sessions from other projects without a full parse.
+
+## How does it switch modes without a restart?
+
+`drive_connect` starts `npx -y @adrive/cli init --yes` as a detached process, with its output going to `connect.log` in the config directory. The log is created with mode `0600`, and the comment says why: it "holds the sign-in URL and code, which together let any AgentDrive account claim this login." The tool polls the log for up to 8 seconds for the URL and code, returns both for the agent to show you, and keeps watching for a saved key for up to 15 minutes.
+
+When a key appears, the server swaps its tools in place:
+
+```ts
+function switchOver(connected: ApiClient): void {
+  if (switched) return;
+  switched = true;
+  for (const tool of [connectTool, ...localTools]) tool.remove();
+  registerTools(server, connected);
+}
+// The user may connect from a terminal (`adrive init`) instead of calling drive_connect.
+void waitFor(buildClient, { intervalMs: 5_000, timeoutMs: Number.POSITIVE_INFINITY }).then((c) => c && switchOver(c));
+```
+
+Removing and registering tools on a connected `McpServer` makes the MCP SDK send a tool-list-changed notification. Hosts that handle it show the full tool set in the same session. Hosts that don't need a reconnect, which the tool's reply tells the agent. The 5-second poll runs indefinitely, so signing in from a terminal works too. Its timer is `unref`'d, so a pending watch never keeps the server alive after the agent disconnects.
+
+## What changes in the hosted server?
+
+Remote hosts like Claude, ChatGPT and Cursor connect to `https://mcp.agentdrive.sh/mcp`. That endpoint imports the same `TOOLS` array and handles JSON-RPC itself, statelessly. Every POST is a self-contained request, and no session id is issued. `tools/list` is built once per isolate by converting each Zod shape to JSON Schema. `tools/call` validates the arguments with the same schema, then builds a client:
+
+```ts
+const self = env.SELF;
+const client = new ApiClient({
+  baseUrl: env.APP_URL,
+  apiKey,
+  agentPlatform: platform,
+  agentRole: role,
+  // Dispatch in-process via the self service binding (avoids the edge
+  // loopback that 522s). Falls back to global fetch if SELF is unbound.
+  fetchImpl: self ? (input, init) => self.fetch(input, init) : undefined,
+});
+```
+
+So a hosted tool call is the same handler making the same REST call, through a service binding back into the same worker. Batches are supported. `GET` returns 405, because a stateless server has no server-initiated stream. For the same reason the server advertises `listChanged: false`.
+
+One difference matters in practice. The hosted server has no working directory, so its client has no project key. `drive_sessions` needs an explicit `project` argument there. `drive_resume` takes no project argument, so with no session id it answers "No project key is known for this session" instead of guessing. The hosted flow is two calls: list with a project, then resume by id. Locally the directory answers that question. Remotely, nothing does.
+
+## How does OAuth work on the hosted MCP?
+
+The OAuth server is Cloudflare's `@cloudflare/workers-oauth-provider`, configured in `build()`:
+
+```ts
+const as = new OAuthAuthorizationServer<Env>({
+  issuer,
+  resources: [env.MCP_URL, issuer],
+  defaultResource: env.MCP_URL,
+  authorizeEndpoint: '/auth/authorize',
+  tokenEndpoint: '/auth/token',
+  clientRegistrationEndpoint: '/auth/register',
+  scopesSupported: SCOPES,
+  clientIdMetadataDocumentEnabled: true,
+  accessTokenTTL: 3600,
+  refreshTokenTTL: 30 * 24 * 60 * 60,
+  refreshTokenIdleTTL: 30 * 24 * 60 * 60,
+  // ...
+});
+```
+
+The issuer is the site origin, because the person consenting is identified by the site's session cookie. There are two protected resources sharing one handler: the MCP URL people paste into their host, and the site origin at `/mcp`. Clients can register dynamically or use a Client ID Metadata Document. Access tokens last an hour and refresh tokens 30 days. The library requires PKCE only of public clients, and `showConsent` requires it of every client.
+
+The design choice I'd defend hardest is in the file's header comment:
+
+```ts
+// A grant's props carry an API key minted at consent: /mcp reaches REST through SELF with
+// it, so OAuth adds no new trusted path into flexAuth, and revoking that key in /v1/keys
+// disconnects the client.
+```
+
+OAuth doesn't get its own authorisation logic. Approving a client mints an ordinary agent API key and stores it in the grant. Every tool call then goes through the same auth middleware, rate limits and permission checks as a CLI call. A connected app shows up in your key list as `<client name> (OAuth)`, and revoking it there is the disconnect button.
+
+Token validation follows from that:
+
+```ts
+const validateToken = (env: Env) => async (resource: string, token: string): Promise<OAuthResourceTokenValidation<McpProps> | null> => {
+  if (token.startsWith('agentdrive_')) {
+    return (await keyExists(env.KV, token)) ? { props: { apiKey: token }, audience: resource, scope: SCOPES } : null;
+  }
+  const validated = await as.validateToken<McpProps>(resource, token, env);
+  return validated && (await keyHeld(env.KV, validated.props)) ? validated : null;
+};
+```
+
+A raw API key still works as a bearer token, for hosts that let you set a header. An OAuth token is valid only while the key behind it exists. On refresh, a missing key throws `invalid_grant`, which revokes the grant and sends the client back through consent instead of handing out tokens `/mcp` would refuse.
+
+"Exists" needs care, because KV is eventually consistent. A key minted where you click Allow can read as missing where the client calls `/mcp` a second later. So for 5 minutes after minting, a missing key counts as still propagating, not revoked. The [storage post](/blog/content-addressed-storage-r2-kv) covers that trade-off in more detail.
+
+The consent step has a few guards worth stealing. The form carries the account it was shown for, and a session swapped in since then gets an error instead of the grant. Keys behind the grants a reconnect replaces are revoked only once the new grant is in place, so a failed reconnect leaves the working connection alone. On each consent, OAuth keys older than 15 minutes that no live grant holds are revoked, so an abandoned sign-in doesn't hold an agent slot forever. And all of this is matched by host and path before the main Hono app, so the app's CORS middleware can't answer OAuth preflights and its catch-all can't swallow these routes.
+
+The cost of the API-key design is plain: each OAuth connection takes an agent slot on your plan, the same as a CLI login. At the cap, consent shows a "No agent slot left" page with links to upgrade or revoke an unused key.
+
+## FAQ
+
+### Do I need an account to use `drive_resume`?
+
+No. Without a key the stdio server reads the other agents' transcripts on your machine and builds the brief locally. An account adds sync across machines, sharing and the timeline.
+
+### Can the hosted server read my local sessions?
+
+No. It only sees sessions the CLI has synced to your workspace. It has no access to your filesystem.
+
+### Can I skip OAuth and use an API key?
+
+Yes. Send `Authorization: Bearer agentdrive_live_...` to the hosted endpoint, or set `AGENTDRIVE_API_KEY` for the stdio server.
+
+### Why not run the stdio server's SDK transport in the worker?
+
+The hosted handler is stateless JSON-RPC in about 140 lines, with no sessions to store or expire, and it reuses the registry's handlers unchanged. The SDK still runs the stdio side.
+
+## Start without an account
+
+The [quick start](/docs/quick-start) sets up local mode in one command. Call `drive_resume` from any agent and you get a brief from another agent's last session in this repo, if there is one. When you want the rest, `drive_connect` signs you in without a restart. The [MCP tools reference](/docs/mcp-tools) lists all 22 tools with their arguments, and the code is in [the repo](https://github.com/agentdrive-sh/agentdrive).

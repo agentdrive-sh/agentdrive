@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { FaqSection, breadcrumbLd, faqLd, pageMetadata, type Faq } from '@/components/marketing/answer-page';
+import { FaqSection, Rich, breadcrumbLd, faqLd, pageMetadata, type Faq } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { JsonLd } from '@/components/seo/json-ld';
 import { COMPETITORS, LAST_CHECKED, getCompetitor, type Competitor } from '../data';
@@ -71,14 +71,14 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
 
       </ProseSection>
       <section className="m-wrap narrow m-compare-one" aria-label="Comparison table">
-        <ComparisonTable competitors={[c]} />
+        <ComparisonTable competitor={c} />
       </section>
       <ProseSection>
         <section>
           <h2>About {c.name}</h2>
           <ul>
             {c.facts.map((f) => (
-              <li key={f.text}>{f.text}</li>
+              <li key={f.text}><Rich text={f.text} /></li>
             ))}
           </ul>
         </section>
@@ -87,7 +87,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
           <section key={s.title}>
             <h2>{s.title}</h2>
             {s.body.map((b) => (
-              <p key={b}>{b}</p>
+              <p key={b}><Rich text={b} /></p>
             ))}
           </section>
         ))}
@@ -96,7 +96,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
           <h2>Where {c.name} works well</h2>
           <ul>
             {c.goodAt.map((g) => (
-              <li key={g}>{g}</li>
+              <li key={g}><Rich text={g} /></li>
             ))}
           </ul>
         </section>
@@ -105,7 +105,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
           <h2>What AgentDrive does differently</h2>
           <ul>
             {c.different.map((d) => (
-              <li key={d}>{d}</li>
+              <li key={d}><Rich text={d} /></li>
             ))}
           </ul>
         </section>

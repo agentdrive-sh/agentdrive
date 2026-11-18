@@ -1,0 +1,107 @@
+---
+title: "Why one model can't continue another's hidden state"
+description: "A coding agent's reasoning and prompt cache stay with its provider. What moves between agents is text and files, so a handoff should be a short, honest brief."
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+One model can't continue another's hidden state because that state never leaves the provider. Reasoning is returned as a summary or an encrypted blob, and prompt caches are tied to one organization and one exact prompt prefix. What can move between agents is text: messages, tool calls and the files on disk.
+
+I get asked a version of this often: "When Codex resumes my Claude Code session, does it pick up where Claude's head was?" No. It picks up where the transcript and the files are. I think that's the right design, not a limitation to apologize for, and this post explains why, using how AgentDrive builds the brief.
+
+## What counts as a model's hidden state?
+
+When a coding agent works, three kinds of state build up that you never see as plain text:
+
+- **Reasoning.** Models that think before answering produce reasoning you can't read in full.
+- **Prompt caches.** Providers keep processed versions of recent prompt prefixes to make the next request cheaper and faster.
+- **The live context window.** The exact sequence of tokens the model saw on its last request, assembled by the agent's harness: system prompt, tool definitions, instruction files, earlier turns.
+
+The first two live on the provider's side. The third is rebuilt by each harness its own way.
+
+## Why can't reasoning be handed over?
+
+Because neither of the big providers hands it to you in a form another model can use.
+
+Anthropic's [thinking docs](https://platform.claude.com/docs/en/build-with-claude/thinking) say that what you see in a thinking block "is never the raw chain of thought". It's a summary, and on many recent models the default is to return no thinking text at all. Each block carries a `signature`, "an encrypted copy of the full reasoning that you pass back unchanged". The same page says a thinking block "is readable only by the model that produced it and certain other models", and the API drops the blocks a target model can't read. So even switching between Claude models can lose the earlier reasoning.
+
+OpenAI's [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning) says reasoning tokens are hidden from API users. In stateless mode, reasoning comes back as items with `encrypted_content` that you can pass back to preserve reasoning, but the API doesn't return their reasoning text. You can opt in to a summary.
+
+Put those together and the answer to "can Codex continue Claude's reasoning" is short. The reasoning is encrypted for one provider's models. The other provider can't decrypt it, and it isn't meant to.
+
+## Why can't a prompt cache be shared?
+
+Because caches are keyed to an exact prompt and isolated by account.
+
+[Anthropic's prompt caching docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) say cache hits "require 100 percent identical prompt segments", that the default lifetime is five minutes, and that "different organizations never share caches, even if they use identical prompts." [OpenAI's](https://developers.openai.com/api/docs/guides/prompt-caching) say "caches are not shared across organizations" and that reuse "requires the entire rendered prefix to match."
+
+A different agent has a different system prompt and tool list, so its prefix never matches anyway. A cache is a speed and cost optimization for repeating the same prompt. It was never a memory.
+
+## What carries over between agents?
+
+Anything that is text both sides can read:
+
+- **Messages.** What you asked and what the agent answered.
+- **Tool calls.** Which tool ran, on which file, with which command.
+- **Files on disk.** The code itself, which is the real result of the session.
+
+Tool results are text too, but the AgentDrive brief leaves them out on purpose, for reasons covered below. The receiving model reads the rest as ordinary input. It doesn't matter which model wrote them, which is why a text handoff works between Claude, GPT-based agents and anything else.
+
+## How does AgentDrive turn a session into text?
+
+In two steps, both in `packages/mcp-server/src/session.ts` (Apache-2.0, like the rest of the client code).
+
+**First, each agent's transcript is parsed and rendered.** The parsers read each agent's own transcript store, for example Claude Code's JSONL files under `~/.claude/projects` and Codex's rollout files under `~/.codex/sessions`. They keep message text and tool calls. In Claude Code, only text parts are kept, so thinking blocks and tool results are skipped. In Codex, reasoning items are skipped. Then `renderSession` writes one markdown document: the harness and session id, the project, working directory, title, last update, turn count and files touched, followed by each turn under a role header with its text and one `> tool:` line per call.
+
+**Second, `buildHandoff` cuts that document to a budget.** The default is 12,000 characters. The brief has a fixed order:
+
+1. An intro line naming the source agent and session, ending with "Continue this work; verify file state on disk before assuming it."
+2. The session metadata.
+3. The goal: the first user message, capped at 1,500 characters or an eighth of the budget, whichever is smaller.
+4. The files touched, up to 50.
+5. The newest turns that fit, walked back from the end, printed oldest to newest.
+
+If anything was cut, the brief says so: `[... N earlier turns omitted ...]` before the turns, and `[... turn truncated ...]` if even the newest turn was too long.
+
+## Why leave out tool output?
+
+This is the choice I get pushed on most, so here is the reasoning.
+
+Tool output is a snapshot. The file contents a `Read` returned at turn 12 may not match the file at turn 40, and certainly not after you edited it by hand before resuming. If the brief included it, the next agent would have two versions of the same file and no reliable way to know which is current.
+
+Tool output is also large. A test run or a file read can be hundreds of lines on its own. Spending the budget on them would push out the turns where the agent said what it was doing and why.
+
+So the brief keeps the call (the agent ran `pnpm test` on this file) and drops the output. The agent can rerun the test and get today's answer.
+
+## Why a short, honest brief instead of a reconstruction?
+
+I could have tried to make the brief look like continuity: summarize the session with a model, smooth over the gaps, present it as "the state of the work". I think that would be worse, for three reasons.
+
+- **A summary invents.** A model summarizing a transcript can state a conclusion the session never reached. The brief is cut from the transcript by fixed rules, so every line in it was said in the session.
+- **Gaps should be visible.** The omitted-turns marker tells the next agent that it's seeing part of the story. A smooth summary hides that.
+- **The disk is the present.** The intro line tells the agent to check files before relying on anything. The brief lists paths and never contents, so the agent has to read the real files.
+
+The receiving model starts without the other model's reasoning either way. Given that, the most useful thing to give it is an accurate account of what was asked and done, and a pointer to where the current state lives.
+
+## FAQ
+
+### Does the receiving agent see the other model's thinking?
+
+No. The parsers skip thinking blocks and reasoning items, and the providers don't expose the raw reasoning anyway.
+
+### Does this apply when both agents use the same provider?
+
+Yes. Anthropic's docs say a thinking block is readable only by the model that produced it and certain other models, so a switch between Claude models can drop earlier reasoning too. And two agents have different system prompts and tools, so their cache prefixes don't match.
+
+### Is the full transcript kept?
+
+When you're signed in, sync uploads the redacted rendered transcript to `sessions/<project>/<harness>/<session-id>.md`, and the brief is built from it. In local mode it stays in each agent's own store on your machine.
+
+### Can I give the next agent more history?
+
+Yes. `drive_resume` takes `max_chars` up to 50,000, and `adrive resume` takes `--max-chars`.
+
+## See the text your agents leave behind
+
+Install the CLI with `npm install -g @adrive/cli` and run `adrive resume` in a project where you've used Claude Code, Codex or OpenCode. What it prints is the whole handoff: no reasoning, no cache, only text. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) walks through each section.

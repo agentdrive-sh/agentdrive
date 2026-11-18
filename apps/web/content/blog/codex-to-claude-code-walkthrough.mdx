@@ -1,0 +1,202 @@
+---
+title: Codex to Claude Code, end to end
+description: A step-by-step walkthrough of moving a Codex session into Claude Code with AgentDrive, from setup and sync to the handoff brief and checking files.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+To move a Codex session into Claude Code, install AgentDrive once. It adds sync hooks to Codex and the AgentDrive plugin to Claude Code. Work in Codex as usual and the session syncs in the background. Then open Claude Code in the same project and run `/agentdrive:resume` to load the goal, files touched and recent turns.
+
+That's the short version, and the [Codex to Claude Code resume page](/resume/codex-to-claude-code) covers it in four steps. This post is the long version: what each step writes to disk, what the sync does while you work, how to see what synced, and what Claude Code actually receives. If you'd rather watch it, I recorded [a how-to video of this exact direction](https://youtu.be/nj7esMsJiwA).
+
+The goal is simple: Claude Code should start from where Codex stopped, not from a blank prompt and my memory of what happened.
+
+## What do I need before I start?
+
+- Codex installed, so `~/.codex` exists (or `$CODEX_HOME`, if you set it).
+- Claude Code installed, so `~/.claude` exists. If `claude` is on your `PATH`, setup installs the plugin for you.
+- A project both agents will open. A git repo with a remote is easiest, because the project is keyed by the normalized remote URL, so any folder inside the repo, or any clone of it, matches.
+
+## How do I set up Codex and Claude Code?
+
+1. **Install the CLI and run init.** Either one-line install works:
+
+   ```bash
+   curl -fsSL agentdrive.sh/install | sh
+   ```
+
+   or
+
+   ```bash
+   npm install -g @adrive/cli
+   adrive init
+   ```
+
+   `adrive init` signs you in through the browser (you type the code it prints), saves your API key in `~/.config/agentdrive/config.json`, and then wires every agent it finds.
+
+2. **Check what it wrote for Codex.** Under `~/.codex`:
+   - `hooks.json` gets a hook on `SessionStart`, `Stop`, `SessionEnd` and `PreCompact`, each running `adrive hook codex` with a 3-second timeout.
+   - `config.toml` gets the AgentDrive MCP server, with `drive_sessions` and `drive_resume` pre-approved because they only read.
+   - `skills/agentdrive/SKILL.md` is the AgentDrive skill, which Codex uses for the reverse direction.
+   - `prompts/agentdrive-resume.md` and `prompts/agentdrive-sessions.md` are custom prompts left over for older Codex versions. Current Codex no longer loads custom prompts.
+
+3. **Approve the hooks if Codex asks.** Codex only runs hooks it trusts. Setup records that approval for the exact commands it wrote. If your Codex is too old for that, init prints a note, and you approve them once via `/hooks`.
+
+4. **Check the Claude Code plugin.** When `claude` is on your `PATH`, init runs `claude plugin install agentdrive@agentdrive -s user`, adding the `agentdrive-sh/agentdrive-mcp` marketplace first if it's missing. If that can't run, install it yourself inside Claude Code:
+
+   ```
+   /plugin marketplace add agentdrive-sh/agentdrive-mcp
+   /plugin install agentdrive@agentdrive
+   ```
+
+5. **Restart both agents** so they load the new hooks and the MCP server.
+
+On a fresh install, transcript and artifact sync start out on, and init prints a notice saying so. `adrive privacy --show` prints your current settings at any point.
+
+## What happens while a Codex session syncs?
+
+You don't do anything here, but it helps to know what runs.
+
+1. **Session start.** Codex fires `SessionStart` and runs `adrive hook codex`. The hook reads the event payload (session id, working directory, transcript path), remembers which directory the session belongs to, starts a detached `adrive sync` and exits. It has to be quick: Codex allows a `SessionEnd` hook at most 3 seconds, and init gives all four events that same 3-second timeout.
+2. **Each turn.** `Stop` fires at the end of every turn. A turn-end sync re-uploads a session at most every two minutes, so a burst of short turns doesn't mean a burst of uploads.
+3. **End or compaction.** `SessionEnd` and `PreCompact` skip that two-minute wait, so the final state always lands.
+
+The sync reads the Codex rollout file under `$CODEX_HOME/sessions/YYYY/MM/DD/`. Codex records the session's working directory in its first record, so the project is known without any extra bookkeeping. The parser keeps your messages, Codex's replies and its tool calls. Paths from `apply_patch` and file-change events become the session's files touched. Then the transcript is redacted on your machine and uploaded to `sessions/<project>/codex/<session-id>.md` in your workspace, along with files Codex wrote that git doesn't track.
+
+**The practical habit:** before you switch, end the Codex session, or at least ask Codex to state the next step and wait a moment. A turn-end sync can lag by up to two minutes. An ended session doesn't.
+
+## How do I see which sessions synced?
+
+Three ways, from lowest to highest level.
+
+**The sync log.** Hook-started syncs write to `~/.config/agentdrive/sync.log` instead of your terminal. Each synced session gets a line like this (the ids and project here are made up):
+
+```text
+2026-11-19T09:14:05.120Z codex:00000000-0000-4000-8000-000000000001: 9 turns, 2 paths touched, 0 files linked -> github.com__example__todo-api
+```
+
+"Files linked" counts the untracked files uploaded with the session. Edits to tracked files show up as paths touched, not as uploads, because git already has them.
+
+**The CLI.** In the project directory:
+
+```bash
+adrive resume --list
+```
+
+It prints the project's ten most recent sessions, one per line: session id, agent, last activity and title.
+
+```text
+codex:00000000-0000-4000-8000-000000000001  codex  2026-11-19T09:13:58.000Z  Add a due_before filter to GET /todos
+claude-code:00000000-0000-4000-8000-0000000000c1  claude-code  2026-11-18T16:02:41.000Z  Add due dates to todos
+```
+
+The title is the first thing you asked in that session, cut at 120 characters.
+
+**Claude Code itself.** `/agentdrive:sessions` calls the `drive_sessions` tool, and passing `codex` after it filters to Codex sessions. Claude Code turns the result into a short list for you.
+
+## How do I resume the Codex session in Claude Code?
+
+1. **Open Claude Code in the same project.** With auto-context on, which is the default, the plugin's `SessionStart` hook tells Claude Code about up to three recent sessions in this project before you type anything. The newest session from each other agent comes first, and the newest remaining sessions fill the rest, which can include earlier Claude Code ones. It sees a block like this:
+
+   ```text
+   Recent AgentDrive sessions in this project:
+   - codex · 3m ago · "Add a due_before filter to GET /todos" (id codex:00000000-0000-4000-8000-000000000001)
+   To continue one, call the drive_resume tool (or /agentdrive:resume) with its id.
+   ```
+
+2. **Run `/agentdrive:resume`.** With no id, `drive_resume` loads the latest session in this project from a different agent than Claude Code, so the Codex session wins over your own earlier Claude Code ones. If you run several agents, pass the id: `/agentdrive:resume codex:00000000-0000-4000-8000-000000000001`.
+
+3. **Read the summary.** The command tells Claude Code to sum up the handoff in three to five bullets: the goal, what's done, what's left and any open questions. Correct it here if the goal moved during the Codex session.
+
+4. **Let it check the files, then continue.** The command's next step is to check the files the brief mentions on disk before relying on it. More on that below.
+
+On the Free plan, cloud resumes like this one count toward a monthly limit; the [pricing page](/pricing) has the numbers for each plan.
+
+## What does the brief show?
+
+The brief is a plain-text excerpt of the Codex session, built to fit 12,000 characters by default. Here is a short made-up one in the layout the code produces:
+
+```text
+Handoff from a codex session (00000000-0000-4000-8000-000000000001). Continue this work; verify file state on disk before assuming it.
+
+Project: github.com__example__todo-api
+Cwd: /Users/you/code/todo-api
+Title: Add a due_before filter to GET /todos
+Updated: 2026-11-19T09:13:58.000Z
+Turns: 9
+
+## Goal
+
+Add a due_before filter to GET /todos. Accept an ISO date, return 400 on anything else, and cover both cases in the tests.
+
+## Files touched
+
+- src/routes/todos.ts
+- test/todos.test.ts
+
+## Recent turns
+
+[... 6 earlier turns omitted ...]
+
+### assistant  _(2026-11-19T09:12:40.000Z)_
+
+The filter is in and parses the date before the query runs.
+
+> tool: apply_patch src/routes/todos.ts
+
+### user  _(2026-11-19T09:13:10.000Z)_
+
+Add the 400 case to the tests.
+
+### assistant  _(2026-11-19T09:13:58.000Z)_
+
+Added a test for an invalid date. I haven't run the suite yet.
+
+> tool: apply_patch test/todos.test.ts
+```
+
+The goal is the first message you sent Codex. Files touched lists what the session edited. Recent turns are the newest turns that fit, with a count of what was left out. When sync uploaded untracked files, an **Uploaded files** section adds the workspace id and file ids, so Claude Code can read those copies with `drive_read` on a machine where they aren't on disk.
+
+What's missing on purpose: Codex's reasoning items, command output and file contents. [What goes into a handoff brief](/blog/what-goes-into-a-handoff-brief) goes through every section and the reasons.
+
+## How do I check the files on disk?
+
+**The brief is history. The repo is the present.** In the example, the last turn says the suite hasn't run. Maybe I ran it by hand afterwards, or switched branches. Claude Code can't know that from the brief alone.
+
+1. Ask Claude Code to run `git status` and `git diff` on the files under **Files touched**.
+2. Have it read those files before it edits anything.
+3. If the last turn left something unfinished, like the untested change above, make that the first thing it does.
+
+The resume command already tells Claude Code to do the second step. I still say it out loud when the session ended mid-edit.
+
+## What if Claude Code can't find the Codex session?
+
+Work down this list in the project directory:
+
+1. `adrive privacy --show` confirms transcript sync is on.
+2. `adrive sync` runs a sync in your terminal and prints what it did, ending with a line like `Synced 1, unchanged 0, debounced 0, failed 0.`
+3. `adrive resume --list` shows whether the session is filed under this project.
+4. If it prints `No sessions for project ...` with a key you don't expect, the two agents opened different folders. Outside a git repo, the key comes from the exact directory, so both need the same one.
+
+## FAQ
+
+### Do I need to end the Codex session first?
+
+No, but it's the surest way. Ending or compacting the session syncs it right away. Otherwise the last turn may wait up to two minutes for the next turn-end sync.
+
+### Can I resume in Claude Code on a different machine?
+
+Yes, when you're signed in to the same account on both. Sessions sync to your workspace, and with a git remote the project key matches across clones. Untracked files Codex wrote come through the Uploaded files section.
+
+### Can I go back from Claude Code to Codex?
+
+Yes. Claude Code sessions sync through the plugin's hooks, and in Codex you ask it to resume your last AgentDrive session, or start the request with `$agentdrive` to call the AgentDrive skill by name. The [reverse guide](/resume/claude-code-to-codex) has the steps, and [Start in Claude Code, pick up in Codex](/blog/start-in-claude-code-pick-up-in-codex) has the background.
+
+### Does this work without an account?
+
+Yes, on one machine. `adrive resume` reads Codex's rollout files directly in local mode, and `/agentdrive:resume` works too. Free includes unlimited local resumes. See [Resume across agents with no account](/blog/local-mode-no-account).
+
+## Where to go from here
+
+The [Codex](/integrations/codex) and [Claude Code](/integrations/claude-code) integration pages list every file setup touches. To see a brief from your own Codex sessions before you sign in, `adrive resume` in a project directory prints one with no account.

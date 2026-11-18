@@ -16,8 +16,8 @@ export default function CodexIntegration() {
       <IntegrationSection id="install" title="1. Install">
         <p>
           The installer signs you in, then wires session sync hooks into <code>~/.codex/hooks.json</code>, the
-          MCP server into <code>~/.codex/config.toml</code>, and the <code>agentdrive-resume</code> and{' '}
-          <code>agentdrive-sessions</code> prompts into Codex.
+          MCP server into <code>~/.codex/config.toml</code>, and the AgentDrive skill into{' '}
+          <code>~/.codex/skills/agentdrive</code>.
         </p>
         <Snippet>{INSTALL_COMMAND}</Snippet>
         <p>
@@ -32,7 +32,7 @@ export default function CodexIntegration() {
           <summary>How sync works in this agent</summary>
           <p>
             The hooks fire on <code>SessionStart</code>, <code>Stop</code>, <code>SessionEnd</code> and{' '}
-            <code>PreCompact</code>. Codex caps hook time at 3 seconds, so the hook only starts a detached{' '}
+            <code>PreCompact</code>. Codex allows a <code>SessionEnd</code> hook at most 3 seconds, so every AgentDrive hook uses a 3-second timeout and only starts a detached{' '}
             <code>adrive sync</code> and returns. The sync uploads the redacted transcript, plus files Codex wrote
             that git doesn&apos;t track, to <code>sessions/&lt;project&gt;/codex/&lt;session&gt;.md</code>. Control
             what is synced with <code>adrive privacy</code>; details are in{' '}
@@ -46,8 +46,8 @@ export default function CodexIntegration() {
         <PromptExample>Resume my last AgentDrive session from Claude Code.</PromptExample>
         <p>
           Codex calls <code>drive_resume</code>, which by default loads the latest session in this project from a
-          different agent CLI, as a brief with the goal, files touched and recent turns. The{' '}
-          <code>agentdrive-resume</code> custom prompt (<code>/prompts:agentdrive-resume</code>) does the same. From a shell, <code>adrive resume</code> prints the
+          different agent CLI, as a brief with the goal, files touched and recent turns. To call the AgentDrive skill
+          by name, mention it with <code>$agentdrive</code> in your request. From a shell, <code>adrive resume</code> prints the
           brief.
         </p>
         <p><strong>Check the result:</strong> the brief should name the source agent, the goal, the files touched and the recent turns. Ask the receiving agent to check those files on disk before continuing. After working in Codex, you can hand the task back to Claude Code in the same way.</p>

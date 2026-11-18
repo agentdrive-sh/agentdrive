@@ -1,0 +1,117 @@
+---
+title: Running two coding agents on one task without losing context
+description: When splitting one coding task between two agents pays off, and how a handoff brief keeps Claude Code, Codex or Cursor in step, with the exact commands.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+Running two coding agents on one task works when they take turns and pass context explicitly. One agent works and ends its session, the other loads a handoff brief of that session and reads the files on disk before it changes anything. Split the work for a second opinion, a usage limit, or because one agent suits a step better.
+
+Most days I have Claude Code, Codex and Cursor open on the same repo. The work isn't the hard part. Keeping the second agent from starting cold is. This post is the workflow I use, with the commands AgentDrive gives you for it.
+
+## When does splitting a task between two agents make sense?
+
+Three cases come up for me again and again:
+
+- **A second opinion.** One agent writes the change, another reviews it. A reviewer on a different model reads the code without the author's assumptions, and it can catch what the author talked itself past.
+- **A usage limit.** One agent stops partway through and the other carries on. I've written up the specifics for [Claude Code](/blog/claude-code-usage-limit), [Codex](/blog/codex-usage-limit), [Cursor](/blog/cursor-usage-limit) and [Antigravity](/blog/antigravity-usage-limit).
+- **Different strengths.** You prefer one agent for planning, another for a long mechanical edit, a third for UI work in an editor. Which agent fits which step is your call; the handoff works the same way.
+
+## When is it a bad idea?
+
+When both agents edit the same files at the same time. AgentDrive moves context between agents. It doesn't lock files or merge two agents' concurrent edits, and real-time co-editing isn't something it tries to do. If two agents write `src/routes/todos.ts` at once, git sees one working tree and the last write wins.
+
+So take turns in one working tree, or give each agent its own worktree and merge with git like you would for two people.
+
+## How does the handoff brief keep both agents in step?
+
+The brief is a plain-text excerpt of one session. It has a fixed order: a line naming the source agent and session, the session metadata, the goal (the first user message), the files touched, and as many recent turns as fit in 12,000 characters by default. The full breakdown is in [what goes into a handoff brief](/blog/what-goes-into-a-handoff-brief).
+
+Two properties make it work for this:
+
+1. **It's history, not state.** The brief says what happened and which files were touched, never their contents. Its first line tells the receiving agent to verify file state on disk before assuming it. Git and the disk stay the source of truth, so the agents can't drift apart on what the code is.
+2. **It goes both ways.** Every agent's sessions are readable by the others. After the reviewer finishes, the author can load the reviewer's session the same way.
+
+## Workflow 1: build in one agent, review in the other
+
+Set up once, in the project. No account needed:
+
+```bash
+npm install -g @adrive/cli
+cd ~/code/your-project
+adrive init --local
+```
+
+Build the change in Claude Code. Before you leave, make the last message state the goal and what's left, because the brief carries the most recent turns. Then open Codex in the same directory and ask:
+
+> Resume my last AgentDrive session from Claude Code. Don't change anything yet. Read the files it touched and review the change against the goal.
+
+Codex calls `drive_resume`, which takes a `platform` filter, so naming Claude Code gets you that agent's session rather than another one. For a review you may want more of the conversation than 12,000 characters. `drive_resume` accepts `max_chars` up to 50,000, and the shell's `--max-chars` takes any size:
+
+```bash
+adrive resume --list                          # id, agent, time and title per session
+adrive resume claude-code:<session-id> --max-chars 30000
+```
+
+When the review is done, go back to Claude Code and run `/agentdrive:resume`. It loads the newest session from a different agent, which is now the Codex review.
+
+## Workflow 2: two agents in parallel worktrees
+
+When the halves are independent, such as an API change and its client, give each agent its own git worktree:
+
+```bash
+git worktree add ../your-project-client -b client-work
+```
+
+Run Claude Code in `~/code/your-project` and Cursor in `~/code/your-project-client`. Each agent edits only its own tree, and you merge the branches when both are done.
+
+Resume still works across the two directories, because of how AgentDrive keys projects. With a git remote, the project key is the normalized remote, such as `github.com__acme__api`, and both worktrees share it. Without a remote, the key comes from the repo folder and a hash of its path, so two worktrees count as two projects. Add a remote first if you want them matched.
+
+If you're checking what the other side decided before you merge, ask Cursor for the latest Claude Code session, or list sessions with `/agentdrive-sessions`.
+
+## Workflow 3: a relay when one agent hits its limit
+
+This is the same as workflow 1, except the first agent stopped on its own. Two habits help:
+
+- Let the current turn finish if the agent allows it, so the disk matches the last turn.
+- Tell the next agent to check `git status` and `git diff` before it continues. The brief lists the files touched; the diff shows what's in them now.
+
+## How do I see which agent did what?
+
+In local mode, `adrive resume --list` is the record: one line per session with its agent. Nothing goes into a timeline, because nothing is uploaded.
+
+Signed in, every synced session is stamped with the agent that produced it, and the workspace timeline shows the history:
+
+```bash
+adrive init                # sign in and sync sessions from every wired agent
+adrive timeline --today    # workspace activity since midnight UTC
+```
+
+Signing in also lets the second agent run on another machine. With a git remote, any clone of the repo matches the same project.
+
+## FAQ
+
+### Can two agents work in the same directory at once?
+
+They can, but AgentDrive won't stop them overwriting each other. Take turns in one tree, or use separate git worktrees and merge.
+
+### Does the second agent see the first agent's reasoning?
+
+No. The brief carries messages and tool calls. Thinking blocks and reasoning items are skipped, and so is tool output. The receiving agent reads the files itself.
+
+### Which agents does this work with?
+
+Claude Code, Codex, OpenCode, Cursor and Antigravity, in any direction. Each pair has a page, for example [Claude Code to Codex](/resume/claude-code-to-codex) and [Codex to Cursor](/resume/codex-to-cursor).
+
+### How is this different from a shared CLAUDE.md or AGENTS.md?
+
+Those files hold standing instructions for a repo. A brief is one session's history, made when you need it. The [comparison with handoff notes](/compare/claude-md-handoff-notes) goes into the trade-offs.
+
+### Does it cost anything?
+
+Local resumes on one machine are unlimited with no account. The [pricing page](/pricing) covers signed-in plans.
+
+## Start with a review
+
+The lowest-risk way to try this is workflow 1 on a small change: build it in one agent, then ask the other to resume the session and review it without editing anything. The [resume guides](/resume) cover every pair.
