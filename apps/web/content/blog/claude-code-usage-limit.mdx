@@ -1,0 +1,127 @@
+---
+title: What to do when Claude Code hits its usage limit
+description: Claude Code hit its usage limit mid-task? You can wait, pay for more usage or switch agents. Here is how to carry the same task into Codex or Cursor.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+When Claude Code hits its usage limit, you have three options: wait for the limit to reset, pay for more usage, or carry on in another agent. If the task can't wait, open Codex or Cursor in the same project and load a handoff brief from the Claude Code session, so you don't have to explain the task again.
+
+The limit tends to land at a bad moment. The plan is in the session, half the files are edited, and the agent that knows why is the one that just stopped. This post covers all three options honestly, then shows the switch in detail, because that's the one AgentDrive helps with.
+
+## Why did Claude Code stop?
+
+On the Pro and Max plans, Claude Code runs on your Claude subscription. According to [Anthropic's help center](https://support.claude.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan), those plans have a five-hour session limit and a weekly limit, and the limits are shared across Claude and Claude Code. Usage in the Claude app counts against the same allowance as your coding sessions.
+
+If you hit the limit mid-response, Claude Code may finish the current step and show "Usage limit reached · wrapping up." Run `/status` in Claude Code to see where you stand.
+
+## Option 1: wait for the reset
+
+Waiting costs nothing. Your edits are on disk and the session is still in Claude Code's transcript store, so nothing is lost. If the work isn't urgent, this is the right answer.
+
+## Option 2: pay for more usage
+
+Anthropic's help center lists the paid routes: turn on usage credits, move to a larger plan, or switch to a Claude Console account and pay standard API rates. One thing to check either way: if an `ANTHROPIC_API_KEY` environment variable is set, Claude Code uses that key instead of your subscription, and API charges apply.
+
+## Option 3: continue in another agent
+
+If you also have Codex or Cursor, you can keep going today. The hard part is that the new agent starts with nothing. Normally you'd copy the plan out of the old session, paste it in, explain what was already tried and point at the files that changed. That's the chore AgentDrive removes: it reads the Claude Code session and gives the next agent a handoff brief with the goal, the files touched and the most recent turns.
+
+There are two ways to do it: local mode with no account, and signed-in mode.
+
+## How do I continue in Codex or Cursor without an account?
+
+Use local mode. It reads each agent's own transcripts on your machine, uploads nothing and needs no network. Claude Code already keeps its transcripts on disk, so this works even if you install AgentDrive after you hit the limit.
+
+```bash
+npm install -g @adrive/cli
+cd ~/code/your-project
+adrive init --local     # wire your agent tools without signing in
+adrive resume --list    # this project's sessions from your other agents
+adrive resume           # handoff brief for the newest one
+```
+
+`adrive resume <id>` prints the brief for one session from the list. Resume skips sessions from the agent you run it in, and it applies the same secret redaction that sync applies before an upload.
+
+`adrive init --local` also wires the AgentDrive MCP server into Codex and Cursor, so you don't need the shell at all. Restart the agent so it loads the new connection, then ask in the same project directory:
+
+> Resume my last AgentDrive session from Claude Code. Check the files on disk before continuing.
+
+The agent calls `drive_resume`, which in local mode reads the transcripts on this machine. In Cursor you can also run `/agentdrive-resume`. Reload the Cursor window after setup (Developer: Reload Window) so it picks up the change.
+
+Claude Code, Codex and OpenCode need no setup for local mode to find their sessions. Cursor and Antigravity do: their transcripts don't record the project directory, so the hooks from `adrive init --local` record it when a session starts. That only matters when Cursor is the agent you're leaving, not the one you're moving to.
+
+## How do I do it signed in?
+
+Signing in syncs sessions to your AgentDrive workspace. You can then resume from another machine, share a session with a teammate, and see in the timeline which agent did what.
+
+```bash
+npm install -g @adrive/cli
+adrive init
+```
+
+`adrive init` signs you in through the browser, where you enter the code it prints, and wires session sync into Codex, Cursor, OpenCode and Antigravity. In Claude Code, AgentDrive is a plugin:
+
+```
+/plugin marketplace add agentdrive-sh/agentdrive-mcp
+/plugin install agentdrive@agentdrive
+```
+
+Then make sure the Claude Code session has reached your workspace:
+
+- **If the plugin was already installed,** exit Claude Code. The session-end hook always syncs. Turn-end syncs are limited to one every two minutes per session, so the very last turn may not be uploaded until the session ends.
+- **If you installed after hitting the limit,** run `adrive sync` in the project. It sweeps every agent's sessions, Claude Code's included. The first sweep looks back 14 days.
+
+Now open Codex in the same project and ask it to resume your last AgentDrive session from Claude Code. Signed in, `drive_resume` prefers the most recent session in this project from a **different** agent, so Codex gets the Claude Code session rather than its own last run. From a shell, run `adrive resume --list` and then `adrive resume <id>`. The shell command without an id picks the latest session from any agent.
+
+The Free plan includes 10 cloud resumes a month. Local resumes are unlimited and don't count toward them.
+
+## What does the other agent get?
+
+The brief starts with a line naming the source agent and session, and an instruction to verify file state on disk before assuming it. Then come the session metadata (project, working directory, title, last update, turn count), the goal, which is the session's first user message, the files touched, and as many recent turns as fit in 12,000 characters by default. The [sessions docs](/docs/concepts/sessions) cover the format.
+
+That instruction about the disk matters here. Claude Code may have stopped in the middle of an edit. The new agent should read the files before it trusts the last turn.
+
+## Which pairs does this work for?
+
+Any direction between Claude Code, Codex, OpenCode, Cursor and Antigravity. Every pair has its own page. When Claude Code is the one that stopped, these two are the ones you want:
+
+- [Claude Code to Codex](/resume/claude-code-to-codex)
+- [Claude Code to Cursor](/resume/claude-code-to-cursor)
+
+If you'd rather watch it first, here is [a short video that resumes a Codex session in Claude Code](https://youtu.be/nj7esMsJiwA). The steps are the same in the other direction.
+
+## FAQ
+
+### Do I need AgentDrive installed before I hit the limit?
+
+Not for local mode. Claude Code's transcripts are already on disk, so you can install AgentDrive afterwards and resume straight away. Signed in, run `adrive sync` once after installing to upload recent sessions.
+
+### Does local mode upload my session?
+
+No. Local mode reads the transcripts on your machine and prints the brief there. Nothing is uploaded, and nothing is recorded in the provenance timeline.
+
+### Will Codex redo work Claude Code already did?
+
+Your edits are already in your working tree, and the brief lists the files touched and the latest turns. The brief tells the agent to check file state on disk, and it's worth repeating that in your prompt.
+
+### Can I move back to Claude Code after the reset?
+
+Yes, the same way in reverse. With the plugin installed, run `/agentdrive:resume` in Claude Code to load the Codex session. Without it, run `adrive resume` in a terminal and paste the brief.
+
+### Does this cost anything?
+
+Local mode needs no account and local resumes are unlimited. The Free plan includes 10 cloud resumes a month. Signed in, `adrive plan` shows your usage.
+
+## Try it now
+
+On the machine where Claude Code stopped, in the project directory:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+The [quick start](/docs/quick-start) walks through both modes.

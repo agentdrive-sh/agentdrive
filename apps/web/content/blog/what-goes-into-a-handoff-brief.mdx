@@ -1,0 +1,143 @@
+---
+title: What goes into a handoff brief, and what doesn't
+description: An AgentDrive handoff brief carries a session's goal, files touched and recent turns in a fixed budget. Here is what it holds, what it leaves out and why.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+A handoff brief is a plain-text excerpt of one agent session that another agent can load. AgentDrive builds it from the session's transcript: the source agent and session metadata, the goal (the first user message), the files touched and as many recent turns as fit in 12,000 characters. It does not carry model state or hidden reasoning.
+
+When Codex runs `drive_resume`, or you run `adrive resume` in a shell, this brief is what comes back. I want to be precise about it, because what the next agent sees decides how well it picks the task up. Everything below comes from `buildHandoff` in `packages/mcp-server/src/session.ts`, which is Apache-2.0 like the rest of the client code.
+
+## What is in a handoff brief?
+
+The brief has a fixed order:
+
+1. **An intro line.** It names the source agent and session and ends with an instruction: "Continue this work; verify file state on disk before assuming it."
+2. **Session metadata.** Project key, working directory, title, the time of the last update and the number of turns.
+3. **Goal.** The first user message in the session, capped at 1,500 characters, or an eighth of the budget if that is smaller.
+4. **Files touched.** Every path the session edited or wrote, up to 50, then a `(+N more)` line.
+5. **Uploaded files.** Only when you are signed in and the session isn't encrypted: the workspace id and the file ids of the copies sync uploaded, so an agent on a machine without those files can fetch them with `drive_read`.
+6. **Recent turns.** The newest turns that fit in the rest of the budget, printed oldest to newest, under a marker that says how many earlier turns were left out.
+
+The budget is 12,000 characters by default. `drive_resume` takes `max_chars` from 1,000 to 50,000, and `adrive resume` takes `--max-chars`. To fill the turns, the builder starts at the newest turn and walks back, adding whole turns until the next one doesn't fit. If even the newest turn is too long, it keeps the end of that turn and marks the cut with `[... turn truncated ...]`.
+
+If the part before the turns runs past half the budget, the file lists shrink first, so even a small budget still carries the latest turns.
+
+## What does a brief look like?
+
+Here is a short example. The session and project are made up, but the layout is the one `adrive resume` prints:
+
+```text
+Handoff from a claude-code session (00000000-example-session). Continue this work; verify file state on disk before assuming it.
+
+Project: github.com__example__todo-api
+Cwd: /Users/you/code/todo-api
+Title: Add due dates to todos
+Updated: 2026-11-18T10:42:07.000Z
+Turns: 23
+
+## Goal
+
+Add an optional due_date to todos. Store it as an ISO date, validate it in the create and update handlers, and add a due_before filter to the list endpoint. Keep the existing tests passing.
+
+## Files touched
+
+- src/schema.ts
+- src/routes/todos.ts
+- test/todos.test.ts
+
+## Recent turns
+
+[... 20 earlier turns omitted ...]
+
+### assistant  _(2026-11-18T10:39:51.000Z)_
+
+The schema and both handlers accept due_date now. The list filter is next.
+
+> tool: Edit /Users/you/code/todo-api/src/routes/todos.ts
+
+### user  _(2026-11-18T10:41:30.000Z)_
+
+Also reject due dates in the past on create.
+
+### assistant  _(2026-11-18T10:42:07.000Z)_
+
+Added the past-date check to create only, since an update may need to keep an old date. Two tests in test/todos.test.ts still fail. Running them next.
+
+> tool: Bash pnpm test test/todos.test.ts
+```
+
+Tool calls show up as one line each: the tool name, then the path it touched or a short summary of its input, such as the command it ran.
+
+## What does the brief leave out?
+
+- **Model state.** Nothing from inside the model is carried over. The brief is text, and the next agent reads it like any other message. That is also why it works between agents built on different models.
+- **Hidden reasoning.** The transcript parsers keep message text and tool calls. In Claude Code, thinking blocks are skipped. In Codex, reasoning items are skipped.
+- **Tool output.** Command output and the file contents a tool returned are not in the brief. Only the call is.
+- **Older turns.** Anything that doesn't fit the budget is left out, with a count. The goal stays, because it is placed before the turns.
+- **Secrets, as far as patterns can find them.** Transcripts go through the same redactor that runs before sync uploads anything. It replaces common shapes like API tokens and private keys with markers such as `[redacted:github-token]`. It's best-effort, not a security boundary.
+
+## Why is the next agent told to check files on disk?
+
+Because the brief is history and the disk is the present. Between the last turn and the resume, you may have edited a file by hand, switched branches or stashed something. The session may also have stopped in the middle of an edit, which is common when an agent hits a usage limit.
+
+The brief lists which files were touched. It never includes their contents. So the receiving agent has to read the files to know their current state, and the intro line tells it to do that before it builds on anything the transcript says.
+
+If the files aren't on this machine at all, for example when you resume on another laptop, the uploaded-files section gives the agent the workspace ids it needs to read the copies sync uploaded. Those are the files the agent wrote that git doesn't track. Tracked files come from your git remote as usual.
+
+## How is it different from CLAUDE.md or AGENTS.md?
+
+CLAUDE.md and AGENTS.md hold standing instructions for a repo: how to run the tests, which conventions to follow, what not to touch. You write them by hand, they change rarely, and the agent loads them at the start of every session.
+
+A brief is about one session. It says what was asked and what happened most recently, and it is out of date as soon as the next session starts. The two don't compete. Keep your conventions in AGENTS.md and let the brief carry the task.
+
+AgentDrive uses both. When auto-context is on, `adrive init` adds a short instructions block for the agents you have installed: to `~/.codex/AGENTS.md` for Codex, to OpenCode's global `AGENTS.md`, and as a Cursor rule at `~/.cursor/rules/agentdrive.mdc`. That block tells the agent to call `drive_resume` when you want to continue earlier work, and to check the files it mentions on disk.
+
+## How is it different from a hand-written handoff note?
+
+A note you write yourself has judgment in it. You know that the second approach failed and why, and you can say so in one sentence. A brief has no judgment. It is assembled from the transcript by fixed rules, so the goal is the first message even if the task changed halfway through.
+
+The brief's advantage is that it exists when you didn't plan to stop. A usage limit or a crashed terminal doesn't wait for you to write a note.
+
+Two habits get you most of both:
+
+- Before you end a session on purpose, ask the agent to state the next step. That turn becomes the last one in the brief.
+- When the task drifted from the first message, say the current goal in your resume prompt.
+
+If you're comparing AgentDrive with memory services or the Filesystem MCP server instead, [the comparison pages](/compare) go through the differences.
+
+## FAQ
+
+### Can I make the brief bigger?
+
+Yes. Pass `max_chars` to `drive_resume`, up to 50,000, or `--max-chars` to `adrive resume`. The default is 12,000.
+
+### Is the full transcript kept anywhere?
+
+When you're signed in, sync uploads the redacted transcript to your workspace at `sessions/<project>/<harness>/<session-id>.md`. The brief is built from that file. In local mode, the transcript stays in the agent's own store on your machine.
+
+### What if the first message wasn't really the goal?
+
+It is still used as the goal. Tell the receiving agent the current goal when you resume.
+
+### Does the receiving agent see the other model's thinking?
+
+No. The parsers skip thinking blocks and reasoning items, so only the visible messages and tool calls reach the brief.
+
+### What happens with Private Workspace on?
+
+The transcript is encrypted on your machine before upload, and `drive_resume` can't decrypt it. The agent is told to run `adrive resume <id>` in a shell, which decrypts locally and prints the same brief, without the uploaded-files section.
+
+## See a brief from your own sessions
+
+No account needed. In a project where you've used Claude Code, Codex or OpenCode:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
+
+The [sessions docs](/docs/concepts/sessions) cover sync, resume and the privacy controls in reference form.

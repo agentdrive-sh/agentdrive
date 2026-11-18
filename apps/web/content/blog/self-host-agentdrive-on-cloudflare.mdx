@@ -1,0 +1,140 @@
+---
+title: Self-host AgentDrive on Cloudflare
+description: What pnpm selfhost creates on your Cloudflare account, what it needs, how to connect the CLI with an API key, and what the AGPL asks of you in return.
+date: 2026-11-18
+author: Rakesh Roushan
+draft: false
+---
+
+To self-host AgentDrive, clone the public repo, log in to Wrangler and run `pnpm selfhost`. The script creates the KV, R2 and Vectorize resources on your Cloudflare account, deploys the API worker, sets its secrets and prints a one-time owner API key. You need the Workers Paid plan, and the instance is API-key only.
+
+The server is AGPL-3.0, so you're free to run it yourself. Self-hosting is community-supported: help comes through GitHub issues and discussions, there's no SLA, and the hosted service at agentdrive.sh is the product I support. This post goes through exactly what the script does, read from `apps/worker/scripts/selfhost.ts`, so you know what will appear on your account before you run it.
+
+## What do I need before I start?
+
+- **Cloudflare Workers Paid** ($5/month). The worker binds a Durable Object (`FileCollab`) on the key-value storage backend, which only Workers Paid can create. Workers Free also caps CPU at 10 ms per request, and uploads, search and encryption need more. KV, R2, Vectorize and Workers AI bill against their own free allowances first.
+- **R2 turned on** for the account, once, in the Cloudflare dashboard.
+- **A workers.dev subdomain.** The dashboard sets one up the first time you open Workers.
+- **Node.js 22.18 or later** and **pnpm 10.** The script is TypeScript that Node runs directly.
+- **A logged-in Wrangler:** `pnpm --filter @agentdrive/worker exec wrangler login`. If your login can reach more than one account, set `CLOUDFLARE_ACCOUNT_ID` first.
+
+The worker uses these bindings from `apps/worker/wrangler.toml`:
+
+| Binding | Type | What the self-hosted copy gets |
+|---|---|---|
+| `KV` | KV namespace | `agentdrive-kv`, created or reused by name |
+| `OAUTH_KV` | KV namespace | `agentdrive-oauth-kv` |
+| `R2` | R2 bucket | `agentdrive-r2` |
+| `VECTORIZE` | Vectorize index | `agentdrive-vectorize`, 768 dimensions, cosine |
+| `AI` | Workers AI | kept as is |
+| `RESUME_METER`, `FILE_COLLAB`, `BILLING_COORDINATOR`, `MAGIC_CODES` | Durable Objects | kept, with their migrations |
+| `RL_PRINCIPAL`, `RL_SEARCH`, `RL_REGISTER`, `RL_MAGIC` | Rate limits | kept, namespace ids `41001` to `41004` |
+| `SELF` | Service binding | pointed at your own worker |
+| `SEND_EMAIL` | Email sending | dropped, because a self-hosted instance never sends mail |
+
+The names above assume the default `--name agentdrive`. Pass `--name` to use another prefix.
+
+## What does `pnpm selfhost` do?
+
+```bash
+git clone https://github.com/agentdrive-sh/agentdrive.git
+cd agentdrive
+pnpm install --frozen-lockfile
+pnpm selfhost
+```
+
+In order, the script:
+
+1. **Checks the worker name** against the production AgentDrive workers and refuses theirs.
+2. **Checks your Wrangler login,** then looks for an existing worker with your chosen name. If there is one, every version it serves must carry `SELF_HOSTED = "true"`, which only this script sets. Otherwise it stops and asks you to pick another `--name`, so it can't overwrite a worker it didn't deploy.
+3. **Creates or reuses the resources** in the table above. An existing Vectorize index with the wrong dimensions or metric stops the run. Missing metadata indexes on `org_id`, `ws_id`, `agent_id` and `agent_platform` are added.
+4. **Writes `apps/worker/wrangler.selfhost.toml`** from the production `wrangler.toml`. It swaps in your resource ids, drops production routes and `WORKERS_DEV_SUBDOMAIN`, sets `SELF_HOSTED = "true"`, and points `APP_URL`, `SITE_URL` and `MCP_URL` at your workers.dev URL. It works from an allow-list, so a section it doesn't recognise stops the run instead of reaching your account with a production id in it. The file is gitignored.
+5. **Builds and deploys the worker** with registration closed. A first run deploys twice, because the workers.dev URL and the worker itself only exist after the first deploy.
+6. **Sets the secrets** `TOKEN_SIGNING_SECRET`, `BUCKET_KEK_ROOT` and `BUCKET_KEK_VERSION` with `wrangler secret put`, without printing them. Secrets that already exist are never replaced.
+7. **Registers your owner key.** It sets a random one-time `SELF_HOSTED_BOOTSTRAP_TOKEN` secret, sends it in the `X-Bootstrap-Token` header of `POST /v1/register`, and deletes the secret straight after, whether registration worked or not. Ctrl-C during this step still deletes it. This only happens when the instance has no organization yet, or when you pass `--register`.
+8. **Prints the owner key once,** with the command that connects the CLI and the one that mints a key for a teammate.
+
+Cloudflare never returns secret values, so if you want a copy, pass `--backup-secrets <new file>`. The script writes the generated secrets there with mode 0600, and syncs the file to disk before it sets any secret. `pnpm selfhost --dry-run` writes the config with placeholder ids and runs `wrangler deploy --dry-run` without touching your account.
+
+## How do I connect the CLI?
+
+A self-hosted instance has no browser sign-in, so the CLI takes the key on stdin:
+
+```bash
+npm install -g @adrive/cli
+printf '%s' 'agentdrive_live_...' | adrive auth login --api-url https://agentdrive.<subdomain>.workers.dev --with-key
+adrive init
+```
+
+`--with-key` reads the key from stdin, so it never shows up in a process listing, and it checks the key against your instance before saving it. You need `@adrive/cli` 1.4.0 or later. `adrive init` keeps the API URL you just saved and wires your agent tools to your instance. The stdio MCP server reads the same config.
+
+Registration stays closed after that. `POST /v1/register` without a valid bootstrap token returns `403` with `code: "registration_closed"`, so nobody who finds your workers.dev URL can sign up. To add a teammate, mint them a key with yours:
+
+```bash
+curl -X POST https://agentdrive.<subdomain>.workers.dev/v1/keys \
+  -H "Authorization: Bearer $AGENTDRIVE_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"teammate"}'
+```
+
+They connect with the same `auth login --with-key` command.
+
+## What does a self-hosted instance include, and what doesn't it?
+
+You get the AgentDrive API: the REST endpoints, the hosted MCP endpoint at `/mcp`, session sync and resume from all five agents, versioned files and semantic search. The instance has one organization and no plan limits. `/v1/org` reports every quota as `null`, which the `drive_org` tool shows as unlimited.
+
+You don't get:
+
+- **The web dashboard.** Use the CLI, the MCP server and the SDK.
+- **Email sign-in, browser sign-in and invites.** Those routes return `501` with codes such as `email_signin_disabled` and `invites_disabled`. Teammates get keys from `/v1/keys`.
+- **OAuth for remote MCP clients.** The `/mcp` endpoint works with an `Authorization: Bearer <API key>` header. OAuth doesn't, because its consent page needs the dashboard.
+- **Billing.** Every billing route returns `501` with `code: "billing_disabled"`, and Stripe is never called.
+
+Two things to keep in mind. Rate limit namespace ids are account-wide, so if another Worker on your account already uses `41001` to `41004`, change them in `wrangler.toml` before deploying. And keep the secrets safe: losing `TOKEN_SIGNING_SECRET` invalidates every share link, and losing `BUCKET_KEK_ROOT` makes envelope-encrypted blobs unreadable.
+
+To upgrade, pull and run the script again. It reuses your resources, keeps your secrets and registers nothing:
+
+```bash
+git pull
+pnpm install --frozen-lockfile
+pnpm selfhost
+```
+
+## What does the AGPL ask of me?
+
+The server code (`apps/worker` and `apps/web`) is AGPL-3.0. The CLI, MCP server, SDK, shared types, installer and Claude Code plugin are Apache-2.0. In plain words, from [LICENSING.md](https://github.com/agentdrive-sh/agentdrive/blob/main/LICENSING.md):
+
+- You can self-host the server for yourself, your team or your company, in production, at any scale, without asking.
+- You can read, audit, modify and fork it, and run an unmodified copy as a service for others.
+- If you **modify** the server and let users interact with your modified version over a network, you must offer those users the complete corresponding source of your version under the AGPL. That is section 13 of the license.
+- Your own code that talks to the server over its API does not become AGPL, whether it talks to the hosted service or your copy.
+
+If you can't use AGPL software, or want to ship a modified server without publishing the changes, a commercial license is available from licensing@agentdrive.sh. The code licenses don't cover the AgentDrive name or logo. LICENSING.md is the summary; the license text itself is what binds.
+
+## FAQ
+
+### Can I run it on the Workers Free plan?
+
+No. The `FileCollab` Durable Object needs Workers Paid, and the 10 ms CPU cap on Free is too low for uploads, search and encryption.
+
+### What if I lose my owner key?
+
+Run `pnpm selfhost --register`. It issues a new owner key in the instance's organization, and that key can revoke the lost one with `DELETE /v1/keys/<key_id>`.
+
+### Can my teammates sign up themselves?
+
+No. Registration is closed apart from the moment the script holds the bootstrap token. Mint each teammate a key with `POST /v1/keys`.
+
+### Do I need a server at all?
+
+Not if you work on one machine. Local mode resumes sessions between agents straight from their transcripts on disk, with no account and no server. Self-hosting is for when you want sync across machines or teammates on infrastructure you control.
+
+## Next step
+
+Read the [self-hosting guide](/docs/self-hosting) for every flag and error code. If you just want to try resume first, local mode needs nothing deployed:
+
+```bash
+npm install -g @adrive/cli
+adrive init --local
+adrive resume
+```
