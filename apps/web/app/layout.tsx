@@ -81,6 +81,9 @@ const JSON_LD = {
         'https://www.npmjs.com/package/@adrive/mcp-server',
         'https://www.npmjs.com/package/@adrive/sdk',
         'https://www.youtube.com/@agentdrive-sh',
+        'https://www.linkedin.com/company/agentdrive',
+        'https://bsky.app/profile/agentdrive.sh',
+        'https://dev.to/agentdrive-sh',
       ],
     },
     {
