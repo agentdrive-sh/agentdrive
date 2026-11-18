@@ -7,6 +7,7 @@ export interface Env {
   MAGIC_CODES: DurableObjectNamespace<import('./durable-objects/magic-codes.js').MagicCodes>;
   RESUME_METER: DurableObjectNamespace<import('./durable-objects/resume-meter.js').ResumeMeter>;
   RESUME_METER_EPOCH?: string;
+  IDEMPOTENCY: DurableObjectNamespace<import('./durable-objects/idempotency.js').IdempotencyRecord>;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
   SEND_EMAIL: SendEmail;

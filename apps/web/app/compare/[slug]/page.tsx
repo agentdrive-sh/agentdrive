@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { FaqSection, Rich, breadcrumbLd, faqLd, pageMetadata, type Faq } from '@/components/marketing/answer-page';
+import { FaqSection, Rich, breadcrumbLd, faqLd, pageMetadata } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { JsonLd } from '@/components/seo/json-ld';
-import { COMPETITORS, LAST_CHECKED, getCompetitor, type Competitor } from '../data';
+import { COMPETITORS, LAST_CHECKED, competitorFaq, getCompetitor } from '../data';
 import { ComparisonTable } from '../table';
 
 export const dynamicParams = false;
@@ -19,20 +19,12 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   return pageMetadata(`AgentDrive vs ${c.name}`, c.description, `/compare/${c.slug}`, `/compare/${c.slug}/opengraph-image`);
 }
 
-function faqFor(c: Competitor): Faq[] {
-  return [
-    { q: `What is the difference between ${c.name} and AgentDrive?`, a: c.tagline },
-    { q: `When should I use ${c.name}?`, a: c.pickThem },
-    { q: 'When should I use AgentDrive instead?', a: c.pickUs },
-    { q: `Can I use AgentDrive alongside ${c.name}?`, a: `Yes. ${c.together}` },
-  ];
-}
 
 export default async function ComparePage(props: { params: Promise<{ slug: string }> }) {
   const c = getCompetitor((await props.params).slug);
   if (!c) notFound();
   const sources = [...new Set(c.facts.map((f) => f.source))];
-  const faq = faqFor(c);
+  const faq = competitorFaq(c);
 
   return (
     <MarketingPageShell screenLabel={`marketing/compare/${c.slug}`}>

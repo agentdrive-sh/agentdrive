@@ -2,12 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHero } from '@/components/marketing/page-shell';
 import { pageMetadata } from '@/components/seo/site';
-import { formatPostDate, listPosts } from '@/lib/source';
+import { BLOG_DESCRIPTION, formatPostDate, listPosts } from '@/lib/source';
 
 export const metadata: Metadata = {
   ...pageMetadata(
     'Blog',
-    'Notes from building AgentDrive: session continuity across Claude Code, Codex, OpenCode, Cursor and Antigravity, provenance, and portable storage.',
+    BLOG_DESCRIPTION,
     '/blog',
   ),
   alternates: { canonical: '/blog', types: { 'application/rss+xml': '/blog/rss.xml' } },

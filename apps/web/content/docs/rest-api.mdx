@@ -1,6 +1,6 @@
 ---
 title: AgentDrive REST API
-description: 'The AgentDrive REST API that MCP, the CLI and the SDKs wrap: authentication modes, identity headers, endpoints, search and runs, errors and versioning.'
+description: 'The AgentDrive REST API that MCP, the CLI and the SDKs wrap: authentication modes, identity headers, endpoints, search and runs, errors, rate limits, idempotency and versioning.'
 ---
 
 The REST API at `https://app.agentdrive.sh/v1/*` is the underlying surface that MCP, the CLI, and the SDKs all wrap. Use it directly when you want a non-MCP client.
@@ -78,8 +78,52 @@ See the [v1 roadmap](/docs/v1-roadmap) for sequencing.
 
 ## Errors
 
-Standard HTTP status codes. Error bodies use `{ "success": false, "error": "<human_readable>" }`, optionally with a machine-readable `code` and additional fields. Rate limits are surfaced as `429` with a `Retry-After` header.
+Standard HTTP status codes. Every `4xx` and `5xx` body has the same shape: `{ "success": false, "code": "<machine_readable>", "error": "<human_readable>" }`. Branch on `code`, not on `error`. Routes set specific codes such as `rate_limited`, `plan_limit` or `idempotency_key_reused`; an error with no specific code gets the default for its status, such as `invalid_request` (400), `unauthorized` (401), `forbidden` (403), `not_found` (404) or `internal_error` (500). Some errors add fields: a `402` with `plan_limit` also carries `metric`, `used`, `limit`, `plan` and `upgrade_url`. The OpenAPI spec at [/openapi.json](/openapi.json) declares these bodies as the `Error` schema, and the bodies that add fields as `allOf` it.
+
+## Rate limits
+
+| Policy | Limit | Counted per | Applies to |
+|---|---|---|---|
+| `principal` | 100 requests / 10 s | API key, session or share link | Every authenticated route |
+| `search` | 20 requests / 10 s | API key, session or share link | `/v1/search`, `/v1/context` and file reindex |
+| `ip_register` | 5 requests / 60 s | Client IP | `/v1/register` |
+| `ip_magic` | 10 requests / 60 s | Client IP | Email-code and CLI sign-in |
+
+Limits are counted per Cloudflare location. Each response names the policies its request was checked against in a `RateLimit-Policy` header, as defined in the IETF draft [RateLimit header fields for HTTP](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/): `q` is the number of requests and `w` the window in seconds.
+
+```
+RateLimit-Policy: "principal";q=100;w=10, "search";q=20;w=10
+```
+
+The limiter does not report how much of a window is left, so there is no `RateLimit` header with a remaining count. A request over a limit gets `429` with code `rate_limited` and a `Retry-After` header in seconds; wait that long, then retry. The per-address sign-in code limits (5 codes an hour, 15-minute lockout) also answer `429` with `Retry-After`.
+
+## Idempotency
+
+Authenticated `POST`, `PUT` and `PATCH` requests accept an `Idempotency-Key` header, as defined in the IETF draft [The Idempotency-Key HTTP Header Field](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/). Send a new unique value, such as a UUID, with each write, and send the same value again when you retry that write.
+
+```
+Idempotency-Key: <a new UUID for each write>
+```
+
+- The key is 1 to 255 visible ASCII characters, compared exactly. Any other value answers `400` `invalid_idempotency_key`.
+- Keys belong to the API key, session or share link that sent them, so two principals cannot collide.
+- The first request runs normally, and its response is kept for 24 hours. A retry with the same key, method, path, query and body gets that response again with `Idempotent-Replayed: true`, and the write does not run a second time.
+- The same key with a different request answers `422` `idempotency_key_reused`.
+- A retry while the first request is still running answers `409` `idempotency_key_in_use`. Retry after it finishes. If the first request was interrupted before it answered, its key is free again after 5 minutes.
+- Refusals that mean nothing ran (`401`, `403`, `404`, `429`) and server errors (`5xx`) are not kept, so you can retry with the same key.
+- A response larger than 1 MiB is not kept. The key stays used, and a retry answers `409` `idempotency_response_not_stored`; read the resource to see the result.
+- `POST /v1/search` and `POST /v1/context` only read, so they ignore the header. `POST /v1/auth/logout` ignores it too: it ends the session that authenticates it, and repeating it is harmless. Unauthenticated sign-in and registration routes have no principal yet and ignore it too, as do `GET` and `DELETE`. Creating an API key or a share link, and opening the billing portal, ignore it as well: their responses carry a secret that AgentDrive never stores in clear, so list your keys or links to check whether a lost request went through.
 
 ## Versioning
 
 The current version is `v1`. Breaking changes will ship as `v2` rather than as in-place edits to `v1`. Additive changes — new endpoints, new optional fields — happen in place.
+
+### Deprecation
+
+An endpoint or field is never removed without notice. When one is deprecated:
+
+- its responses carry a `Deprecation` header ([RFC 9745](https://www.rfc-editor.org/rfc/rfc9745)) with the date it was deprecated, and a `Sunset` header ([RFC 8594](https://www.rfc-editor.org/rfc/rfc8594)) with the date it stops working;
+- this page marks it deprecated and names its replacement;
+- it keeps working for at least 90 days after the `Deprecation` date.
+
+No `v1` endpoint is deprecated today.

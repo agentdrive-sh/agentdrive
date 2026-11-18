@@ -49,7 +49,9 @@ bindings = [
   { name = "FILE_COLLAB", class_name = "FileCollab" },
   { name = "BILLING_COORDINATOR", class_name = "BillingCoordinator" },
   # One per lowercased email: its sign-in code, wrong-guess count, lockout and send cap.
-  { name = "MAGIC_CODES", class_name = "MagicCodes" }
+  { name = "MAGIC_CODES", class_name = "MagicCodes" },
+  # One per (principal, Idempotency-Key): the claim and stored response of a REST write.
+  { name = "IDEMPOTENCY", class_name = "IdempotencyRecord" }
 ]
 
 [[migrations]]
@@ -67,6 +69,10 @@ new_sqlite_classes = ["BillingCoordinator"]
 [[migrations]]
 tag = "v4-resume"
 new_sqlite_classes = ["ResumeMeter"]
+
+[[migrations]]
+tag = "v5-idempotency"
+new_sqlite_classes = ["IdempotencyRecord"]
 
 [ai]
 binding = "AI"

@@ -85,7 +85,7 @@ Worker entry: `apps/worker/src/index.ts` mounts the per-domain route modules:
 
 Custom domain: `app.agentdrive.sh`. The current website, docs and dashboard are served by the separate `apps/web` OpenNext Worker at `agentdrive.sh`, whose `API` service binding targets this API Worker. `apps/frontend` is legacy.
 
-CI gate: `.github/workflows/ci.yml` runs typecheck + test + build + verify-claims on every PR.
+CI gate: `scripts/ci.sh` runs typecheck, test, build, verify-claims, the browser regressions and a production dependency audit on each PR (GitHub's merge of its head into the base), on the maintainer's machine.
 
 ---
 
@@ -236,7 +236,7 @@ Three pipeline endpoints work together:
 | Public docs | `agentdrive.sh/docs` | apps/web/content/docs | Served with the website Worker |
 | Install script | `agentdrive.sh/install` | Generated string in the Worker | Built from `apps/installer/install.sh` via `apps/installer/build.mjs` |
 
-CI: GitHub Actions runs typecheck + test + build + verify-claims on every PR. No deploy from CI today — deploys are manual via `wrangler deploy` from a maintainer's machine. Deploy and rollback procedures live in a maintainer runbook.
+CI and deploys run on the maintainer's machine, not GitHub Actions: `scripts/ci.sh` checks one commit and posts each job as a commit status. Deploys go out from there too, only for a commit whose statuses are green; deploy and rollback procedures live in a maintainer runbook.
 
 Compatibility date `2025-02-20`. `nodejs_compat` flag enabled (for `Buffer`, `crypto` interop shims).
 
@@ -256,6 +256,7 @@ The Worker reads everything through Cloudflare bindings — no env-var URLs to r
 | `SEND_EMAIL` | Cloudflare Email Workers | Magic-link delivery | Yes |
 | `FILE_COLLAB` | Durable Object (`FileCollab` class) | Real-time collab — parked, not implemented | Bound, unused |
 | `MAGIC_CODES` | Durable Object (`MagicCodes` class, SQLite) | Email sign-in codes, one object per lowercased email: live code, wrong-guess lockout, send cap | Bound |
+| `IDEMPOTENCY` | Durable Object (`IdempotencyRecord` class, SQLite) | REST `Idempotency-Key` claims, one object per (principal, key): the in-flight claim and the stored response, deleted by alarm after 24 hours | Bound |
 | `SANDBOX` | Durable Object (Cloudflare Containers) | Per-workspace Linux sandbox | Optional — 503s when unbound |
 
 Secrets (via `wrangler secret put`):

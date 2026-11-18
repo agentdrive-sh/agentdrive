@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { FaqSection, breadcrumbLd, faqLd, pageMetadata, type Faq } from '@/components/marketing/answer-page';
+import { FaqSection, breadcrumbLd, faqLd, pageMetadata } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { JsonLd } from '@/components/seo/json-ld';
-import { AGENTDRIVE_MATRIX, COMPETITORS, LAST_CHECKED, MATRIX_COLS } from './data';
+import { AGENTDRIVE_MATRIX, COMPARE_FAQ, COMPARE_LEDE, COMPETITORS, LAST_CHECKED, MATRIX_COLS } from './data';
 
 export const metadata = pageMetadata(
   'AgentDrive vs the alternatives',
@@ -10,31 +10,13 @@ export const metadata = pageMetadata(
   '/compare',
 );
 
-const FAQ: Faq[] = [
-  {
-    q: 'When is AgentDrive the right tool?',
-    a: 'When one task moves between coding agents or machines. AgentDrive syncs each session from Claude Code, Codex, OpenCode, Cursor and Antigravity, and the next agent resumes from a handoff brief with the goal, the files touched and the recent turns.',
-  },
-  {
-    q: 'When is AgentDrive the wrong tool?',
-    a: "When you stay in one agent, its built-in resume restores the full conversation. When you are building an app that remembers its users, use a memory layer such as Mem0 or Cloudflare Agent Memory. For rules every session should follow, write CLAUDE.md or AGENTS.md.",
-  },
-  {
-    q: 'Which alternative is closest to AgentDrive?',
-    a: 'Session history tools. SpecStory and Entire also save sessions from several coding agents, and SpecStory can resume a session in a different agent. AgentDrive differs in handing the next agent a short brief, and in keeping the files agents write in a versioned workspace with provenance.',
-  },
-  {
-    q: 'Can I use AgentDrive alongside these tools?',
-    a: 'Yes. Most of them hold something different: project rules, facts about users, or a full session record. AgentDrive carries the state of the current task from one agent to the next.',
-  },
-];
 
 export default function CompareIndex() {
   return (
     <MarketingPageShell screenLabel="marketing/compare">
       <JsonLd
         data={[
-          faqLd(FAQ),
+          faqLd(COMPARE_FAQ),
           breadcrumbLd([
             { name: 'Home', path: '/' },
             { name: 'Compare', path: '/compare' },
@@ -44,7 +26,7 @@ export default function CompareIndex() {
       <PageHero
         width="wide"
         title="AgentDrive vs the alternatives"
-        lede="AgentDrive is the right tool when one task moves between coding agents or machines: it syncs each session and hands the next agent the goal, files touched and recent turns. It is not the right tool if you stay in one agent, need memory for an app you build, or only need standing project rules."
+        lede={COMPARE_LEDE}
         meta={`Last checked ${LAST_CHECKED}.`}
       />
       <section className="m-wrap" aria-label="Comparison matrix">
@@ -131,7 +113,7 @@ export default function CompareIndex() {
         </div>
       </section>
       <ProseSection>
-        <FaqSection faq={FAQ} />
+        <FaqSection faq={COMPARE_FAQ} />
       </ProseSection>
     </MarketingPageShell>
   );

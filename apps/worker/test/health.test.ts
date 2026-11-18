@@ -46,7 +46,7 @@ describe('GET /v1/health', () => {
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(503);
     const body = await res.text();
-    expect(body).toContain('unavailable');
+    expect(JSON.parse(body)).toMatchObject({ success: false, code: 'storage_unavailable', status: 'unavailable' });
     expect(body).not.toContain('synthetic-private-provider-detail');
   });
 });

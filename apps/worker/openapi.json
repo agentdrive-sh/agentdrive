@@ -4,7 +4,7 @@
     "title": "AgentDrive REST API",
     "version": "1.0.0",
     "summary": "Cross-agent artifact workspace with provenance.",
-    "description": "The HTTP surface that the AgentDrive MCP server, CLI and SDKs wrap: versioned workspace files, cross-agent session resume, semantic search, run provenance, sharing and org management. Errors are `{ \"success\": false, \"error\": \"...\" }`, sometimes with a machine-readable `code`. Paginated lists return `data` with a sibling `cursor`; pass it back as `?cursor=` until it is null.",
+    "description": "The HTTP surface that the AgentDrive MCP server, CLI and SDKs wrap: versioned workspace files, cross-agent session resume, semantic search, run provenance, sharing and org management. Errors are `{ \"success\": false, \"code\": \"...\", \"error\": \"...\" }` (the Error schema). Paginated lists return `data` with a sibling `cursor`; pass it back as `?cursor=` until it is null. Authenticated POST, PUT and PATCH operations take an Idempotency-Key header, and responses name the rate limits they were checked against in RateLimit-Policy.",
     "license": {
       "name": "AGPL-3.0-only",
       "identifier": "AGPL-3.0-only"
@@ -95,7 +95,7 @@
       "get": {
         "operationId": "getHealth",
         "summary": "Check service health",
-        "description": "Reports whether KV and R2 answer reads, with the deployed version. Needs no authentication. Answers 503 with the same body when either store is unavailable.",
+        "description": "Reports whether KV and R2 answer reads, with the deployed version. Needs no authentication. Answers 503 when either store is unavailable, with the same fields plus the error ones.",
         "tags": [
           "Meta"
         ],
@@ -117,7 +117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "$ref": "#/components/schemas/HealthUnavailable"
                 }
               }
             }
@@ -158,6 +158,11 @@
         "responses": {
           "201": {
             "description": "Agent registered.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -225,6 +230,11 @@
         "responses": {
           "200": {
             "description": "Code sent.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -271,6 +281,11 @@
         "responses": {
           "200": {
             "description": "Signed in.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -320,6 +335,11 @@
         "responses": {
           "200": {
             "description": "The principal.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -354,6 +374,11 @@
         "responses": {
           "200": {
             "description": "Logged out.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -397,6 +422,11 @@
         "responses": {
           "201": {
             "description": "Sign-in started.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -467,7 +497,11 @@
             "session": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -481,6 +515,14 @@
         "responses": {
           "200": {
             "description": "Sign-in approved.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -503,6 +545,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -577,6 +625,11 @@
         "responses": {
           "200": {
             "description": "A page of workspaces.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -614,6 +667,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -629,6 +685,14 @@
         "responses": {
           "201": {
             "description": "Workspace created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -648,6 +712,12 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -691,6 +761,11 @@
         "responses": {
           "200": {
             "description": "The workspace.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -736,6 +811,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -751,6 +829,14 @@
         "responses": {
           "200": {
             "description": "The updated workspace.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -770,6 +856,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -805,6 +897,11 @@
         "responses": {
           "200": {
             "description": "The updated workspace.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -882,6 +979,11 @@
         "responses": {
           "200": {
             "description": "A page of files.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -934,6 +1036,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -949,6 +1054,14 @@
         "responses": {
           "200": {
             "description": "New version written.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -959,6 +1072,14 @@
           },
           "201": {
             "description": "File created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -981,6 +1102,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1048,6 +1175,11 @@
         "responses": {
           "200": {
             "description": "The file; with content when content=true.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1112,6 +1244,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -1127,6 +1262,14 @@
         "responses": {
           "200": {
             "description": "New version written.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1146,6 +1289,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1190,6 +1339,11 @@
         "responses": {
           "200": {
             "description": "File deleted.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1267,6 +1421,11 @@
         "responses": {
           "200": {
             "description": "A page of versions.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1335,6 +1494,11 @@
         "responses": {
           "200": {
             "description": "A page of runs.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1392,11 +1556,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
           "200": {
             "description": "Index update accepted.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1404,6 +1579,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1416,6 +1594,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1480,6 +1661,11 @@
         "responses": {
           "200": {
             "description": "A page of comments.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1541,6 +1727,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -1556,6 +1745,14 @@
         "responses": {
           "201": {
             "description": "Comment added.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1575,6 +1772,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1627,6 +1830,11 @@
         "responses": {
           "200": {
             "description": "A page of events.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1686,6 +1894,11 @@
         "responses": {
           "200": {
             "description": "A page of links.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1747,6 +1960,11 @@
         "responses": {
           "201": {
             "description": "Link created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1812,6 +2030,11 @@
         "responses": {
           "200": {
             "description": "Link revoked.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1868,6 +2091,11 @@
         "responses": {
           "200": {
             "description": "A page of roles.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1914,6 +2142,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -1929,6 +2160,14 @@
         "responses": {
           "201": {
             "description": "Role granted.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1948,6 +2187,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1994,6 +2239,11 @@
         "responses": {
           "200": {
             "description": "Role removed.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2042,6 +2292,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2057,6 +2310,14 @@
         "responses": {
           "200": {
             "description": "Repository cloned.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2076,6 +2337,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2114,6 +2381,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2129,6 +2399,14 @@
         "responses": {
           "200": {
             "description": "Command finished.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2148,6 +2426,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2200,6 +2484,11 @@
         "responses": {
           "200": {
             "description": "File content.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2257,6 +2546,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentPlatform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2272,6 +2564,14 @@
         "responses": {
           "200": {
             "description": "Changes committed.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2291,6 +2591,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2334,6 +2640,11 @@
         "responses": {
           "200": {
             "description": "Matching artifacts.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2390,6 +2701,11 @@
         "responses": {
           "200": {
             "description": "Relevant artifacts.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2435,6 +2751,9 @@
           },
           {
             "$ref": "#/components/parameters/AgentRole"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2450,6 +2769,14 @@
         "responses": {
           "200": {
             "description": "Run updated.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2460,6 +2787,14 @@
           },
           "201": {
             "description": "Run created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2479,6 +2814,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2567,6 +2908,11 @@
         "responses": {
           "200": {
             "description": "A page of runs.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2620,6 +2966,11 @@
         "responses": {
           "200": {
             "description": "The run.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2686,6 +3037,11 @@
         "responses": {
           "200": {
             "description": "Timeline events.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2757,6 +3113,11 @@
         "responses": {
           "200": {
             "description": "The org.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2791,7 +3152,11 @@
             "session": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2805,6 +3170,14 @@
         "responses": {
           "200": {
             "description": "The renamed org.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2824,6 +3197,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2847,7 +3226,11 @@
             "session": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2861,6 +3244,14 @@
         "responses": {
           "201": {
             "description": "Invite created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2883,6 +3274,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2920,6 +3317,11 @@
         "responses": {
           "200": {
             "description": "A page of invites.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2962,11 +3364,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
           "200": {
             "description": "Joined.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2974,6 +3387,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -2986,6 +3402,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3015,11 +3437,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
           "200": {
             "description": "Invite declined.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3027,6 +3460,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -3036,6 +3472,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3073,6 +3515,11 @@
         "responses": {
           "200": {
             "description": "Removed.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3129,6 +3576,11 @@
         "responses": {
           "200": {
             "description": "A page of keys.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3177,6 +3629,11 @@
         "responses": {
           "201": {
             "description": "Key created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3233,6 +3690,11 @@
         "responses": {
           "200": {
             "description": "Key revoked.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3272,7 +3734,11 @@
             "session": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -3286,6 +3752,14 @@
         "responses": {
           "201": {
             "description": "Bucket config created.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3302,6 +3776,12 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3337,6 +3817,11 @@
         "responses": {
           "200": {
             "description": "A page of bucket configs.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3387,6 +3872,11 @@
         "responses": {
           "200": {
             "description": "The bucket config.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3438,6 +3928,11 @@
         "responses": {
           "200": {
             "description": "Bucket config deleted.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3489,11 +3984,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
           "200": {
             "description": "Bucket verified.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3501,6 +4007,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -3510,6 +4019,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3540,6 +4055,11 @@
         "responses": {
           "200": {
             "description": "Plan and usage.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3579,7 +4099,11 @@
             "session": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -3593,6 +4117,14 @@
         "responses": {
           "200": {
             "description": "Checkout opened.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3615,6 +4147,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3664,6 +4199,11 @@
         "responses": {
           "200": {
             "description": "Portal link.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3719,6 +4259,11 @@
         "responses": {
           "200": {
             "description": "Invoices.",
+            "headers": {
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3811,6 +4356,44 @@
         "schema": {
           "type": "string"
         }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Makes a retry safe (draft-ietf-httpapi-idempotency-key-header). Keys are scoped to the calling principal and kept 24 hours. A retry with the same key and the same method, path, query and body gets the first response again, with Idempotent-Replayed: true, and does not run again. The same key with a different request answers 422; a retry while the first is still running answers 409. 401, 403, 404, 429 and 5xx responses are not kept, so the key can be retried. A response over 1048576 bytes is not kept either: its key stays used and a retry answers 409 idempotency_response_not_stored.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[!-~]+$"
+        }
+      }
+    },
+    "headers": {
+      "RateLimitPolicy": {
+        "description": "The rate limits this request was checked against, as a draft-ietf-httpapi-ratelimit-headers List: q requests per w seconds, counted per Cloudflare location. All policies: \"principal\";q=100;w=10, \"search\";q=20;w=10, \"ip_register\";q=5;w=60, \"ip_magic\";q=10;w=60. principal and search count per API key, session or share link; ip_register and ip_magic per client IP. Remaining quota is not reported.",
+        "schema": {
+          "type": "string",
+          "examples": [
+            "\"principal\";q=100;w=10"
+          ]
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds to wait before retrying.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "IdempotentReplayed": {
+        "description": "Set on a response replayed for a retried Idempotency-Key; the request did not run again.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        }
       }
     },
     "schemas": {
@@ -3848,73 +4431,73 @@
             "type": "boolean",
             "const": false
           },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable code. Routes set specific ones (e.g. rate_limited, plan_limit, idempotency_key_reused); otherwise it is the status default: 400 invalid_request, 401 unauthorized, 402 payment_required, 403 forbidden, 404 not_found, 405 method_not_allowed, 409 conflict, 413 payload_too_large, 422 unprocessable, 429 rate_limited, 500 internal_error, 501 not_implemented, 502 upstream_error, 503 unavailable."
+          },
           "error": {
             "type": "string",
             "description": "Human-readable message."
-          },
-          "code": {
-            "description": "Machine-readable code, when the route sets one (e.g. rate_limited, plan_limit).",
-            "type": "string"
           }
         },
         "required": [
           "success",
+          "code",
           "error"
-        ]
+        ],
+        "description": "Every 4xx and 5xx body. Some carry extra fields; the subtypes that declare them are allOf this schema."
       },
       "PlanLimitError": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "const": false
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
           },
-          "error": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string",
-            "const": "plan_limit"
-          },
-          "metric": {
-            "type": "string",
-            "enum": [
-              "storage_bytes",
-              "embedding_count",
-              "agent_count",
-              "workspace_count",
-              "member_count",
-              "resume_count"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "const": "plan_limit"
+              },
+              "metric": {
+                "type": "string",
+                "enum": [
+                  "storage_bytes",
+                  "embedding_count",
+                  "agent_count",
+                  "workspace_count",
+                  "member_count",
+                  "resume_count"
+                ]
+              },
+              "used": {
+                "type": "number"
+              },
+              "limit": {
+                "type": "number"
+              },
+              "plan": {
+                "type": "string",
+                "enum": [
+                  "trial",
+                  "starter",
+                  "pro",
+                  "team"
+                ]
+              },
+              "upgrade_url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "metric",
+              "used",
+              "limit",
+              "plan",
+              "upgrade_url"
             ]
-          },
-          "used": {
-            "type": "number"
-          },
-          "limit": {
-            "type": "number"
-          },
-          "plan": {
-            "type": "string",
-            "enum": [
-              "trial",
-              "starter",
-              "pro",
-              "team"
-            ]
-          },
-          "upgrade_url": {
-            "type": "string"
           }
-        },
-        "required": [
-          "success",
-          "error",
-          "code",
-          "metric",
-          "used",
-          "limit",
-          "plan",
-          "upgrade_url"
         ]
       },
       "UsageWarning": {
@@ -6191,6 +6774,17 @@
           "checks"
         ]
       },
+      "HealthUnavailable": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "$ref": "#/components/schemas/HealthResponse"
+          }
+        ],
+        "description": "code is storage_unavailable."
+      },
       "RegisterResponse": {
         "type": "object",
         "properties": {
@@ -7693,7 +8287,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "The request body or query failed validation.",
+        "description": "The request body, query or Idempotency-Key header failed validation.",
         "content": {
           "application/json": {
             "schema": {
@@ -7743,7 +8337,17 @@
         }
       },
       "Conflict": {
-        "description": "The request conflicts with current state.",
+        "description": "The request conflicts with current state; or a request with the same Idempotency-Key is still running (idempotency_key_in_use), or already ran and its response was too large to keep (idempotency_response_not_stored).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "IdempotencyKeyReused": {
+        "description": "The Idempotency-Key was already used for a different request (idempotency_key_reused).",
         "content": {
           "application/json": {
             "schema": {
@@ -7756,10 +8360,10 @@
         "description": "Rate limited; retry after Retry-After seconds.",
         "headers": {
           "Retry-After": {
-            "description": "Seconds to wait.",
-            "schema": {
-              "type": "integer"
-            }
+            "$ref": "#/components/headers/RetryAfter"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimitPolicy"
           }
         },
         "content": {

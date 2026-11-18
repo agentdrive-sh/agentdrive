@@ -99,6 +99,8 @@ test('discovery catalogs carry branding, linkset items and trust manifests', asy
   expect(card).toMatchObject({ name: 'sh.agentdrive/mcp', title: 'AgentDrive', remotes: [{ type: 'streamable-http', url: 'https://mcp.agentdrive.sh/mcp' }] });
   expect(card.icons[0].src).toBe(`${SITE}/apple-icon`);
   expect(card.description.length).toBeLessThanOrEqual(100);
+  expect(card.tools.length).toBeGreaterThan(0);
+  for (const tool of card.tools) expect(tool).toMatchObject({ name: expect.stringMatching(/^drive_/), title: expect.any(String), inputSchema: { type: 'object' } });
 
   const catalog = await request.get('/.well-known/api-catalog');
   expect(catalog.headers()['content-type']).toContain('application/linkset+json');
@@ -137,4 +139,24 @@ test('WebMCP registers read-only tools that read docs and pricing through the ma
   expect(result.readOnly).toBe(true);
   expect(result.doc).toContain('# Quick start');
   expect(result.pricing).toContain('# AgentDrive pricing');
+});
+
+test('blog, glossary, compare and facts pages have .md twins, and the blog has its own llms.txt', async ({ request }) => {
+  const llms = await (await request.get('/llms.txt')).text();
+  const post = llms.match(/\]\(https:\/\/agentdrive\.sh(\/blog\/[^)/]+)\/index\.md\)/)![1]!;
+  const term = llms.match(/\]\(https:\/\/agentdrive\.sh(\/glossary\/[^)/]+)\/index\.md\)/)![1]!;
+  const compare = llms.match(/\]\(https:\/\/agentdrive\.sh(\/compare\/[^)/.]+)\.md\)/)![1]!;
+  for (const path of ['/blog.md', `${post}.md`, '/glossary.md', `${term}.md`, '/compare.md', `${compare}.md`, '/facts.md']) {
+    const md = await markdown(request, path);
+    expect(md.status, path).toBe(200);
+    expect(md.type, path).toMatch(MARKDOWN);
+    expect(md.body, path).toMatch(/^---\ntitle: ".+"\n[\s\S]*?\n---\n\n?# .+\n\n> For the complete documentation index, see \[llms\.txt\]\(https:\/\/agentdrive\.sh\/llms\.txt\)/);
+    expect(md.body, path).not.toContain('](/');
+  }
+  expect((await markdown(request, compare, { accept: 'text/markdown' })).body).toMatch(/\n# AgentDrive vs /);
+  expect((await markdown(request, '/compare.md')).body).toMatch(/\| Tool \| Works across agents \|/);
+  const blogIndex = await request.get('/blog/llms.txt');
+  expect(blogIndex.status()).toBe(200);
+  expect(await blogIndex.text()).toMatch(/^# AgentDrive blog\n\n> .+\n\n## Posts\n\n- \[/);
+  expect(llms).toContain('(https://agentdrive.sh/blog/llms.txt)');
 });

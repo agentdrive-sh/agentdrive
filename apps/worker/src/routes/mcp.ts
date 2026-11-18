@@ -22,7 +22,7 @@ const DEFAULT_PROTOCOL = '2025-06-18';
 const SERVER_INFO = { name: 'agentdrive', version: WORKER_HEALTH_VERSION };
 
 // Built once per isolate: Zod shapes -> JSON Schema for tools/list.
-const TOOL_LIST = TOOLS.map((t) => {
+export const TOOL_LIST = TOOLS.map((t) => {
   const schema = z.toJSONSchema(z.object(t.schema)) as Record<string, unknown>;
   delete schema.$schema;
   return { name: t.name, title: t.annotations.title, description: t.description, inputSchema: schema, annotations: t.annotations };

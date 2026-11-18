@@ -12,6 +12,9 @@ export const blogSource = loader({
   source: toFumadocsSource(blog, []),
 });
 
+export const BLOG_DESCRIPTION =
+  'Notes from building AgentDrive: session continuity across Claude Code, Codex, OpenCode, Cursor and Antigravity, provenance, and portable storage.';
+
 export type BlogPost = ReturnType<typeof blogSource.getPages>[number];
 
 const showDrafts = process.env.NODE_ENV !== 'production';

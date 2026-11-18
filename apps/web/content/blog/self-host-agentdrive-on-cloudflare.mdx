@@ -27,7 +27,7 @@ The worker uses these bindings from `apps/worker/wrangler.toml`:
 | `R2` | R2 bucket | `agentdrive-r2` |
 | `VECTORIZE` | Vectorize index | `agentdrive-vectorize`, 768 dimensions, cosine |
 | `AI` | Workers AI | kept as is |
-| `RESUME_METER`, `FILE_COLLAB`, `BILLING_COORDINATOR`, `MAGIC_CODES` | Durable Objects | kept, with their migrations |
+| `RESUME_METER`, `FILE_COLLAB`, `BILLING_COORDINATOR`, `MAGIC_CODES`, `IDEMPOTENCY` | Durable Objects | kept, with their migrations |
 | `RL_PRINCIPAL`, `RL_SEARCH`, `RL_REGISTER`, `RL_MAGIC` | Rate limits | kept, namespace ids `41001` to `41004` |
 | `SELF` | Service binding | pointed at your own worker |
 | `SEND_EMAIL` | Email sending | dropped, because a self-hosted instance never sends mail |

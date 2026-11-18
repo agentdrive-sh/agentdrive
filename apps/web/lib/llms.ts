@@ -18,6 +18,11 @@ export function docLinks(): string[] {
   return source.getPages().map((p) => link(p.data.title, markdownPath(p.url), p.data.description));
 }
 
+// Agents look for the llms.txt pointer near the top, so it goes right under the page title.
+export function withDirective(markdown: string): string {
+  return markdown.includes(LLMS_DIRECTIVE) ? markdown : markdown.replace(/^(# .*\n)/m, `$1\n${LLMS_DIRECTIVE}\n`);
+}
+
 // Markdown gets copied, chunked and pasted away from the URL it came from, so root-relative links would dangle.
 export function absoluteLinks(markdown: string): string {
   return markdown.replace(/\]\(\//g, `](${SITE}/`);

@@ -3,6 +3,7 @@ import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import type { Env, AuthContext } from './env.js';
 import { corsMiddleware } from './middleware/cors.js';
+import { rateLimitPolicyHeader } from './middleware/rate-limit.js';
 import { orgBilling } from './durable-objects/billing-coordinator.js';
 import { constructStripeEvent } from './services/stripe-webhook.js';
 import searchRoutes from './routes/search.js';
@@ -37,6 +38,37 @@ export const app = new Hono<AppType>();
 
 app.use('*', corsMiddleware);
 
+// The code an error body gets when its route set none, so every /v1 error carries one.
+export const DEFAULT_ERROR_CODES: Record<number, string> = {
+  400: 'invalid_request',
+  401: 'unauthorized',
+  402: 'payment_required',
+  403: 'forbidden',
+  404: 'not_found',
+  405: 'method_not_allowed',
+  409: 'conflict',
+  413: 'payload_too_large',
+  422: 'unprocessable',
+  429: 'rate_limited',
+  500: 'internal_error',
+  501: 'not_implemented',
+  502: 'upstream_error',
+  503: 'unavailable',
+};
+
+app.use('/v1/*', async (c, next) => {
+  await next();
+  const { status, headers } = c.res;
+  if (status < 400 || !headers.get('Content-Type')?.startsWith('application/json')) return;
+  const body = await c.res.clone().json().catch(() => null) as { success?: unknown; code?: unknown } | null;
+  if (body?.success !== false || typeof body.code === 'string') return;
+  const coded = new Headers(headers);
+  coded.delete('Content-Length');
+  c.res = undefined;
+  c.res = new Response(JSON.stringify({ ...body, code: DEFAULT_ERROR_CODES[status] ?? `http_${status}` }), { status, headers: coded });
+});
+app.use('/v1/*', rateLimitPolicyHeader);
+
 // A self-hosted instance has no Stripe account and no plan to upgrade to.
 const billingDisabled = createMiddleware<AppType>(async (c, next) => {
   if (!selfHosted(c.env)) return next();
@@ -51,7 +83,9 @@ app.get('/v1/health', async (c) => {
   const checks = await storageReadiness(c.env);
   const ready = checks.kv === 'ok' && checks.r2 === 'ok';
   c.header('Cache-Control', 'no-store');
-  return c.json({ status: ready ? 'ok' : 'unavailable', version: WORKER_HEALTH_VERSION, checks }, ready ? 200 : 503);
+  const body = { status: ready ? 'ok' : 'unavailable', version: WORKER_HEALTH_VERSION, checks } as const;
+  if (ready) return c.json(body);
+  return c.json({ success: false, code: 'storage_unavailable', error: 'KV or R2 is not answering reads', ...body }, 503);
 });
 
 // Mount order matters: more-specific public sub-apps go BEFORE the generic

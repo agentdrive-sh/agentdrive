@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { frontmatter, markdownResponse } from '@/lib/llms';
+import { absoluteLinks, frontmatter, LLMS_DIRECTIVE, markdownResponse } from '@/lib/llms';
 import { formatPostDate, getPost, listPosts } from '@/lib/source';
 
 export const dynamic = 'force-static';
@@ -15,6 +15,7 @@ export async function GET(_req: Request, props: { params: Promise<{ slug: string
   if (!post) notFound();
   const head = [
     `# ${post.data.title}`,
+    LLMS_DIRECTIVE,
     ...(post.data.description ? [`> ${post.data.description}`] : []),
     `By ${post.data.author}, ${formatPostDate(post.data.date)}. Source: https://agentdrive.sh${post.url}`,
   ];
@@ -24,5 +25,5 @@ export async function GET(_req: Request, props: { params: Promise<{ slug: string
     canonical: `https://agentdrive.sh${post.url}`,
     'last-updated': post.data.updated ?? post.data.date,
   });
-  return markdownResponse(`${meta}${head.join('\n\n')}\n\n${await post.data.getText('processed')}`);
+  return markdownResponse(`${meta}${head.join('\n\n')}\n\n${absoluteLinks(await post.data.getText('processed'))}`);
 }

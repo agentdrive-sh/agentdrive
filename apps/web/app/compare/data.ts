@@ -1,3 +1,5 @@
+import { SITE_URL } from '@/components/seo/site';
+
 export const LAST_CHECKED = '2026-11-18';
 
 export const ROWS = ['Unit of storage', 'Where it runs', 'Coding-agent sessions', 'Storage location', 'Availability'] as const;
@@ -414,4 +416,83 @@ export const COMPETITORS: Competitor[] = [
 
 export function getCompetitor(slug: string): Competitor | undefined {
   return COMPETITORS.find((c) => c.slug === slug);
+}
+
+export const COMPARE_LEDE =
+  "AgentDrive is the right tool when one task moves between coding agents or machines: it syncs each session and hands the next agent the goal, files touched and recent turns. It is not the right tool if you stay in one agent, need memory for an app you build, or only need standing project rules.";
+
+export const COMPARE_FAQ: { q: string; a: string }[] = [
+  {
+    q: 'When is AgentDrive the right tool?',
+    a: 'When one task moves between coding agents or machines. AgentDrive syncs each session from Claude Code, Codex, OpenCode, Cursor and Antigravity, and the next agent resumes from a handoff brief with the goal, the files touched and the recent turns.',
+  },
+  {
+    q: 'When is AgentDrive the wrong tool?',
+    a: "When you stay in one agent, its built-in resume restores the full conversation. When you are building an app that remembers its users, use a memory layer such as Mem0 or Cloudflare Agent Memory. For rules every session should follow, write CLAUDE.md or AGENTS.md.",
+  },
+  {
+    q: 'Which alternative is closest to AgentDrive?',
+    a: 'Session history tools. SpecStory and Entire also save sessions from several coding agents, and SpecStory can resume a session in a different agent. AgentDrive differs in handing the next agent a short brief, and in keeping the files agents write in a versioned workspace with provenance.',
+  },
+  {
+    q: 'Can I use AgentDrive alongside these tools?',
+    a: 'Yes. Most of them hold something different: project rules, facts about users, or a full session record. AgentDrive carries the state of the current task from one agent to the next.',
+  },
+];
+
+export function competitorFaq(c: Competitor): { q: string; a: string }[] {
+  return [
+    { q: `What is the difference between ${c.name} and AgentDrive?`, a: c.tagline },
+    { q: `When should I use ${c.name}?`, a: c.pickThem },
+    { q: 'When should I use AgentDrive instead?', a: c.pickUs },
+    { q: `Can I use AgentDrive alongside ${c.name}?`, a: `Yes. ${c.together}` },
+  ];
+}
+
+const cell = (text: string) => text.replace(/\|/g, '\\|');
+const faqSection = (faq: { q: string; a: string }[]) => faq.map((f) => `### ${f.q}\n\n${f.a}`).join('\n\n');
+
+export function compareIndexMarkdown(): string {
+  const head = ['Tool', ...MATRIX_COLS];
+  const rows = [
+    ['AgentDrive', ...MATRIX_COLS.map((col) => AGENTDRIVE_MATRIX[col])],
+    ...COMPETITORS.map((c) => [`[${c.name}](${SITE_URL}/compare/${c.slug}.md)`, ...MATRIX_COLS.map((col) => c.matrix[col])]),
+  ];
+  return [
+    '# AgentDrive vs the alternatives',
+    `> ${COMPARE_LEDE}`,
+    `Source: ${SITE_URL}/compare. Last checked ${LAST_CHECKED}.`,
+    `| ${head.join(' | ')} |\n| ${head.map(() => '---').join(' | ')} |\n${rows.map((r) => `| ${r.map(cell).join(' | ')} |`).join('\n')}`,
+    '## Comparisons',
+    COMPETITORS.map((c) => `- [AgentDrive vs ${c.name}](${SITE_URL}/compare/${c.slug}.md): ${c.tagline}`).join('\n'),
+    '## Questions',
+    faqSection(COMPARE_FAQ),
+    '',
+  ].join('\n\n');
+}
+
+export function compareMarkdown(c: Competitor): string {
+  const sources = [...new Set(c.facts.map((f) => f.source))];
+  return [
+    `# AgentDrive vs ${c.name}`,
+    `> ${c.tagline}`,
+    `Source: ${SITE_URL}/compare/${c.slug}. Last checked ${LAST_CHECKED}. All comparisons: ${SITE_URL}/compare.md.`,
+    '## When to pick which',
+    `Pick ${c.name} when: ${c.pickThem}`,
+    `Pick AgentDrive when: ${c.pickUs}`,
+    c.together,
+    `| Feature | AgentDrive | ${cell(c.name)} |\n| --- | --- | --- |\n${ROWS.map((r) => `| ${r} | ${cell(AGENTDRIVE_ROW[r])} | ${cell(c.row[r])} |`).join('\n')}`,
+    `## About ${c.name}`,
+    c.facts.map((f) => `- ${f.text}`).join('\n'),
+    ...(c.sections ?? []).flatMap((s) => [`## ${s.title}`, ...s.body]),
+    `## Where ${c.name} works well`,
+    c.goodAt.map((g) => `- ${g}`).join('\n'),
+    '## What AgentDrive does differently',
+    c.different.map((x) => `- ${x}`).join('\n'),
+    '## Questions',
+    faqSection(competitorFaq(c)),
+    '## Sources',
+    sources.map((s) => `- ${s}`).join('\n'),
+    '',
+  ].join('\n\n');
 }

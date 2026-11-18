@@ -34,7 +34,7 @@ The name and logo are covered separately by `TRADEMARKS.md`: forks must rebrand.
 **Harder:**
 
 - Some companies ban AGPL software outright, even for internal self-hosting. The commercial license and the hosted service are the answer for them.
-- Every external contribution needs a signed CLA before merge, which adds a step for first-time contributors. A bot (`.github/workflows/cla.yml`) handles it on the pull request.
+- Every external contribution needs a signed CLA before merge, which adds a step for first-time contributors. The contributor signs by commenting on the pull request, and the maintainer's CI (`scripts/ci.sh`) records the signature.
 - Two licenses to maintain, as before. A file that lands in the wrong package inherits the wrong license.
 - A permissive fork of the server is no longer possible for third parties without a commercial license.
 

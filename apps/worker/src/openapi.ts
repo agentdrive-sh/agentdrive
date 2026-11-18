@@ -25,6 +25,9 @@ import { checkoutSchema } from './routes/billing.js';
 import { sendCodeSchema, verifyCodeSchema } from './routes/auth.js';
 import { registerSchema } from './routes/register.js';
 import { startSchema, pollSchema, completeSchema } from './routes/cli-auth.js';
+import { LIMITERS, rateLimitPolicy, type Kind } from './middleware/rate-limit.js';
+import { supportsIdempotency, MAX_STORED_RESPONSE_BYTES } from './middleware/idempotency.js';
+import { DEFAULT_ERROR_CODES } from './app.js';
 
 // The OpenAPI 3.1 contract for the /v1 REST API, published at agentdrive.sh/openapi.json.
 // Request bodies are the routes' own Zod schemas; response schemas are checked against
@@ -66,24 +69,23 @@ const storageLocator = {
 
 const errorBody = component('Error', z.object({
   success: z.literal(false),
+  code: z.string().describe(`Machine-readable code. Routes set specific ones (e.g. rate_limited, plan_limit, idempotency_key_reused); otherwise it is the status default: ${
+    Object.entries(DEFAULT_ERROR_CODES).map(([status, code]) => `${status} ${code}`).join(', ')}.`),
   error: z.string().describe('Human-readable message.'),
-  code: z.string().optional().describe('Machine-readable code, when the route sets one (e.g. rate_limited, plan_limit).'),
-}));
+}).describe('Every 4xx and 5xx body. Some carry extra fields; the subtypes that declare them are allOf this schema.'));
 
 const usageMetric = z.enum(['storage_bytes', 'embedding_count', 'agent_count', 'workspace_count', 'member_count', 'resume_count']);
 const usageLevel = z.enum(['ok', 'warn80', 'warn90', 'warn99', 'paused']);
 const plan = z.enum(['trial', 'starter', 'pro', 'team']);
 
-const planLimit = component('PlanLimitError', typed<PlanLimitBody>()(z.object({
-  success: z.literal(false),
-  error: z.string(),
+const planLimit = component('PlanLimitError', typed<PlanLimitBody>()(errorBody.and(z.object({
   code: z.literal('plan_limit'),
   metric: usageMetric,
   used: z.number(),
   limit: z.number(),
   plan,
   upgrade_url: z.string(),
-})));
+}))));
 
 const usageWarning = component('UsageWarning', typed<UsageWarning>()(z.object({
   metric: usageMetric,
@@ -414,7 +416,7 @@ component('ToolCallInput', toolCallSchema);
 
 type Principal = 'apiKey' | 'session' | 'share';
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
-type ErrorStatus = 400 | 401 | 402 | 403 | 404 | 409 | 429 | 500 | 501 | 502 | 503;
+type ErrorStatus = 400 | 401 | 402 | 403 | 404 | 409 | 422 | 429 | 500 | 501 | 502 | 503;
 type Header = 'platform' | 'role' | 'bootstrap';
 
 interface QueryParam {
@@ -434,6 +436,8 @@ interface Operation {
   body?: keyof typeof requestBodies;
   query?: Record<string, QueryParam>;
   headers?: Header[];
+  // Limiters besides the per-principal one every authenticated operation passes.
+  limits?: Exclude<Kind, 'principal'>[];
   ok: Partial<Record<200 | 201 | 503, { schema: z.ZodType; description: string }>>;
   errors: ErrorStatus[];
 }
@@ -458,16 +462,17 @@ const healthResponse = component('HealthResponse', typed<{ status: 'ok' | 'unava
   version: z.string(),
   checks: z.object({ kv: z.enum(['ok', 'unavailable']), r2: z.enum(['ok', 'unavailable']) }),
 })));
+const healthUnavailable = component('HealthUnavailable', errorBody.and(healthResponse).describe('code is storage_unavailable.'));
 
 const operations: Operation[] = [
   {
     method: 'get', path: '/v1/health', operationId: 'getHealth', tag: 'Meta',
     summary: 'Check service health',
-    description: 'Reports whether KV and R2 answer reads, with the deployed version. Needs no authentication. Answers 503 with the same body when either store is unavailable.',
+    description: 'Reports whether KV and R2 answer reads, with the deployed version. Needs no authentication. Answers 503 when either store is unavailable, with the same fields plus the error ones.',
     auth: [],
     ok: {
       200: { schema: healthResponse, description: 'Both stores answered.' },
-      503: { schema: healthResponse, description: 'A store is unavailable.' },
+      503: { schema: healthUnavailable, description: 'A store is unavailable.' },
     },
     errors: [],
   },
@@ -475,6 +480,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/register', operationId: 'registerAgent', tag: 'Registration',
     summary: 'Register an agent and create its org',
     description: 'Creates a new org on the trial plan and its first agent, and returns that agent\'s API key. The key is shown only in this response. Needs no authentication; rate-limited per IP. On a self-hosted instance it needs X-Bootstrap-Token.',
+    limits: ['ip_register'],
     auth: [],
     body: 'RegisterRequest',
     headers: ['bootstrap'],
@@ -502,6 +508,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/auth/send-code', operationId: 'sendSignInCode', tag: 'Auth',
     summary: 'Email a sign-in code',
     description: 'Emails a 6-digit sign-in code. While a code is live, a resend repeats it. At most 5 codes an hour per address (429 rate_limited); after 5 wrong codes the address is locked for 15 minutes (429 too_many_attempts). Both 429s carry Retry-After. Needs no authentication; rate-limited per IP. Disabled (501) on a self-hosted instance.',
+    limits: ['ip_magic'],
     auth: [],
     body: 'SendCodeRequest',
     ok: { 200: { schema: ok('MessageResponse', z.object({ message: z.string() })), description: 'Code sent.' } },
@@ -511,6 +518,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/auth/verify-code', operationId: 'verifySignInCode', tag: 'Auth',
     summary: 'Exchange a sign-in code for a session',
     description: 'Checks the emailed code and returns a session. Send the session_id as X-Session-Token on later requests. Creates an org for the email if it has none. 5 wrong codes lock the address for 15 minutes (429 too_many_attempts with Retry-After). Needs no authentication; rate-limited per IP. Disabled (501) on a self-hosted instance.',
+    limits: ['ip_magic'],
     auth: [],
     body: 'VerifyCodeRequest',
     ok: { 200: { schema: ok('SessionResponse', z.object({
@@ -547,6 +555,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/auth/cli/start', operationId: 'startCliSignIn', tag: 'Auth',
     summary: 'Start a CLI browser sign-in',
     description: 'Starts a device-style sign-in. Show user_code in the terminal, open auth_url in a browser, then poll /v1/auth/cli/poll with id and device_code. A body without shows_user_code: true answers 400 cli_outdated. Needs no authentication; rate-limited per IP. Not available (501) on a self-hosted instance.',
+    limits: ['ip_magic'],
     auth: [],
     body: 'CliStartRequest',
     ok: { 201: { schema: ok('CliStartResponse', z.object({
@@ -579,6 +588,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/auth/cli/complete', operationId: 'completeCliSignIn', tag: 'Auth',
     summary: 'Approve a CLI sign-in',
     description: 'Called by the signed-in browser with the user code shown in the terminal. Mints an API key for the CLI. Wrong codes answer 400 wrong_code; too many end the sign-in (403 denied). Session only; rate-limited per IP.',
+    limits: ['ip_magic'],
     auth: ['session'],
     body: 'CliCompleteRequest',
     ok: { 200: { schema: ok('CliCompleteResponse', z.object({ status: z.literal('complete') })), description: 'Sign-in approved.' } },
@@ -716,6 +726,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/workspaces/{wid}/files/{fid}/reindex', operationId: 'reindexFile', tag: 'Files',
     summary: 'Rebuild a file\'s search index',
     description: 'Re-embeds the current version for semantic search, after checking the stored bytes match the content hash. Changes no versions, activity or usage. The vector index applies the change asynchronously, so poll search for availability. Org owner or admin only; shares the search rate limit.',
+    limits: ['search'],
     auth: ORG,
     ok: { 200: { schema: ok('ReindexResponse', z.object({
       status: z.literal('accepted'),
@@ -856,6 +867,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/search', operationId: 'searchArtifacts', tag: 'Search',
     summary: 'Search artifacts',
     description: 'Semantic search across the org\'s files, falling back to keyword search when nothing matches semantically. Optionally limited to one workspace and filtered by agent platform, agent or path prefix. Not available to share links; has its own rate limit.',
+    limits: ['search'],
     auth: ORG,
     body: 'SearchRequest',
     ok: { 200: { schema: ok('SearchResponse', z.object({ hits: z.array(searchHit), total: z.number() })), description: 'Matching artifacts.' } },
@@ -865,6 +877,7 @@ const operations: Operation[] = [
     method: 'post', path: '/v1/context', operationId: 'getTaskContext', tag: 'Search',
     summary: 'Get relevant context for a task',
     description: 'Returns the artifacts most relevant to a task description, ranked by semantic match and recency with agent-platform diversity, each with why it was surfaced and the last run that referenced it. Not available to share links; shares the search rate limit.',
+    limits: ['search'],
     auth: ORG,
     body: 'ContextRequest',
     ok: { 200: { schema: ok('ContextResponse', z.object({ artifacts: z.array(contextArtifact), retrieved_at: epochMs }), warning), description: 'Relevant artifacts.' } },
@@ -1110,14 +1123,15 @@ const operations: Operation[] = [
   },
 ];
 
-const ERRORS: Record<ErrorStatus, { name: string; description: string; schema?: z.ZodType; retryAfter?: boolean }> = {
-  400: { name: 'BadRequest', description: 'The request body or query failed validation.' },
+const ERRORS: Record<ErrorStatus, { name: string; description: string; schema?: z.ZodType; limited?: boolean }> = {
+  400: { name: 'BadRequest', description: 'The request body, query or Idempotency-Key header failed validation.' },
   401: { name: 'Unauthorized', description: 'Credentials are missing, invalid, expired or revoked.' },
   402: { name: 'PlanLimit', description: 'The org is at a plan limit; the body says which and links the upgrade.', schema: planLimit },
   403: { name: 'Forbidden', description: 'This principal may not do this.' },
   404: { name: 'NotFound', description: 'Not found, or not visible to this principal.' },
-  409: { name: 'Conflict', description: 'The request conflicts with current state.' },
-  429: { name: 'RateLimited', description: 'Rate limited; retry after Retry-After seconds.', retryAfter: true },
+  409: { name: 'Conflict', description: 'The request conflicts with current state; or a request with the same Idempotency-Key is still running (idempotency_key_in_use), or already ran and its response was too large to keep (idempotency_response_not_stored).' },
+  422: { name: 'IdempotencyKeyReused', description: 'The Idempotency-Key was already used for a different request (idempotency_key_reused).' },
+  429: { name: 'RateLimited', description: 'Rate limited; retry after Retry-After seconds.', limited: true },
   500: { name: 'InternalError', description: 'The operation failed on the server.' },
   501: { name: 'NotImplemented', description: 'Disabled on a self-hosted instance.' },
   502: { name: 'BadGateway', description: 'An upstream service (Stripe, email, a storage bucket or the vector index) failed.' },
@@ -1154,6 +1168,13 @@ const SECURITY: Record<Principal, object[]> = {
 };
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
+const headerRef = (id: string) => ({ $ref: `#/components/headers/${id}` });
+
+const idempotent = (op: Operation) => op.auth.length > 0 && supportsIdempotency(op.method, op.path);
+
+function errorStatuses(op: Operation): ErrorStatus[] {
+  return idempotent(op) ? [...new Set<ErrorStatus>([...op.errors, 400, 409, 422])].sort() : op.errors;
+}
 
 function jsonSchema(schema: z.ZodType): object {
   const { $schema: _drop, ...rest } = z.toJSONSchema(schema, { io: 'input' });
@@ -1173,21 +1194,31 @@ function buildOperation(op: Operation): object {
   const queryParams = Object.entries(op.query ?? {}).map(([name, q]) => ({
     name, in: 'query', required: !!q.required, description: q.description, schema: jsonSchema(q.schema),
   }));
+  const headers = {
+    ...(op.auth.length || op.limits ? { 'RateLimit-Policy': headerRef('RateLimitPolicy') } : {}),
+    ...(idempotent(op) ? { 'Idempotent-Replayed': headerRef('IdempotentReplayed') } : {}),
+  };
   const responses: Record<string, object> = {};
   for (const [status, res] of Object.entries(op.ok)) {
     responses[status] = {
       description: res.description,
+      ...(Object.keys(headers).length ? { headers } : {}),
       content: { 'application/json': { schema: schemaRef(res.schema) } },
     };
   }
-  for (const status of op.errors) responses[status] = { $ref: `#/components/responses/${ERRORS[status].name}` };
+  for (const status of errorStatuses(op)) responses[status] = { $ref: `#/components/responses/${ERRORS[status].name}` };
   return {
     operationId: op.operationId,
     summary: op.summary,
     description: op.description,
     tags: [op.tag],
     security: op.auth.flatMap((p) => SECURITY[p]),
-    parameters: [...pathParams, ...queryParams, ...(op.headers ?? []).map((h) => HEADERS[h])],
+    parameters: [
+      ...pathParams,
+      ...queryParams,
+      ...(op.headers ?? []).map((h) => HEADERS[h]),
+      ...(idempotent(op) ? [{ $ref: '#/components/parameters/IdempotencyKey' }] : []),
+    ],
     ...(op.body ? {
       requestBody: { required: true, content: { 'application/json': { schema: ref(op.body) } } },
     } : {}),
@@ -1203,12 +1234,12 @@ export function buildOpenApiDocument() {
   const paths: Record<string, Record<string, object>> = {};
   for (const op of operations) (paths[op.path] ??= {})[op.method] = buildOperation(op);
 
-  const used = new Set(operations.flatMap((op) => op.errors));
+  const used = new Set(operations.flatMap(errorStatuses));
   const responses = Object.fromEntries([...used].sort().map((status) => {
     const e = ERRORS[status];
     return [e.name, {
       description: e.description,
-      ...(e.retryAfter ? { headers: { 'Retry-After': { description: 'Seconds to wait.', schema: { type: 'integer' } } } } : {}),
+      ...(e.limited ? { headers: { 'Retry-After': headerRef('RetryAfter'), 'RateLimit-Policy': headerRef('RateLimitPolicy') } } : {}),
       content: { 'application/json': { schema: schemaRef(e.schema ?? errorBody) } },
     }];
   }));
@@ -1219,7 +1250,7 @@ export function buildOpenApiDocument() {
       title: 'AgentDrive REST API',
       version: '1.0.0',
       summary: 'Cross-agent artifact workspace with provenance.',
-      description: 'The HTTP surface that the AgentDrive MCP server, CLI and SDKs wrap: versioned workspace files, cross-agent session resume, semantic search, run provenance, sharing and org management. Errors are `{ "success": false, "error": "..." }`, sometimes with a machine-readable `code`. Paginated lists return `data` with a sibling `cursor`; pass it back as `?cursor=` until it is null.',
+      description: 'The HTTP surface that the AgentDrive MCP server, CLI and SDKs wrap: versioned workspace files, cross-agent session resume, semantic search, run provenance, sharing and org management. Errors are `{ "success": false, "code": "...", "error": "..." }` (the Error schema). Paginated lists return `data` with a sibling `cursor`; pass it back as `?cursor=` until it is null. Authenticated POST, PUT and PATCH operations take an Idempotency-Key header, and responses name the rate limits they were checked against in RateLimit-Policy.',
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
       contact: { name: 'AgentDrive', url: 'https://agentdrive.sh' },
     },
@@ -1274,6 +1305,25 @@ export function buildOpenApiDocument() {
           name: 'X-Agent-Role', in: 'header', required: false,
           description: 'Free-form role of the agent (e.g. planner, coder, reviewer), recorded on runs. Read only with an API key; truncated to 64 characters.',
           schema: { type: 'string' },
+        },
+        IdempotencyKey: {
+          name: 'Idempotency-Key', in: 'header', required: false,
+          description: `Makes a retry safe (draft-ietf-httpapi-idempotency-key-header). Keys are scoped to the calling principal and kept 24 hours. A retry with the same key and the same method, path, query and body gets the first response again, with Idempotent-Replayed: true, and does not run again. The same key with a different request answers 422; a retry while the first is still running answers 409. 401, 403, 404, 429 and 5xx responses are not kept, so the key can be retried. A response over ${MAX_STORED_RESPONSE_BYTES} bytes is not kept either: its key stays used and a retry answers 409 idempotency_response_not_stored.`,
+          schema: { type: 'string', minLength: 1, maxLength: 255, pattern: '^[!-~]+$' },
+        },
+      },
+      headers: {
+        RateLimitPolicy: {
+          description: `The rate limits this request was checked against, as a draft-ietf-httpapi-ratelimit-headers List: q requests per w seconds, counted per Cloudflare location. All policies: ${rateLimitPolicy(Object.keys(LIMITERS) as Kind[])}. principal and search count per API key, session or share link; ip_register and ip_magic per client IP. Remaining quota is not reported.`,
+          schema: { type: 'string', examples: [rateLimitPolicy(['principal'])] },
+        },
+        RetryAfter: {
+          description: 'Seconds to wait before retrying.',
+          schema: { type: 'integer' },
+        },
+        IdempotentReplayed: {
+          description: 'Set on a response replayed for a retried Idempotency-Key; the request did not run again.',
+          schema: { type: 'string', enum: ['true'] },
         },
       },
       schemas: componentsSchemas,

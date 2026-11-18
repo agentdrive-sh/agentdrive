@@ -39,7 +39,9 @@ const honoCors = cors({
     'X-Session-Token',
     'X-Agent-Platform',
     'X-Agent-Role',
+    'Idempotency-Key',
   ],
+  exposeHeaders: ['Retry-After', 'RateLimit-Policy', 'Idempotent-Replayed'],
   maxAge: 86400,
 });
 

@@ -1,0 +1,790 @@
+[
+  {
+    "name": "drive_write",
+    "title": "Write file",
+    "description": "Write a markdown file to a workspace. Creates or updates the file with automatic versioning.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID to write to"
+        },
+        "path": {
+          "type": "string",
+          "description": "File path (e.g. \"notes/meeting.md\")"
+        },
+        "content": {
+          "type": "string",
+          "description": "File content (markdown)"
+        },
+        "message": {
+          "description": "Optional version message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "path",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Write file",
+      "readOnlyHint": false,
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "drive_read",
+    "title": "Read file",
+    "description": "Read a file's content from a workspace.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "file_id": {
+          "type": "string",
+          "description": "File ID to read"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "file_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Read file",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_list",
+    "title": "List files",
+    "description": "List files in a workspace, optionally filtered by path prefix.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "prefix": {
+          "description": "Path prefix filter (e.g. \"notes/\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "List files",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_share",
+    "title": "Create share link",
+    "description": "Generate a share link for a workspace or specific file. Optionally email-gate the link so only a specific person can access it. Humans open this link to view, comment, or edit files.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "permission": {
+          "type": "string",
+          "enum": [
+            "view",
+            "comment",
+            "edit"
+          ],
+          "description": "Permission level for the share link"
+        },
+        "file_id": {
+          "description": "Scope to a specific file (optional)",
+          "type": "string"
+        },
+        "expires_in": {
+          "description": "Expiry in seconds (optional)",
+          "type": "number"
+        },
+        "max_uses": {
+          "description": "Maximum number of uses (optional)",
+          "type": "number"
+        },
+        "email": {
+          "description": "Email-gate: only this email can access the link (requires email verification). Leave empty for public access.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "permission"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Create share link",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_comment",
+    "title": "Add comment",
+    "description": "Add a comment to a file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "file_id": {
+          "type": "string",
+          "description": "File ID to comment on"
+        },
+        "body": {
+          "type": "string",
+          "description": "Comment text"
+        },
+        "line_start": {
+          "description": "Start line number (optional)",
+          "type": "number"
+        },
+        "line_end": {
+          "description": "End line number (optional)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "file_id",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Add comment",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_feedback",
+    "title": "Read comments",
+    "description": "Read human comments on a file. Use this to check if humans have left feedback.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "file_id": {
+          "type": "string",
+          "description": "File ID to read comments from"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "file_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Read comments",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_activity",
+    "title": "Workspace activity",
+    "description": "Get recent activity in a workspace (file writes, comments, shares).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        }
+      },
+      "required": [
+        "workspace_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Workspace activity",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_invite",
+    "title": "Invite member",
+    "description": "Invite a human to your organization by email. The invite stays pending until they sign in and accept it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the human to invite to your organization"
+        },
+        "role": {
+          "default": "member",
+          "description": "Role in the organization (default: member)",
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "member"
+          ]
+        }
+      },
+      "required": [
+        "email",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Invite member",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_roles",
+    "title": "Manage workspace roles",
+    "description": "Manage per-workspace role delegation. Assign, list, or remove access for specific emails (view/comment/edit).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "assign",
+            "list",
+            "remove"
+          ],
+          "description": "Action: assign a role, list all roles, or remove a role"
+        },
+        "email": {
+          "description": "Email address (required for assign/remove)",
+          "type": "string"
+        },
+        "permission": {
+          "description": "Permission level (required for assign)",
+          "type": "string",
+          "enum": [
+            "view",
+            "comment",
+            "edit"
+          ]
+        }
+      },
+      "required": [
+        "workspace_id",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Manage workspace roles",
+      "readOnlyHint": false,
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "drive_org",
+    "title": "Organization details",
+    "description": "View your organization details: agents, members, plan, and usage.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Organization details",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_delete",
+    "title": "Delete file",
+    "description": "Delete a file from a workspace.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "file_id": {
+          "type": "string",
+          "description": "File ID to delete"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "file_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Delete file",
+      "readOnlyHint": false,
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "drive_versions",
+    "title": "Version history",
+    "description": "View version history for a file in a workspace.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace ID"
+        },
+        "file_id": {
+          "type": "string",
+          "description": "File ID"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "file_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Version history",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_search",
+    "title": "Search artifacts",
+    "description": "Semantic search across your org's artifacts in AgentDrive. Returns the top-N most relevant files. Use this BEFORE writing similar artifacts to avoid duplication and surface prior context.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Search query"
+        },
+        "workspace_id": {
+          "description": "Scope to a single workspace; omit for org-wide search",
+          "type": "string"
+        },
+        "top_k": {
+          "description": "Max hits to return (default 10, max 50)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
+        },
+        "filter": {
+          "type": "object",
+          "properties": {
+            "agent_platform": {
+              "type": "string",
+              "enum": [
+                "claude-code",
+                "codex",
+                "cursor",
+                "langgraph",
+                "crewai",
+                "autogen",
+                "hermes",
+                "openclaw",
+                "opencode",
+                "gemini-cli",
+                "antigravity",
+                "unknown"
+              ]
+            },
+            "agent_id": {
+              "type": "string"
+            },
+            "path_prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Search artifacts",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_recall",
+    "title": "Recall memory",
+    "description": "Recall persistent facts and preferences your agents have written. In v1 this returns semantic search results across artifacts; v1.5 will narrow to auto-extracted facts (preferences, decisions, key entities).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Recall query — what fact, preference, or decision are you trying to remember?"
+        },
+        "top_k": {
+          "description": "Max results (default 5, max 20)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Recall memory",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_log_run",
+    "title": "Log run",
+    "description": "Log an agent run to AgentDrive's provenance store. Logs task, status, referenced/produced artifacts, and cross-platform identity (which agent on which tool). Used for retrospective context retrieval and team-wide audit.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the agent did or is doing (free text)"
+        },
+        "status": {
+          "description": "Run outcome (default success)",
+          "type": "string",
+          "enum": [
+            "success",
+            "failure",
+            "partial",
+            "in_progress"
+          ]
+        },
+        "run_id": {
+          "description": "Existing run ID to update; omit to let server allocate",
+          "type": "string"
+        },
+        "artifacts_referenced": {
+          "description": "Paths of artifacts the run read",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifacts_produced": {
+          "description": "Paths of artifacts the run wrote",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "duration_ms": {
+          "description": "Wall-clock duration in milliseconds",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "metadata": {
+          "description": "Free-form key/value metadata",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Log run",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_context",
+    "title": "Load task context",
+    "description": "Auto-pull the most relevant artifacts from prior agent sessions for the task you are about to do. Combines semantic relevance with recency. Call this at the START of any non-trivial task to ground the agent in prior context — replaces manual copy-paste of artifacts between sessions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "What you are about to do — used to rank prior artifacts by relevance"
+        },
+        "workspace_id": {
+          "description": "Scope to a single workspace; omit for org-wide context",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Max artifacts to return (default 5, max 20)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Load task context",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_sessions",
+    "title": "List sessions",
+    "description": "List recent agent sessions for this project across agents (Claude Code, Codex, OpenCode, Cursor, Antigravity), newest first. Use to find prior work to continue.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "description": "Project key; defaults to the project of the current working directory",
+          "type": "string",
+          "pattern": "^[a-z0-9._-]{1,200}$"
+        },
+        "platform": {
+          "description": "Only sessions from this harness (claude-code, codex, opencode, gemini-cli, cursor, antigravity)",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Max sessions to return (default 10, max 50)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "List sessions",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_resume",
+    "title": "Resume session",
+    "description": "Load a compact handoff brief (goal, files touched, recent turns) from a prior session, by default the latest one from a different agent, so you can continue that work.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "description": "Session run id from drive_sessions (e.g. codex:abc123); omit to pick the latest session from another harness",
+          "type": "string"
+        },
+        "platform": {
+          "description": "When session_id is omitted, only consider sessions from this harness",
+          "type": "string"
+        },
+        "max_chars": {
+          "description": "Handoff size budget in characters (default 12000)",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 50000
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Resume session",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_sandbox_clone",
+    "title": "Clone repo into sandbox",
+    "description": "[EXPERIMENTAL] Clone a git repo into a per-workspace Linux sandbox. Requires Cloudflare Containers on the AgentDrive worker; gracefully degrades to a 503 with \"sandbox not configured\" otherwise.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace to clone into. The sandbox persists across MCP sessions per workspace."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Git repository URL to clone"
+        },
+        "branch": {
+          "description": "Branch to check out (default: repo default)",
+          "type": "string"
+        },
+        "depth": {
+          "description": "Shallow clone depth (default: full clone)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "workspace_id",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Clone repo into sandbox",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_sandbox_exec",
+    "title": "Run sandbox command",
+    "description": "[EXPERIMENTAL] Run a shell command inside the per-workspace Linux sandbox. Returns stdout/stderr (64 KB cap), exit code, duration. Requires Cloudflare Containers; degrades to 503 otherwise.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace whose sandbox to run in"
+        },
+        "cmd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Shell command to run inside the per-workspace Linux sandbox"
+        },
+        "cwd": {
+          "description": "Working directory (default: workspace root)",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "description": "Max runtime in ms (default 30000, hard cap 60000)",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 60000
+        }
+      },
+      "required": [
+        "workspace_id",
+        "cmd"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Run sandbox command",
+      "readOnlyHint": false,
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "drive_sandbox_read",
+    "title": "Read sandbox file",
+    "description": "[EXPERIMENTAL] Read a file from the per-workspace sandbox filesystem (build artifacts, test output, logs). Requires Cloudflare Containers; degrades to 503 otherwise.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace whose sandbox to read from"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path inside the sandbox (e.g., src/index.ts or /tmp/build.log)"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Read sandbox file",
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "drive_sandbox_commit",
+    "title": "Commit sandbox changes",
+    "description": "[EXPERIMENTAL] Stage + commit the current sandbox worktree. Surfaces as an AgentDrive artifact at commits/<sha>.json. Requires Cloudflare Containers; degrades to 503 otherwise.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "description": "Workspace whose sandbox to commit"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Commit message"
+        },
+        "author_name": {
+          "description": "Override git author name (default: agent identity)",
+          "type": "string"
+        },
+        "author_email": {
+          "description": "Override git author email (default: agent identity)",
+          "type": "string",
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Commit sandbox changes",
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  }
+]

@@ -7,6 +7,7 @@ import type { Env, AuthContext, AgentAuth, SessionAuth, ShareAuth } from '../env
 import type { Permission, ApiKeyMeta, ShareTokenMeta, SessionMeta, AgentPlatform, RoleAssignment, WorkspaceMeta, OrgAgent, OrgMember } from '@agentdrive/shared';
 import { StorageService } from '../services/storage.js';
 import { principalRateLimit } from './rate-limit.js';
+import { idempotent } from './idempotency.js';
 
 export type Variables = {
   auth: AuthContext;
@@ -112,13 +113,16 @@ export async function shareTokenAuth(
 
 type FlexContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-// Every authenticated route mounts flexAuth, so the per-principal limit runs here once.
+// Every authenticated route mounts flexAuth, so the per-principal limit and the
+// Idempotency-Key claim run here, after auth and the limit, so neither refusal spends a key.
 async function admit(c: FlexContext, auth: AuthContext, next: Next, onAdmitted?: () => void): Promise<Response | void> {
   c.set('auth', auth);
   const refusal = await principalRateLimit(c, auth);
   if (refusal) return refusal;
-  onAdmitted?.();
-  await next();
+  return idempotent(c, auth, async () => {
+    onAdmitted?.();
+    await next();
+  });
 }
 
 export const flexAuth = createMiddleware<{ Bindings: Env; Variables: Variables }>(async (c, next) => {

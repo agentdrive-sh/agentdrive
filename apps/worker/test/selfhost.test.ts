@@ -44,6 +44,8 @@ describe('selfhostConfig', () => {
     expect(out).toContain('{ name = "RESUME_METER", class_name = "ResumeMeter" }');
     expect(migrations).toEqual(blocks(prod).filter(b => b.header === '[[migrations]]').map(b => b.lines.join('\n')));
     expect(migrations).toContain('tag = "v4-resume"\nnew_sqlite_classes = ["ResumeMeter"]');
+    expect(out).toContain('{ name = "IDEMPOTENCY", class_name = "IdempotencyRecord" }');
+    expect(migrations).toContain('tag = "v5-idempotency"\nnew_sqlite_classes = ["IdempotencyRecord"]');
   });
 
   it('sets SELF_HOSTED and the deployed URL', () => {

@@ -6,6 +6,7 @@ export { FileCollab } from './durable-objects/file-collab.js';
 export { BillingCoordinator } from './durable-objects/billing-coordinator.js';
 export { ResumeMeter } from './durable-objects/resume-meter.js';
 export { MagicCodes } from './durable-objects/magic-codes.js';
+export { IdempotencyRecord } from './durable-objects/idempotency.js';
 
 // The hosted MCP and its OAuth endpoints are matched before the app; see oauth-server.ts.
 export default {

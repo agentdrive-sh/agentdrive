@@ -15,13 +15,17 @@ pnpm dev:worker      # local API at http://localhost:8787
 
 `pnpm --filter @agentdrive/web dev` starts the website and dashboard at http://localhost:3001. See [`docs/tech/architecture.md`](./docs/tech/architecture.md) for how the pieces fit.
 
-Every change lands through a pull request against `main`, and CI (typecheck and tests) must be green before it merges. Keep pull requests small and focused; open an issue first if you plan a large change.
+Every change lands through a pull request against `main`, and CI must pass on its head before it merges. CI does not run on GitHub Actions: a maintainer reads your diff, then runs `scripts/ci.sh --pr <n>` on their own machine. It tests GitHub's merge of your branch into `main` and posts each job (Typecheck, Test, Build, Verify claims, Browser regressions, Production dependency audit) as a status on your pull request's head commit. You can run the same checks yourself before you push: `scripts/ci.sh` tests your last commit in a clean temporary worktree, so uncommitted changes do not count, and its exit code and summary table are the result. In a clone of this repo it posts no statuses; in your fork it posts them to the fork when `gh` is signed in. It needs Node 22, `pnpm`, `jq` and `git`. Keep pull requests small and focused; open an issue first if you plan a large change.
 
 The maintainers develop in a private repository and publish each release here as one sync commit (its message names the internal commit). Pull requests opened here are reviewed and squash-merged here as usual, and carried into the private repository before the next release, so nothing you contribute is overwritten.
 
 ## Contributor License Agreement
 
-Before your first pull request can merge, you sign the [CLA](./CLA.md). A bot comments on the pull request with instructions; you reply with the sentence it gives you, once, and it covers all your future contributions. You keep the copyright in your work. The CLA lets Roushan Inc offer AgentDrive under a commercial license alongside the AGPL; [`LICENSING.md`](./LICENSING.md) explains why. If you contribute on behalf of your employer, have them email `licensing@agentdrive.sh` too.
+Before your first pull request can merge, you sign the [CLA](./CLA.md) by commenting on the pull request with exactly this sentence:
+
+> I have read the CLA Document and I hereby sign the CLA
+
+You do it once, and it covers all your future contributions. The maintainer's CI run records your signature and sets the `cla` status; until then that status names the commit authors who have not signed. Every commit must be authored with an email linked to your GitHub account, or there is no login to match the signature to. You keep the copyright in your work. The CLA lets Roushan Inc offer AgentDrive under a commercial license alongside the AGPL; [`LICENSING.md`](./LICENSING.md) explains why. If you contribute on behalf of your employer, have them email `licensing@agentdrive.sh` too.
 
 ## House style
 

@@ -39,6 +39,7 @@ export default defineWorkersConfig({
             BILLING_COORDINATOR: { className: 'BillingCoordinator', useSQLite: true },
             RESUME_METER: { className: 'ResumeMeter', useSQLite: true },
             MAGIC_CODES: { className: 'MagicCodes', useSQLite: true },
+            IDEMPOTENCY: { className: 'IdempotencyRecord', useSQLite: true },
           },
           bindings: {
             ENVIRONMENT: 'test',

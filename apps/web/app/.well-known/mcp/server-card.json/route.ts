@@ -1,4 +1,5 @@
 import mcpServerPackage from '../../../../../../packages/mcp-server/package.json';
+import tools from '../../../../../worker/mcp-tools.json';
 
 export const dynamic = 'force-static';
 
@@ -26,6 +27,7 @@ export function GET() {
       documentationUrl: 'https://agentdrive.sh/docs/mcp-tools',
       transport: { type: 'streamable-http', endpoint: ENDPOINT },
       capabilities: { tools: { listChanged: false } },
+      tools,
       authentication: { required: true, schemes: ['bearer'] },
       instructions:
         'Send Authorization: Bearer agentdrive_live_... with an AgentDrive API key. See https://agentdrive.sh/auth.md.',

@@ -6,7 +6,7 @@
 // claim about them in docs + web copy matches. Exits non-zero on drift.
 //
 // Run via:  pnpm verify-claims
-// Wired into CI in .github/workflows/ci.yml.
+// Wired into CI in scripts/ci.sh.
 
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
