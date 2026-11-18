@@ -11,6 +11,14 @@ import { storage } from '../lib/route-helpers.js';
 
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const shareSchema = z.object({
+  permission: z.enum(['view', 'comment', 'edit']),
+  file_id: z.string().optional().describe('Scope the link to this one file; omit for the whole workspace.'),
+  expires_in: z.number().positive().optional().describe('Seconds until the link expires; omit for no expiry.'),
+  max_uses: z.number().int().positive().optional().describe('Content reads and writes the link allows; omit for unlimited.'),
+  email: z.string().email().optional().describe('Gate the link to this email: it then also needs a session signed in as that email.'),
+});
+
 const app = new Hono<AppType>();
 app.use('*', flexAuth, workspaceAccess());
 
@@ -31,13 +39,7 @@ app.post('/', async (c) => {
   const issuer = agent ? auth.agent_id : `member:${auth.email.toLowerCase()}`;
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    permission: z.enum(['view', 'comment', 'edit']),
-    file_id: z.string().optional(),
-    expires_in: z.number().positive().optional(),
-    max_uses: z.number().int().positive().optional(),
-    email: z.string().email().optional(),
-  }).safeParse(body);
+  const parsed = shareSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'permission is required (view/comment/edit)' }, 400);
 
   const s = storage(c);

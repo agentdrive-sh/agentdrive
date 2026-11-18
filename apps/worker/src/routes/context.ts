@@ -33,7 +33,7 @@ type AppType = { Bindings: Env; Variables: Variables };
 
 const SNIPPET_CONTEXT_CHARS = 500;
 
-const contextSchema = z
+export const contextSchema = z
   .object({
     workspace_id: z.string().optional(),
     task: z.string().min(1),

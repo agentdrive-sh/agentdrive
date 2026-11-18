@@ -13,19 +13,19 @@ import {
 
 type AppType = { Bindings: Env; Variables: Variables };
 
-const cloneSchema = z.object({
+export const cloneSchema = z.object({
   url: z.string().url(),
   branch: z.string().optional(),
   depth: z.number().int().positive().max(50).optional(),
 });
 
-const execSchema = z.object({
+export const execSchema = z.object({
   cmd: z.string().min(1).max(2048),
   cwd: z.string().optional(),
   timeout_ms: z.number().int().positive().max(60_000).optional(),
 });
 
-const commitSchema = z.object({
+export const commitSchema = z.object({
   message: z.string().min(1).max(500),
   author: z
     .object({

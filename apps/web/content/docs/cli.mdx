@@ -1,0 +1,81 @@
+---
+title: AgentDrive CLI (adrive)
+description: Install the adrive command-line tool, sign in, and run every command with its flags.
+---
+
+`adrive` is the AgentDrive command-line tool. It signs you in, wires session sync and the MCP server into your agent tools, syncs and resumes sessions, and reads and writes workspace files over the [REST API](/docs/rest-api).
+
+## Install
+
+```bash
+curl -fsSL agentdrive.sh/install | sh
+```
+
+Or install the package yourself, then run setup:
+
+```bash
+pnpm add -g @adrive/cli    # or: npm i -g @adrive/cli
+adrive init
+```
+
+`-v` / `--version` prints the version. `--help` works on every command.
+
+## Sign in
+
+`adrive init` and `adrive auth login` use polling auth, with no localhost server:
+
+1. The CLI prints a URL and a code like `WXYZ-2345`, and opens the URL in your browser.
+2. You sign in (Google, GitHub or email code) and type the code from your terminal. Only enter a code from your own terminal.
+3. The CLI polls until you finish, for up to 10 minutes. Five wrong codes cancel the login.
+
+On a headless machine or over SSH, open the printed URL on any device. To use an existing key instead, pipe it on stdin:
+
+```bash
+echo "$AGENTDRIVE_API_KEY" | adrive auth login --with-key
+```
+
+The key is stored in `$XDG_CONFIG_HOME/agentdrive/config.json` (falling back to `~/.config/agentdrive/config.json`) with mode 600. No agent tool config ever holds it.
+
+## Setup and account
+
+| Command | Flags | Purpose |
+|---|---|---|
+| `adrive init` | `-y, --yes` never prompt; with several workspaces the first becomes the default. `--api-url <url>` override the API base URL. `--local` skip sign-in and resume between agents on this machine from local transcripts. | Log in and wire AgentDrive into every installed agent tool. |
+| `adrive auth login` | `--api-url <url>`, `--with-key` read an API key from stdin | Open the browser, log in, store the API key. |
+| `adrive auth logout` | `-y, --yes` skip confirmation | Wipe local credentials. |
+| `adrive auth status` | | Show the current login state. |
+| `adrive whoami` | | Print principal info from the API. |
+| `adrive privacy` | `--show`, `--auto-context <on\|off>`, `--capture-artifacts <on\|off>`, `--capture-transcripts <on\|off>`, `--private-workspace <on\|off>`, `--auto-wire <on\|off>` | Show or change privacy and sync preferences. |
+
+`adrive init` wires Claude Code (through its plugin), Codex, OpenCode, Cursor and Antigravity with session sync hooks, the MCP server and resume commands, and adds the MCP server to Claude Desktop, Cline, Continue and Zed. Merges keep everything else in each file, the first change to a file saves `<file>.bak`, and re-running it changes nothing.
+
+## Sessions
+
+| Command | Flags | Purpose |
+|---|---|---|
+| `adrive resume [id]` | `--list` list recent sessions for this project. `--local` read this machine's transcripts even when logged in. `--max-chars <n>` handoff size budget. | Print a handoff for a prior session of this project (the latest if no id), or for a share link. Without a login, reads this machine's agent transcripts. |
+| `adrive sync` | `--harness <h>`, `--session <id>`, `--transcript <path>`, `--cwd <dir>`, `--force`, `--start`, `--all`, `--quiet`, `--dry-run` | Upload agent sessions and the untracked files they wrote. |
+| `adrive hook <harness>` | `--event <name>` for harnesses whose payload has none (antigravity) | Lifecycle hook entry; reads the event JSON on stdin. Hooks call this, so you rarely run it by hand. |
+| `adrive timeline` | `--today`, `--since <iso>`, `--limit <n>` (default 200, max 1000) | Cross-agent activity stream for your org. |
+
+`--harness` and `hook` take `claude-code`, `codex`, `opencode`, `gemini-cli`, `cursor` or `antigravity`. For `sync`: `--session` names one harness session (with `--harness`), `--transcript` and `--cwd` describe that session, `--force` ignores the debounce and marks it finished, `--start` always sweeps for recent sessions, `--all` sweeps full history instead of changes since the last sweep, and `--quiet` logs to `sync.log` in the config directory. See [Sessions](/docs/concepts/sessions).
+
+## Files and memory
+
+| Command | Flags | Purpose |
+|---|---|---|
+| `adrive ls` | | List workspaces. |
+| `adrive push <local-path>` | `-w, --workspace <id>` (default: the only workspace), `-r, --remote-path <path>` (default: basename), `-m, --message <msg>`, `--encrypt`, `--plaintext` | Upload a local file. |
+| `adrive pull <workspace-id>/<path>` | `-o, --out <file>` (default: stdout) | Download a file. |
+| `adrive watch [path]` | `-w, --workspace <id>`, `--dry-run`, `--no-encrypt`, `--debounce <ms>` | Upload every file under the path (default: cwd), existing ones first, then each change. Skips `.gitignore` and `.adriveignore` matches. |
+| `adrive search <query>` | `--top-k <n>`, `--platform <p>`, `-w, --workspace <id>` | Semantic search across workspace artifacts. |
+| `adrive context [task]` | `--limit <n>`, `-w, --workspace <id>` | Pull artifacts relevant to a task. |
+| `adrive run-log <task>` | `--status <status>` (`success`, `failure`, `partial`, `in_progress`; default `success`), `--duration <ms>`, `--ref <path...>`, `--produced <path...>` | Log an agent run for cross-agent provenance. |
+
+## Billing
+
+| Command | Flags | Purpose |
+|---|---|---|
+| `adrive plan` | | Show the current plan, usage and quotas. |
+| `adrive billing` | | Open the Stripe billing portal in your browser. |
+| `adrive upgrade [plan]` | `--seats <n>` Team seats, 3 to 100, default 3 | Open the upgrade page for `pro` or `team` (default: the next plan up). |

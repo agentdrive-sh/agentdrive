@@ -26,7 +26,7 @@ const PROJECT_REGEX = /^[a-z0-9._-]{1,200}$/;
 // Client clocks drift; a far-future activity time would pin a run to the top.
 const MAX_ACTIVITY_SKEW_MS = 5 * 60_000;
 
-const toolCallSchema = z.object({
+export const toolCallSchema = z.object({
   tool: z.string().min(1).max(128),
   args_summary: z.string().optional(),
   result_summary: z.string().optional(),
@@ -35,7 +35,7 @@ const toolCallSchema = z.object({
   time_offset_ms: z.number().nonnegative(),
 });
 
-const runSchema = z.object({
+export const runSchema = z.object({
   run_id: z.string().regex(RUN_ID_REGEX).optional(),
   workspace_id: z.string().optional(),
   task: z.string().min(1),
@@ -70,7 +70,7 @@ function sanitizeToolCalls(raw: ToolCall[] | undefined): ToolCall[] | undefined 
   }));
 }
 
-const projectQuerySchema = z.object({
+export const projectQuerySchema = z.object({
   project: z.string().regex(PROJECT_REGEX),
   platform: z.enum(AGENT_PLATFORMS as readonly [AgentPlatform, ...AgentPlatform[]]).optional(),
   limit: z.coerce.number().int().positive().optional(),

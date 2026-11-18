@@ -10,6 +10,7 @@ export const WEBMCP_SCRIPT = `(function () {
       name: 'search_docs',
       description: 'Search the AgentDrive documentation. Returns up to 5 matches with their URLs.',
       inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'What to search for' } }, required: ['query'] },
+      annotations: { readOnlyHint: true },
       execute: function (input) {
         var q = encodeURIComponent(String((input && input.query) || ''));
         return fetch('/api/search?query=' + q, { credentials: 'omit' })
@@ -25,7 +26,30 @@ export const WEBMCP_SCRIPT = `(function () {
       name: 'get_install_command',
       description: 'Get the shell command that installs AgentDrive and connects it to your agent tools.',
       inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
       execute: function () { return Promise.resolve(text(${JSON.stringify(INSTALL_COMMAND)})); }
+    },
+    {
+      name: 'read_doc',
+      description: 'Read one AgentDrive docs page as markdown, such as /docs/quick-start or /docs/rest-api.',
+      inputSchema: { type: 'object', properties: { path: { type: 'string', description: 'Docs path starting with /docs' } }, required: ['path'] },
+      annotations: { readOnlyHint: true },
+      execute: function (input) {
+        var path = String((input && input.path) || '/docs');
+        if (path.slice(-3) === '.md') path = path.slice(0, -3);
+        if (path.length > 1 && path.slice(-1) === '/') path = path.slice(0, -1);
+        if (path.indexOf('/docs') !== 0) return Promise.resolve(text('Docs paths start with /docs.'));
+        return fetch(path + '.md', { credentials: 'omit' }).then(function (r) { return r.text(); }).then(text);
+      }
+    },
+    {
+      name: 'get_pricing',
+      description: 'Get the AgentDrive plans, prices and limits as markdown.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      execute: function () {
+        return fetch('/pricing.md', { credentials: 'omit' }).then(function (r) { return r.text(); }).then(text);
+      }
     }
   ];
   var done = false;

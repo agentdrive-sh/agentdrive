@@ -16,6 +16,11 @@ import { resumeMonth } from '../services/storage.js';
 type Variables = { auth: AuthContext };
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const checkoutSchema = z.discriminatedUnion('plan', [
+  z.object({ plan: z.literal('team'), seats: z.number().int().min(TEAM_SEATS.min).max(TEAM_SEATS.max).optional() }),
+  z.object({ plan: z.literal('pro') }),
+]);
+
 const app = new Hono<AppType>();
 app.use('*', flexAuth);
 
@@ -69,10 +74,7 @@ app.post('/checkout', async (c) => {
   }
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.discriminatedUnion('plan', [
-    z.object({ plan: z.literal('team'), seats: z.number().int().min(TEAM_SEATS.min).max(TEAM_SEATS.max).optional() }),
-    z.object({ plan: z.literal('pro') }),
-  ]).safeParse(body);
+  const parsed = checkoutSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: `plan is required (${PAID_PLANS.join('/')}); team seats must be a whole number from ${TEAM_SEATS.min} to ${TEAM_SEATS.max}` }, 400);
   }

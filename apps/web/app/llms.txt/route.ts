@@ -1,16 +1,12 @@
 import { PLAN_CATALOG } from '@agentdrive/shared';
-import { listPosts, source } from '@/lib/source';
+import { docLinks, link } from '@/lib/llms';
+import { listPosts } from '@/lib/source';
 import { COMPETITORS } from '../compare/data';
 import { FACTS_DESCRIPTION, ONE_SENTENCE } from '../facts/facts';
 import { CAPTURE_HARNESSES, INSTALL_COMMAND } from '../integrations/data';
+import { PAIRS } from '../resume/data';
 
 export const dynamic = 'force-static';
-
-const SITE = 'https://agentdrive.sh';
-
-function link(title: string, path: string, description?: string): string {
-  return `- [${title}](${SITE}${path})${description ? `: ${description}` : ''}`;
-}
 
 export function GET() {
   const body = [
@@ -22,7 +18,7 @@ export function GET() {
     '',
     `Install: \`${INSTALL_COMMAND}\``,
     '',
-    'Links below point to markdown versions where one exists. Start with the facts page for canonical answers, or read llms-full.txt for every docs page in one file.',
+    'Links below point to markdown versions where one exists. Every docs page is served as markdown at its URL plus `.md`, or at its normal URL with `Accept: text/markdown`. Start with the facts page for canonical answers, or read llms-full.txt for every docs page in one file.',
     '',
     '## Facts',
     '',
@@ -31,28 +27,51 @@ export function GET() {
     '',
     '## Docs',
     '',
-    ...source.getPages().map((p) => link(p.data.title, `/llms.mdx${p.url}`, p.data.description)),
+    ...docLinks(),
+    link('Docs index', '/docs/llms.txt', 'This docs section on its own'),
+    '',
+    '## API',
+    '',
+    link('OpenAPI specification', '/openapi.json', 'OpenAPI 3.1 description of the REST API at https://app.agentdrive.sh/v1'),
+    link('API catalog', '/.well-known/api-catalog', 'RFC 9727 linkset of the REST API and MCP servers'),
+    link('MCP server card', '/.well-known/mcp/server-card.json', 'Hosted MCP server at https://mcp.agentdrive.sh/mcp (OAuth or API key)'),
+    link('Docs MCP server', '/docs/mcp/server-card', 'Public read-only MCP server at https://agentdrive.sh/docs/mcp with search_docs and read_doc, no sign-in'),
+    link('AI catalog', '/.well-known/ai-catalog.json'),
+    '- [Source code](https://github.com/agentdrive-sh/agentdrive): the AGPL server, web app, CLI, SDK, MCP server and Claude Code plugin, with AGENTS.md for coding agents',
     '',
     '## Product',
     '',
-    link('Pricing', '/pricing', PLAN_CATALOG.map((p) => `${p.name} ${p.price} ${p.cadence}`).join('; ')),
+    link('Home', '/index.md', 'This index plus the homepage questions, served at the homepage URL for markdown clients'),
+    link('Pricing', '/pricing.md', PLAN_CATALOG.map((p) => `${p.name} ${p.price} ${p.cadence}`).join('; ')),
     link('Integrations', '/integrations', 'Which agents sync sessions and which use the workspace tools'),
     ...CAPTURE_HARNESSES.map((i) => link(`${i.label} integration`, `/integrations/${i.platform}`, i.body)),
     link('Security', '/security', 'What AgentDrive syncs, what Private Workspace encrypts, and what stays managed when you bring your own bucket'),
+    link('Service status', '/status'),
+    link('About', '/about'),
+    link('Contact', '/contact', 'Support, security, privacy and legal contacts'),
+    '',
+    '## Resume guides',
+    '',
+    link('Resume a session in another coding agent', '/resume'),
+    ...PAIRS.map((p) => link(`Resume a ${p.from.label} session in ${p.to.label}`, `/resume/${p.slug}`)),
     '',
     '## Compare',
     '',
+    link('Compare', '/compare', 'How AgentDrive differs from the alternatives'),
     ...COMPETITORS.map((c) => link(`AgentDrive vs ${c.name}`, `/compare/${c.slug}`, c.tagline)),
     '',
     '## Blog',
     '',
+    link('Blog', '/blog'),
     ...listPosts().map((p) => link(p.data.title, `${p.url}/index.md`, p.data.description)),
     '',
     '## Optional',
     '',
     link('Manifesto', '/manifesto', 'Why AgentDrive was built: a shared artifact workspace with provenance for coding agents'),
+    link('Legal', '/legal'),
     link('Terms', '/legal/terms'),
     link('Privacy', '/legal/privacy'),
+    link('Data Processing Agreement', '/legal/dpa'),
     '',
   ].join('\n');
   return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });

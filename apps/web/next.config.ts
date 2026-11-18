@@ -3,6 +3,49 @@ import { createMDX } from 'fumadocs-mdx/next';
 
 // shortcut: ignores q-values, upgrade to a negotiator if a client sends text/markdown;q=0
 const acceptsMarkdown = [{ type: 'header' as const, key: 'accept', value: '(.*)text/markdown(.*)' }];
+// AI fetchers that ask for HTML still read markdown best.
+const aiAgent = [
+  {
+    type: 'header' as const,
+    key: 'user-agent',
+    value: '(.*)(ClaudeBot|Claude-User|Claude-SearchBot|GPTBot|ChatGPT-User|OAI-SearchBot|PerplexityBot|Perplexity-User)(.*)',
+  },
+];
+// Docs page slugs never contain a dot, which keeps /docs/llms.txt and the .md twins out, and
+// /docs/mcp is the docs MCP endpoint, which a markdown rewrite would break.
+const DOCS_PAGE = '/docs/:path((?!mcp(?:/|$))[^.]+)';
+const toMarkdown = (source: string, destination: string) =>
+  [acceptsMarkdown, aiAgent].map((has) => ({ source, has, destination }));
+
+// Next marks prerendered pages s-maxage=31536000; agents and caches should see a redeploy within minutes.
+const FRESH_PATHS = [
+  '/',
+  '/index.md',
+  '/llms.txt',
+  '/llms-full.txt',
+  '/docs',
+  '/docs.md',
+  DOCS_PAGE,
+  '/docs/:path+.md',
+  '/docs/llms.txt',
+  '/pricing',
+  '/pricing.md',
+  '/integrations/:path*',
+  '/resume/:path*',
+  '/compare/:path*',
+  '/blog/:path*',
+  '/security',
+  '/manifesto',
+  '/about',
+  '/contact',
+  '/facts/:path*',
+  '/legal/:path*',
+  '/openapi.json',
+  '/robots.txt',
+  '/schemamap.xml',
+  '/feeds/:path*',
+  '/.well-known/:path*',
+];
 
 // Gemini CLI pages were folded into Antigravity; keep their indexed URLs working.
 const GEMINI_PAIR_PEERS = ['claude-code', 'codex', 'opencode', 'cursor'];
@@ -24,6 +67,10 @@ const config: NextConfig = {
   typedRoutes: false,
   async headers() {
     return [
+      ...FRESH_PATHS.map((source) => ({
+        source,
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=300, must-revalidate' }],
+      })),
       {
         source: '/',
         headers: [
@@ -66,11 +113,17 @@ const config: NextConfig = {
   async rewrites() {
     return {
       beforeFiles: [
-        { source: '/', has: acceptsMarkdown, destination: '/index.md' },
+        { source: '/docs.md', destination: '/llms.mdx/docs' },
+        { source: '/docs/index.md', destination: '/llms.mdx/docs' },
+        { source: '/docs/:path+.md', destination: '/llms.mdx/docs/:path+' },
+        ...toMarkdown('/', '/index.md'),
         // Under OpenNext a single /docs/:path* rule rewrote bare /docs to a 404, so it gets its own rule.
-        { source: '/docs', has: acceptsMarkdown, destination: '/llms.mdx/docs' },
-        { source: '/docs/:path+', has: acceptsMarkdown, destination: '/llms.mdx/docs/:path+' },
+        ...toMarkdown('/docs', '/llms.mdx/docs'),
+        ...toMarkdown(DOCS_PAGE, '/llms.mdx/docs/:path'),
+        ...toMarkdown('/pricing', '/pricing.md'),
       ],
+      afterFiles: [],
+      fallback: [{ source: '/:path*', has: acceptsMarkdown, destination: '/llms.mdx/not-found' }],
     };
   },
 };

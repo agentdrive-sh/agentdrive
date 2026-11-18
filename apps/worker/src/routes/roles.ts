@@ -10,6 +10,11 @@ import { storage, requireAgent } from '../lib/route-helpers.js';
 
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const roleSchema = z.object({
+  email: z.string().email(),
+  permission: z.enum(['view', 'comment', 'edit']),
+});
+
 const app = new Hono<AppType>();
 app.use('*', flexAuth, workspaceAccess());
 
@@ -21,10 +26,7 @@ app.post('/', async (c) => {
   const wid = workspaceId(c);
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    email: z.string().email(),
-    permission: z.enum(['view', 'comment', 'edit']),
-  }).safeParse(body);
+  const parsed = roleSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'email and permission are required' }, 400);
 
   const s = storage(c);

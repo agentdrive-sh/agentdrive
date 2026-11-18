@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         kicker="Legal"
         kickerHref="/legal"
         title="Privacy Policy"
-        lede="Effective 2026-05-17."
+        lede="Effective 2026-05-17. Updated 2026-11-18."
       />
       <ProseSection>
         <Contents titles={["Data we collect", "What we do not collect", "How we use it", "Third parties", "Retention", "Your rights (GDPR / CCPA)", "International transfers", "Security", "Children", "Changes", "Contact"]} />
@@ -37,11 +37,12 @@ export default function PrivacyPage() {
           <p><strong>Agent data.</strong> Files your agents write to AgentDrive (content + metadata), share tokens you create, comments, run logs (task description, status, artifacts referenced/produced, duration, cost metadata).</p>
           <p><strong>Session transcripts.</strong> When session sync is on in the AgentDrive CLI or an AgentDrive plugin, we store your coding-agent session transcripts (your prompts, the agent&apos;s replies and its tool calls) and files your agents write that git does not track. Secrets are redacted on your device before upload; everything else, including any personal data in them, is stored as written. Turn session sync off with <code>adrive privacy</code>.</p>
           <p><strong>Operational data.</strong> Request logs (IP, user-agent, request id, timestamp, response status), API key usage timestamps. We do not log request bodies.</p>
+          <p><strong>Website analytics.</strong> On the public pages of agentdrive.sh (not the signed-in app), Google Analytics, loaded through Google Tag Manager, counts visits and which pages are read. It sets analytics cookies and receives the page address, your IP address and browser details.</p>
           <p><strong>Billing data.</strong> If you upgrade to a paid plan, Stripe processes your payment. We store a Stripe customer id; Stripe stores the card details. We never see card numbers.</p>
         </LegalSection>
 
         <LegalSection title="What we do not collect">
-          <p>We do not collect: device fingerprints, third-party tracking cookies, advertising identifiers, your contact list, the cleartext of your API keys after issuance, or the cleartext of your share tokens after the signing operation.</p>
+          <p>We do not collect: device fingerprints, advertising identifiers, your contact list, the cleartext of your API keys after issuance, or the cleartext of your share tokens after the signing operation.</p>
         </LegalSection>
 
         <LegalSection title="How we use it">
@@ -55,6 +56,7 @@ export default function PrivacyPage() {
           <p>We use a named set of subprocessors to provide the Service. The current list — including cloud infrastructure, payments, and OAuth identity — is maintained in our <a href="/legal/dpa">Data Processing Addendum</a>. Each subprocessor&apos;s privacy practices apply to data they process.</p>
           <p><strong>Stripe</strong> processes payments. Only billing data flows to Stripe.</p>
           <p><strong>Google / GitHub</strong> are OAuth providers if you choose to sign in with them. They share your profile id, email, and avatar with us. We do not request additional scopes.</p>
+          <p><strong>Google Analytics</strong> measures visits to our public web pages, as described under Website analytics. It does not measure the signed-in app.</p>
           <p>We do not sell, rent, or share your data with any other third party.</p>
         </LegalSection>
 

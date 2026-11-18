@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { frontmatter, markdownResponse } from '@/lib/llms';
 import { formatPostDate, getPost, listPosts } from '@/lib/source';
 
 export const dynamic = 'force-static';
@@ -17,7 +18,11 @@ export async function GET(_req: Request, props: { params: Promise<{ slug: string
     ...(post.data.description ? [`> ${post.data.description}`] : []),
     `By ${post.data.author}, ${formatPostDate(post.data.date)}. Source: https://agentdrive.sh${post.url}`,
   ];
-  return new Response(`${head.join('\n\n')}\n\n${await post.data.getText('processed')}`, {
-    headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
+  const meta = frontmatter({
+    title: post.data.title,
+    description: post.data.description,
+    canonical: `https://agentdrive.sh${post.url}`,
+    'last-updated': post.data.updated ?? post.data.date,
   });
+  return markdownResponse(`${meta}${head.join('\n\n')}\n\n${await post.data.getText('processed')}`);
 }

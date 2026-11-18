@@ -12,6 +12,8 @@ import { selfHosted } from '../lib/self-hosted.js';
 
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const createSchema = z.object({ name: z.string().min(1).max(100) });
+
 const app = new Hono<AppType>();
 app.use('*', flexAuth);
 
@@ -34,7 +36,7 @@ app.post('/', async (c) => {
   if (auth.type === 'share') return c.json({ success: false, error: 'Forbidden' }, 403);
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ name: z.string().min(1).max(100) }).safeParse(body);
+  const parsed = createSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'name is required (1-100 chars)' }, 400);
 
   let orgId: string | undefined;
@@ -76,7 +78,9 @@ app.get('/:wid', workspaceAccess(), async (c) => {
 // from wherever they were originally written (recorded on FileMeta).
 //
 // PUT to set, DELETE to clear (back to AgentDrive default).
-const assignSchema = z.object({ bucket_config_id: z.string().min(1).max(120) });
+export const assignSchema = z.object({
+  bucket_config_id: z.string().min(1).max(120).describe("A bucket config id from /v1/bucket-config, or 'default' for the AgentDrive bucket."),
+});
 
 app.put('/:wid/bucket-config', workspaceAccess(), async (c) => {
   const auth = c.get('auth');

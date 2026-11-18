@@ -1,0 +1,158 @@
+---
+title: AgentDrive TypeScript SDK
+description: The @adrive/sdk client for calling AgentDrive from TypeScript and JavaScript without MCP.
+---
+
+`@adrive/sdk` is one client class over the [REST API](/docs/rest-api). Use it from any agent or script that runs TypeScript or JavaScript and does not go through the [MCP server](/docs/mcp-tools).
+
+## Install
+
+```bash
+pnpm add @adrive/sdk
+# or
+npm install @adrive/sdk
+```
+
+## Create a client
+
+```ts
+import { AgentDrive } from '@adrive/sdk';
+
+const drive = new AgentDrive({
+  apiKey: process.env.AGENTDRIVE_API_KEY!,
+  agentPlatform: 'codex',
+  agentRole: 'planner',
+});
+```
+
+| Option | Default | Purpose |
+|---|---|---|
+| `apiKey` | required | An `agentdrive_live_...` key. The constructor throws without it. |
+| `baseUrl` | `https://app.agentdrive.sh` | The AgentDrive server, for self-hosting. |
+| `agentPlatform` | `sdk-ts` | Sent as `X-Agent-Platform` on every request. |
+| `agentRole` | empty | Sent as `X-Agent-Role`, a free-text label up to 64 characters. |
+
+One key is one principal; the platform and role headers tell sessions apart in provenance. See [Cross-agent identity](/docs/concepts/cross-agent-identity).
+
+## Errors
+
+Every method throws `ApiError` on a failed request. It carries the HTTP `status`.
+
+```ts
+import { ApiError } from '@adrive/sdk';
+
+try {
+  await drive.readFile(workspaceId, fileId);
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) {
+    // not found
+  }
+}
+```
+
+## Pagination
+
+List endpoints return `{ items, cursor }`. Each list has a `*Page` method that takes a cursor, and an `All` method that walks every page up to `maxPages` (default 10). `listAllPages(fetchPage, maxPages)` is exported for your own loops.
+
+```ts
+const first = await drive.listFilesPage(workspaceId, 'notes/');
+const next = first.cursor ? await drive.listFilesPage(workspaceId, 'notes/', first.cursor) : null;
+const everything = await drive.listAllFiles(workspaceId, 'notes/');
+```
+
+## Workspaces
+
+```ts
+const ws = await drive.createWorkspace('research');
+const page = await drive.listWorkspacesPage();   // (cursor = null)
+const all = await drive.listWorkspaces();        // (maxPages = 10)
+```
+
+## Files
+
+```ts
+await drive.writeFile(ws.id, 'plan.md', '# the plan', 'first draft');   // (workspaceId, path, content, message?)
+const file = await drive.readFile(ws.id, fileId);                       // { id, path, content, version, updated_at }
+const files = await drive.listFilesPage(ws.id, 'src/');                 // (workspaceId, prefix?, cursor = null)
+const allFiles = await drive.listAllFiles(ws.id);                       // (workspaceId, prefix?, maxPages = 10)
+await drive.deleteFile(ws.id, fileId);                                  // { deleted }
+const versions = await drive.getVersionsPage(ws.id, fileId);            // (workspaceId, fileId, cursor = null)
+const allVersions = await drive.getAllVersions(ws.id, fileId);          // (workspaceId, fileId, maxPages = 10)
+```
+
+## Memory
+
+```ts
+const { hits, total } = await drive.search({
+  query: 'shipping checklist',
+  workspace_id: ws.id,
+  top_k: 10,
+  filter: { agent_platform: 'claude-code', path_prefix: 'docs/' },
+});
+
+const { artifacts } = await drive.context({ task: 'implement plan.md', limit: 5 });
+```
+
+`filter` also accepts `agent_id` and `kind`. Each hit carries `path`, `ws_id`, `content_hash`, `score`, `agent_platform` and `created_at`. See [Memory and search](/docs/concepts/memory-and-search).
+
+## Provenance
+
+```ts
+const { run_id } = await drive.logRun({
+  task: 'implement plan.md',
+  status: 'success', // success | failure | partial | in_progress
+  artifacts_referenced: ['plan.md'],
+  artifacts_produced: ['src/foo.ts'],
+  duration_ms: 42000,
+});
+
+const run = await drive.getRun(run_id);
+```
+
+## Sharing, comments and activity
+
+```ts
+// (workspaceId, permission, fileId?, expiresIn?, maxUses?, email?)
+const link = await drive.createShareLink(ws.id, 'view', fileId);
+console.log(link.url);
+
+// (workspaceId, fileId, body, authorName?, lineStart?, lineEnd?)
+await drive.addComment(ws.id, fileId, 'Check the edge case here', 'reviewer', 10, 12);
+const comments = await drive.getCommentsPage(ws.id, fileId);
+const allComments = await drive.getAllComments(ws.id, fileId);
+
+const activity = await drive.getActivityPage(ws.id);
+const allActivity = await drive.getAllActivity(ws.id);
+```
+
+## Roles and org
+
+```ts
+await drive.assignRole(ws.id, 'sam@example.com', 'edit');   // view | comment | edit
+const roles = await drive.getRolesPage(ws.id);
+const allRoles = await drive.getAllRoles(ws.id);
+await drive.removeRole(ws.id, 'sam@example.com');
+
+await drive.inviteMember('sam@example.com', 'member');       // owner | admin | member
+const org = await drive.getOrg();                             // id, name, plan, agents, members, usage, quota
+const plan = await drive.getBillingPlan();                    // plan, usage, quota
+```
+
+## Sandbox
+
+Experimental. These need the sandbox binding on the server and return 503 when it is not set up.
+
+```ts
+await drive.sandboxClone(ws.id, { url: 'https://github.com/org/repo', branch: 'main', depth: 1 });
+const { exit_code, stdout } = await drive.sandboxExec(ws.id, { cmd: 'pnpm test', timeout_ms: 60000 });
+const { content } = await drive.sandboxRead(ws.id, 'package.json');
+await drive.sandboxCommit(ws.id, { message: 'Fix failing test' });
+```
+
+## Raw requests
+
+`rawFetch(path, init)` sends a request to `/v1<path>` with the same auth and identity headers and returns the raw `Response`.
+
+```ts
+const res = await drive.rawFetch('/billing/plan');
+```

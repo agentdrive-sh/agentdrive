@@ -15,6 +15,7 @@
     "pretest": "pnpm run generate",
     "test": "vitest run",
     "test:watch": "vitest",
+    "openapi": "pnpm run generate && vitest run test/openapi.test.ts --update",
     "predev": "pnpm run generate",
     "predeploy": "pnpm run generate"
   },

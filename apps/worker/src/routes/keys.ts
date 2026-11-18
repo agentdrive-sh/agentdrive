@@ -25,6 +25,8 @@ function resolveOrg(auth: AuthContext): string | null {
   return null;
 }
 
+export const createKeySchema = z.object({ name: z.string().min(1).max(100) });
+
 const FORBIDDEN = { success: false, error: 'API key management requires an org-scoped principal' } as const;
 
 app.get('/', async (c) => {
@@ -41,7 +43,7 @@ app.post('/', async (c) => {
   const createdBy = auth.type === 'session' ? auth.email.toLowerCase() : auth.type === 'agent' ? auth.created_by : undefined;
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ name: z.string().min(1).max(100) }).safeParse(body);
+  const parsed = createKeySchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'name is required (1-100 chars)' }, 400);
 
   const refusal = await planLimitFor(c.env, orgId, 'agent_count');

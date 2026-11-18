@@ -14,7 +14,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: 'Pricing',
   description: DESCRIPTION,
-  alternates: { canonical: '/pricing' },
+  alternates: { canonical: '/pricing', types: { 'text/markdown': '/pricing.md' } },
   openGraph: {
     ...OPEN_GRAPH_BASE,
     url: '/pricing',

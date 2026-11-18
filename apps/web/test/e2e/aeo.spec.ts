@@ -40,7 +40,7 @@ test('llms.txt links the facts, the full docs file and markdown mirrors that res
   for (const link of links) {
     const res = await request.get(link);
     expect(res.status(), link).toBe(200);
-    expect(await res.text(), link).toMatch(/^# /);
+    expect(await res.text(), link).toMatch(/^(---\n[\s\S]*?\n---\n\n?)?# /);
   }
 
   const full = await (await request.get('/llms-full.txt')).text();

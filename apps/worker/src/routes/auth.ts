@@ -20,6 +20,18 @@ type AppType = { Bindings: Env; Variables: Variables };
 
 const app = new Hono<AppType>();
 
+export const sendCodeSchema = z.object({
+  email: z.string().email(),
+  purpose: z.enum(['verify', 'login']).default('login'),
+  workspace_id: z.string().optional(),
+  token_id: z.string().optional(),
+});
+
+export const verifyCodeSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6),
+});
+
 const minutes = (seconds: number) => {
   const m = Math.ceil(seconds / 60);
   return `${m} minute${m === 1 ? '' : 's'}`;
@@ -51,12 +63,7 @@ app.use('/verify-code', emailSignInDisabled);
 
 app.post('/send-code', ipRateLimit('ip_magic'), async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    email: z.string().email(),
-    purpose: z.enum(['verify', 'login']).default('login'),
-    workspace_id: z.string().optional(),
-    token_id: z.string().optional(),
-  }).safeParse(body);
+  const parsed = sendCodeSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'valid email is required' }, 400);
 
   const result = await sendMagicCode(c.env, parsed.data.email, parsed.data.purpose, {
@@ -86,10 +93,7 @@ app.post('/send-code', ipRateLimit('ip_magic'), async (c) => {
 
 app.post('/verify-code', ipRateLimit('ip_magic'), async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    email: z.string().email(),
-    code: z.string().length(6),
-  }).safeParse(body);
+  const parsed = verifyCodeSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'email and 6-digit code are required' }, 400);
 
   const magic = await verifyMagicCode(c.env, parsed.data.email, parsed.data.code);

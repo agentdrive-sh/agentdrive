@@ -17,8 +17,16 @@ type AppType = { Bindings: Env; Variables: Variables };
 const app = new Hono<AppType>();
 app.use('*', flexAuth);
 
+export const renameSchema = z.object({ name: z.string().min(1).max(100) });
+
+export const inviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['owner', 'admin', 'member']).default('member'),
+});
+
 const ownerOnly = { success: false as const, error: 'Only an org owner can invite or remove an owner' };
 const adminOnly = { success: false as const, error: 'Only an org owner or admin can invite an admin' };
+const renameAdminOnly = { success: false as const, error: 'Only an org owner or admin can rename the organization' };
 
 app.get('/', async (c) => {
   const auth = c.get('auth');
@@ -67,11 +75,13 @@ app.patch('/', async (c) => {
   else if (auth.type === 'session') orgId = auth.org_id;
   if (!orgId) return c.json({ success: false, error: 'No organization found' }, 404);
 
+  const s = storage(c);
+  if (!(await canManageOrg(s, auth, orgId))) return c.json(renameAdminOnly, 403);
+
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ name: z.string().min(1).max(100) }).safeParse(body);
+  const parsed = renameSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'name is required (1-100 chars)' }, 400);
 
-  const s = storage(c);
   const org = await s.getOrg(orgId);
   if (!org) return c.json({ success: false, error: 'Organization not found' }, 404);
 
@@ -94,10 +104,7 @@ app.post('/invite', async (c) => {
   if (!orgId || !invitedBy) return c.json({ success: false, error: 'Forbidden' }, 403);
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    email: z.string().email(),
-    role: z.enum(['owner', 'admin', 'member']).default('member'),
-  }).safeParse(body);
+  const parsed = inviteSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'valid email and role required' }, 400);
 
   const s = storage(c);

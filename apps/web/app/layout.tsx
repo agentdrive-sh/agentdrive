@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { PLAN_CATALOG } from '@agentdrive/shared';
+import { Analytics } from '@/components/analytics';
 import { JsonLd } from '@/components/seo/json-ld';
-import { ORGANIZATION, SITE_URL, SOFTWARE_ID } from '@/components/seo/site';
+import { ORGANIZATION, SITE_DESCRIPTION, SITE_TITLE, SITE_URL, SOFTWARE_APPLICATION } from '@/components/seo/site';
 import { WEBMCP_SCRIPT } from '@/components/webmcp-script';
 import './globals.css';
 
@@ -18,17 +18,14 @@ const geistMono = Geist_Mono({
   display: 'swap',
 });
 
-const TITLE = 'AgentDrive — start in any agent, finish in any other';
-const DESCRIPTION =
-  "The shared workspace that lets Claude Code, Codex, OpenCode, Cursor and Antigravity pick up each other's sessions, with provenance on every artifact.";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://agentdrive.sh'),
   title: {
-    default: TITLE,
+    default: SITE_TITLE,
     template: '%s — AgentDrive',
   },
-  description: DESCRIPTION,
+  description: SITE_DESCRIPTION,
   applicationName: 'AgentDrive',
   keywords: [
     'shared workspace for coding agents',
@@ -58,17 +55,27 @@ export const metadata: Metadata = {
   },
 };
 
-const PLAN_BILLING: Record<string, Record<string, unknown>> = {
-  pro: { billingDuration: 'P1M' },
-  team: { billingDuration: 'P1M', referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitText: 'seat' } },
-};
-
 const JSON_LD = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       ...ORGANIZATION,
+      legalName: 'Roushan, Inc.',
+      email: 'hello@agentdrive.sh',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: '1111b S Governors Ave STE 55131',
+        addressLocality: 'Dover',
+        addressRegion: 'DE',
+        postalCode: '19904',
+        addressCountry: 'US',
+      },
+      contactPoint: [
+        { '@type': 'ContactPoint', contactType: 'customer support', email: 'hello@agentdrive.sh', url: `${SITE_URL}/contact` },
+        { '@type': 'ContactPoint', contactType: 'security', email: 'security@agentdrive.sh', url: `${SITE_URL}/security` },
+      ],
       sameAs: [
+        'https://github.com/agentdrive-sh',
         'https://github.com/agentdrive-sh/agentdrive',
         'https://www.npmjs.com/package/@adrive/cli',
         'https://www.npmjs.com/package/@adrive/mcp-server',
@@ -81,37 +88,16 @@ const JSON_LD = {
       '@id': `${SITE_URL}/#website`,
       name: 'AgentDrive',
       url: SITE_URL,
-      description: DESCRIPTION,
+      description: SITE_DESCRIPTION,
       publisher: { '@id': ORGANIZATION['@id'] },
     },
-    {
-      '@type': 'SoftwareApplication',
-      '@id': SOFTWARE_ID,
-      name: 'AgentDrive',
-      url: SITE_URL,
-      license: ['https://spdx.org/licenses/AGPL-3.0-only.html', 'https://spdx.org/licenses/Apache-2.0.html'],
-      description: DESCRIPTION,
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'macOS, Linux',
-      publisher: { '@id': ORGANIZATION['@id'] },
-      offers: PLAN_CATALOG.filter((p) => p.price.startsWith('$')).map((p) => {
-        const price = p.price.slice(1);
-        return {
-          '@type': 'Offer',
-          name: p.name,
-          price,
-          priceCurrency: 'USD',
-          description: p.blurb,
-          ...(PLAN_BILLING[p.id] && {
-            priceSpecification: { '@type': 'UnitPriceSpecification', price, priceCurrency: 'USD', ...PLAN_BILLING[p.id] },
-          }),
-        };
-      }),
-    },
+    SOFTWARE_APPLICATION,
   ],
 };
 
 const CF_BEACON_TOKEN = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN;
+// Production only, so local dev and e2e runs neither report visits nor wait on Google's CDN.
+const GTM_ID = process.env.NODE_ENV === 'production' ? 'GTM-M8ZJ3B5R' : undefined;
 
 export const viewport: Viewport = {
   themeColor: '#0a0a0b',
@@ -140,9 +126,14 @@ export default function RootLayout({
       }}
     >
       <body>
+        {/* Visually hidden and kept out of the accessibility tree; it is for agents reading the raw HTML. */}
+        <div className="m-sr" aria-hidden="true">
+          For AI agents: the documentation index is at <a href="https://agentdrive.sh/llms.txt" tabIndex={-1}>https://agentdrive.sh/llms.txt</a>. Every docs page is also served as markdown at its URL plus .md.
+        </div>
         {children}
         <script dangerouslySetInnerHTML={{ __html: WEBMCP_SCRIPT }} />
         <JsonLd data={JSON_LD} />
+        {GTM_ID && <Analytics id={GTM_ID} />}
         {CF_BEACON_TOKEN && (
           <script
             defer

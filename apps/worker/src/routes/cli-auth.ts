@@ -14,6 +14,14 @@ type AppType = { Bindings: Env; Variables: Variables };
 
 const app = new Hono<AppType>();
 
+export const startSchema = z.object({ shows_user_code: z.literal(true) });
+export const pollSchema = z.object({ id: z.string().min(1), device_code: z.string().min(1) });
+export const completeSchema = z.object({
+  id: z.string().min(1),
+  user_code: z.string().trim().min(1).max(32),
+  agent_name: z.string().min(1).max(100).optional(),
+});
+
 const START_AGAIN = 'Start sign-in again from your terminal.';
 const EXPIRED = { success: false, code: 'expired', error: `This sign-in has expired or was already used. ${START_AGAIN}` } as const;
 
@@ -29,7 +37,7 @@ app.post('/start', ipRateLimit('ip_magic'), async (c) => {
     }, 501);
   }
   const body = await c.req.json().catch(() => null);
-  if (!z.object({ shows_user_code: z.literal(true) }).safeParse(body).success) {
+  if (!startSchema.safeParse(body).success) {
     return c.json({
       success: false,
       code: 'cli_outdated',
@@ -53,7 +61,7 @@ app.post('/start', ipRateLimit('ip_magic'), async (c) => {
 
 app.post('/poll', async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ id: z.string().min(1), device_code: z.string().min(1) }).safeParse(body);
+  const parsed = pollSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'id and device_code are required' }, 400);
 
   const record = await pollPending(c.env, parsed.data.id, parsed.data.device_code);
@@ -89,11 +97,7 @@ app.post('/complete', ipRateLimit('ip_magic', 'cli_complete'), flexAuth, async (
   }
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    id: z.string().min(1),
-    user_code: z.string().trim().min(1).max(32),
-    agent_name: z.string().min(1).max(100).optional(),
-  }).safeParse(body);
+  const parsed = completeSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, code: 'user_code_required', error: 'Enter the code shown in your terminal.' }, 400);
   }

@@ -20,10 +20,15 @@ import { selfHosted } from '../lib/self-hosted.js';
 
 type AppType = { Bindings: Env; Variables: Variables };
 
-const writeSchema = z.object({
-  path: z.string(),
-  content: z.string(),
-  message: z.string().optional(),
+export const writeSchema = z.object({
+  path: z.string().describe('Workspace-relative path, e.g. notes/plan.md. Writing to an existing path adds a version.'),
+  content: z.string().describe('Full UTF-8 file content.'),
+  message: z.string().optional().describe('Version message recorded in the history.'),
+});
+
+export const updateSchema = z.object({
+  content: z.string().describe('Full UTF-8 file content.'),
+  message: z.string().optional().describe('Version message recorded in the history.'),
 });
 
 // Runs before workspaceAccess: a write to a new workspace name creates it, so a
@@ -226,7 +231,7 @@ app.put('/:fid', requirePermission('edit'), async (c) => {
   const fid = c.req.param('fid')!;
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ content: z.string(), message: z.string().optional() }).safeParse(body);
+  const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'content is required' }, 400);
 
   const encoder = new TextEncoder();

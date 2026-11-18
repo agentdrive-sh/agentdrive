@@ -1,6 +1,7 @@
 import { getBreadcrumbItems } from 'fumadocs-core/breadcrumb';
 import { JsonLd } from '@/components/seo/json-ld';
-import { breadcrumbList, ORGANIZATION, SITE_URL } from '@/components/seo/site';
+import { breadcrumbList, techArticle } from '@/components/seo/site';
+import { markdownPath } from '@/lib/llms';
 import { source } from '@/lib/source';
 import { DocsPage, DocsBody, DocsDescription, DocsTitle } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
@@ -13,7 +14,6 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
   if (!page) notFound();
 
   const MDX = page.data.body;
-  const url = `${SITE_URL}${page.url}`;
   // A folder without an index page has no URL, and Google rejects a breadcrumb item without one.
   const sections = getBreadcrumbItems(page.url, source.pageTree).filter(
     (item): item is { name: string; url: string } => typeof item.name === 'string' && !!item.url && item.url !== '/docs',
@@ -23,16 +23,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     <DocsPage toc={page.data.toc} full={page.data.full}>
       <JsonLd
         data={[
-          {
-            '@context': 'https://schema.org',
-            '@type': 'TechArticle',
-            headline: page.data.title,
-            description: page.data.description,
-            dateModified: page.data.lastModified?.toISOString(),
-            publisher: ORGANIZATION,
-            mainEntityOfPage: { '@type': 'WebPage', '@id': url },
-            url,
-          },
+          techArticle(page),
           breadcrumbList([
             { name: 'Home', path: '/' },
             { name: 'Docs', path: '/docs' },
@@ -61,7 +52,7 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   return {
     title: page.data.title,
     description: page.data.description,
-    alternates: { canonical: page.url },
+    alternates: { canonical: page.url, types: { 'text/markdown': markdownPath(page.url) } },
     openGraph: {
       type: 'article',
       title: page.data.title,

@@ -438,3 +438,39 @@ describe('who can revoke keys and remove members', () => {
     expect((await removeMember(founder.headers, 'crew@example.com')).status).toBe(200);
   });
 });
+
+describe('only owners, admins and the keys they mint can rename the org', () => {
+  async function teamOwner(): Promise<{ headers: Headers; org_id: string }> {
+    const owner = await signIn('owner@example.com');
+    const org = JSON.parse((await env.KV.get(`org:${owner.org_id}`))!) as Record<string, unknown>;
+    await env.KV.put(`org:${owner.org_id}`, JSON.stringify({ ...org, plan: 'team' }));
+    return owner;
+  }
+  const rename = (who: Headers, name: string) => api('/org', 'PATCH', who, { name });
+  const storedName = async (orgId: string) => (JSON.parse((await env.KV.get(`org:${orgId}`))!) as { name: string }).name;
+
+  it('refuses a plain member session and the keys a member mints', async () => {
+    const owner = await teamOwner();
+    const before = await storedName(owner.org_id);
+    const member = await joinOrg('member@example.com', owner.headers, owner.org_id);
+    const memberKey = await mintKey(member, 'member laptop');
+
+    expect((await rename(member, 'Hijacked')).status).toBe(403);
+    expect((await rename(memberKey.headers, 'Hijacked by key')).status).toBe(403);
+    expect(await storedName(owner.org_id)).toBe(before);
+  });
+
+  it('lets an owner, an admin, an owner key and a founding agent rename it', async () => {
+    const owner = await teamOwner();
+    const admin = await joinOrg('admin@example.com', owner.headers, owner.org_id, 'admin');
+    const ownerKey = await mintKey(owner.headers, 'owner agent');
+    for (const [who, name] of [[owner.headers, 'By owner'], [admin, 'By admin'], [ownerKey.headers, 'By owner key']] as const) {
+      expect((await rename(who, name)).status, name).toBe(200);
+      expect(await storedName(owner.org_id)).toBe(name);
+    }
+
+    const founded = await registerOrg();
+    expect((await rename(founded.headers, 'By founding agent')).status).toBe(200);
+    expect(await storedName(founded.org_id)).toBe('By founding agent');
+  });
+});

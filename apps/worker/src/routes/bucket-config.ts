@@ -24,7 +24,7 @@ app.use('*', flexAuth);
 
 const providerSchema = z.enum(['agentdrive-r2', 'cf-r2-cross-account', 's3-hmac']);
 
-const createSchema = z
+export const createSchema = z
   .object({
     name: z.string().min(1).max(120),
     provider: providerSchema,

@@ -15,7 +15,7 @@ type AppType = { Bindings: Env; Variables: Variables };
 const app = new Hono<AppType>();
 app.use('*', flexAuth);
 
-const querySchema = z.object({
+export const querySchema = z.object({
   since: z.string().datetime().optional(),
   limit: z.coerce.number().int().positive().max(TIMELINE_HARD_LIMIT).optional(),
 });

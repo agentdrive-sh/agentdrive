@@ -12,15 +12,17 @@ import { REGISTRATION_CLOSED, SELF_HOSTED_ORG_ID, bootstrapAllowed, selfHosted }
 type Variables = { auth: AuthContext };
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const registerSchema = z.object({
+  agent_name: z.string().min(1).max(100),
+  org_name: z.string().min(1).max(100).optional(),
+});
+
 const app = new Hono<AppType>();
 
 app.post('/', ipRateLimit('ip_register'), async (c) => {
   if (selfHosted(c.env) && !bootstrapAllowed(c.env, c.req.header('X-Bootstrap-Token'))) return c.json(REGISTRATION_CLOSED, 403);
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    agent_name: z.string().min(1).max(100),
-    org_name: z.string().min(1).max(100).optional(),
-  }).safeParse(body);
+  const parsed = registerSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'agent_name is required (1-100 chars)' }, 400);
 
   const s = storage(c);

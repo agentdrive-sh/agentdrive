@@ -16,7 +16,7 @@ type AppType = { Bindings: Env; Variables: Variables };
 // the same file out of the top-K before we cut.
 const OVERFETCH_MULTIPLIER = 4;
 
-const searchSchema = z.object({
+export const searchSchema = z.object({
   workspace_id: z.string().optional(),
   query: z.string().min(1),
   top_k: z.number().int().positive().max(50).optional(),

@@ -9,6 +9,13 @@ import { storage } from '../lib/route-helpers.js';
 
 type AppType = { Bindings: Env; Variables: Variables };
 
+export const commentSchema = z.object({
+  body: z.string().min(1).max(5000),
+  author_name: z.string().max(100).optional(),
+  line_start: z.number().int().positive().optional(),
+  line_end: z.number().int().positive().optional(),
+});
+
 const app = new Hono<AppType>();
 app.use('*', flexAuth, workspaceAccess({ fileScope: true }), shareFileScope);
 
@@ -18,12 +25,7 @@ app.post('/', requirePermission('comment'), async (c) => {
   const fid = c.req.param('fid')!;
 
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({
-    body: z.string().min(1).max(5000),
-    author_name: z.string().max(100).optional(),
-    line_start: z.number().int().positive().optional(),
-    line_end: z.number().int().positive().optional(),
-  }).safeParse(body);
+  const parsed = commentSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'body is required (1-5000 chars)' }, 400);
 
   const s = storage(c);
