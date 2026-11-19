@@ -99,6 +99,13 @@ const config: NextConfig = {
   async redirects() {
     return [
       {
+        // Search results still point to the original docs host. Consolidate them on each page's canonical URL.
+        source: '/docs/:path*',
+        has: [{ type: 'host', value: 'app.agentdrive.sh' }],
+        destination: 'https://agentdrive.sh/docs/:path*',
+        permanent: true,
+      },
+      {
         // Sign-in always ends on agentdrive.sh and the session cookie is host-only, so pages
         // on the app host would never see it. Its /v1, /auth and /install paths are zone-routed
         // to the API worker and never reach this app.

@@ -3,6 +3,16 @@ import { expect, test } from '@playwright/test';
 
 const site = 'https://agentdrive.sh';
 
+test('old docs URLs permanently redirect to the corresponding canonical URL', async ({ request }) => {
+  const options = { headers: { host: 'app.agentdrive.sh' }, maxRedirects: 0 };
+  for (const path of ['/docs', '/docs/rest-api?lang=en', '/docs/mcp-tools', '/docs/sdk', '/docs/cli']) {
+    const response = await request.get(path, options);
+    expect(response.status()).toBe(308);
+    expect(response.headers().location).toBe(site + path);
+  }
+  expect((await request.get('/login', options)).status()).toBe(307);
+});
+
 test('the homepage links to the four canonical developer references and the GitHub organization', async ({ page, request }) => {
   await page.goto('/');
   const links = page.getByRole('navigation', { name: 'Developers', exact: true });

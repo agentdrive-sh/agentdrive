@@ -142,7 +142,7 @@ plugins/
 
 ## Documentation
 
-- [agentdrive.sh/docs](https://agentdrive.sh/docs): [quick start](https://go2.gg/agentdrive-docs), [sessions](https://agentdrive.sh/docs/concepts/sessions), [MCP tools](https://agentdrive.sh/docs/mcp-tools), [REST API](https://agentdrive.sh/docs/rest-api). Source in [`apps/web/content/docs/`](./apps/web/content/docs/).
+- [AgentDrive documentation](https://agentdrive.sh/docs) includes the [quick start](https://agentdrive.sh/docs/quick-start), [session guide](https://agentdrive.sh/docs/concepts/sessions), [REST API reference](https://agentdrive.sh/docs/rest-api), [MCP server tools](https://agentdrive.sh/docs/mcp-tools), [TypeScript SDK](https://agentdrive.sh/docs/sdk), and [CLI reference](https://agentdrive.sh/docs/cli). Source in [`apps/web/content/docs/`](./apps/web/content/docs/).
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): dev setup, house style and where to start.
 - [`docs/tech/`](./docs/tech/): architecture and ADRs.
 
