@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { docsSearch } from '@/lib/search';
-import { source } from '@/lib/source';
+import { pageAt, searchDocs } from '@/lib/search';
 import webPackage from '../package.json';
 
 // Public, read-only docs MCP server (Streamable HTTP, stateless, no auth) at /docs/mcp.
@@ -38,7 +37,7 @@ const TOOLS = [
       query: z.string().trim().min(1).describe('Words to search for, e.g. "resume a Codex session in Claude Code"'),
       limit: z.number().int().min(1).max(20).optional().describe('Maximum pages to return (default 8, max 20)'),
     }),
-    handler: (args: { query: string; limit?: number }) => searchDocs(args.query, args.limit ?? 8),
+    handler: async (args: { query: string; limit?: number }) => text(await searchDocs(args.query, args.limit)),
   },
   {
     name: 'read_doc',
@@ -67,37 +66,6 @@ const TOOL_LIST = TOOLS.map((t) => {
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: 'text', text: t }], ...(isError && { isError }) });
-
-async function searchDocs(query: string, limit: number): Promise<ToolResult> {
-  const hits = await docsSearch.search(query);
-  const pages = new Map<string, { title: string; url: string; description?: string; match?: string }>();
-  for (const hit of hits) {
-    const [path] = hit.url.split('#');
-    let entry = pages.get(path);
-    if (!entry) {
-      const page = pages.size < limit ? pageAt(path) : undefined;
-      if (!page) continue;
-      entry = { title: page.data.title, url: `${SITE}${page.url}`, description: page.data.description };
-      pages.set(path, entry);
-    }
-    if (!entry.match && hit.type !== 'page') entry.match = `${hit.content} (${SITE}${hit.url})`;
-  }
-  if (pages.size === 0) return text(`No AgentDrive docs pages match "${query}".`);
-  return text(
-    [...pages.values()]
-      .map((p, i) =>
-        [`${i + 1}. ${p.title}`, `   ${p.url}`, p.description && `   ${p.description}`, p.match && `   Match: ${p.match}`]
-          .filter(Boolean)
-          .join('\n'),
-      )
-      .join('\n\n'),
-  );
-}
-
-function pageAt(path: string) {
-  if (path !== '/docs' && !path.startsWith('/docs/')) return undefined;
-  return source.getPage(path.split('/').slice(2).filter(Boolean).map(decodeURIComponent));
-}
 
 async function readDoc(input: string): Promise<ToolResult> {
   let url: URL | undefined;

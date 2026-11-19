@@ -21,7 +21,7 @@ export default function TermsPage() {
         kicker="Legal"
         kickerHref="/legal"
         title="Terms of Service"
-        lede="Effective 2026-10-22."
+        lede="Effective 2026-10-22. Updated 2026-11-19."
       />
       <ProseSection>
         <Contents titles={["1. Accounts", "2. Acceptable use", "3. Your content", "4. Subscriptions and payments", "5. Service availability", "6. Termination", "7. Intellectual property", "8. Disclaimer of warranties", "9. Limitation of liability", "10. Governing law", "11. Changes", "12. Contact"]} />
@@ -37,8 +37,8 @@ export default function TermsPage() {
         </LegalSection>
 
         <LegalSection title="2. Acceptable use">
-          <p>You agree not to use the Service to: (a) violate any law; (b) store or transmit malware, illegal content, or content that infringes third-party rights; (c) attempt to gain unauthorized access to the Service or its infrastructure; (d) reverse-engineer the hosted Worker code; (e) exceed the rate limits or quotas attached to your plan without an arrangement with us; (f) resell the Service to third parties on a hosted basis without a commercial license.</p>
-          <p>The AgentDrive MCP server, CLI, SDK, and Claude Code plugin are licensed under Apache-2.0 (source at <a href="https://github.com/agentdrive-sh/agentdrive-mcp">GitHub</a> and on npm). The hosted Service is proprietary. See <a href="/legal/dpa">the DPA</a> for the data-processing terms.</p>
+          <p>You agree not to use the Service to: (a) violate any law; (b) store or transmit malware, illegal content, or content that infringes third-party rights; (c) attempt to gain unauthorized access to the Service or its infrastructure; (d) exceed the rate limits or quotas attached to your plan without an arrangement with us; (e) resell the Service to third parties on a hosted basis without a commercial license.</p>
+          <p>The AgentDrive server is licensed under AGPL-3.0, and the MCP server, CLI, SDK, and Claude Code plugin are licensed under Apache-2.0 (source at <a href="https://github.com/agentdrive-sh/agentdrive">GitHub</a>, clients also on npm). You can use the hosted Service under these Terms or self-host the server under its license; see <a href="/docs/license">License</a>. See <a href="/legal/dpa">the DPA</a> for the data-processing terms.</p>
         </LegalSection>
 
         <LegalSection title="3. Your content">
@@ -63,7 +63,7 @@ export default function TermsPage() {
         </LegalSection>
 
         <LegalSection title="7. Intellectual property">
-          <p>The Service, including its UI, brand, documentation, and the hosted Worker code, is our intellectual property and the property of our licensors. The open-source client pieces (the MCP server, CLI, SDK, and Claude Code plugin) are licensed under Apache-2.0.</p>
+          <p>AgentDrive is open source and copyright Roushan Inc. The server, including the hosted Worker and the web app, is licensed under AGPL-3.0; the client pieces (the MCP server, CLI, SDK, and Claude Code plugin) are licensed under Apache-2.0. Those licenses govern your use of the source code. A commercial license is available for organizations that cannot use AGPL: <a href="mailto:licensing@agentdrive.sh">licensing@agentdrive.sh</a>. The AgentDrive name and logo are trademarks of Roushan Inc and are not covered by the code licenses.</p>
         </LegalSection>
 
         <LegalSection title="8. Disclaimer of warranties">

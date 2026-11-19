@@ -16,7 +16,11 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     title: 'Developers',
     links: [
       { href: '/docs', label: 'Docs' },
-      { href: 'https://github.com/agentdrive-sh/agentdrive-mcp', label: 'GitHub' },
+      { href: '/docs/rest-api', label: 'REST API reference' },
+      { href: '/docs/mcp-tools', label: 'MCP server' },
+      { href: '/docs/sdk', label: 'TypeScript SDK' },
+      { href: '/docs/cli', label: 'AgentDrive CLI' },
+      { href: 'https://github.com/agentdrive-sh', label: 'AgentDrive on GitHub' },
       { href: '/status', label: 'Status' },
     ],
   },

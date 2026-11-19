@@ -33,7 +33,8 @@
     "annotations": {
       "title": "Write file",
       "readOnlyHint": false,
-      "destructiveHint": true
+      "destructiveHint": true,
+      "openWorldHint": false
     }
   },
   {
@@ -61,7 +62,8 @@
     "annotations": {
       "title": "Read file",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -88,7 +90,8 @@
     "annotations": {
       "title": "List files",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -137,7 +140,8 @@
     "annotations": {
       "title": "Create share link",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": true
     }
   },
   {
@@ -178,7 +182,8 @@
     "annotations": {
       "title": "Add comment",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -206,7 +211,8 @@
     "annotations": {
       "title": "Read comments",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -229,7 +235,8 @@
     "annotations": {
       "title": "Workspace activity",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -263,7 +270,8 @@
     "annotations": {
       "title": "Invite member",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": true,
+      "openWorldHint": true
     }
   },
   {
@@ -309,7 +317,8 @@
     "annotations": {
       "title": "Manage workspace roles",
       "readOnlyHint": false,
-      "destructiveHint": true
+      "destructiveHint": true,
+      "openWorldHint": true
     }
   },
   {
@@ -324,7 +333,8 @@
     "annotations": {
       "title": "Organization details",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -352,7 +362,8 @@
     "annotations": {
       "title": "Delete file",
       "readOnlyHint": false,
-      "destructiveHint": true
+      "destructiveHint": true,
+      "openWorldHint": false
     }
   },
   {
@@ -380,7 +391,8 @@
     "annotations": {
       "title": "Version history",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -444,7 +456,8 @@
     "annotations": {
       "title": "Search artifacts",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -475,7 +488,8 @@
     "annotations": {
       "title": "Recall memory",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -541,7 +555,8 @@
     "annotations": {
       "title": "Log run",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -576,7 +591,8 @@
     "annotations": {
       "title": "Load task context",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -607,7 +623,8 @@
     "annotations": {
       "title": "List sessions",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -637,7 +654,8 @@
     "annotations": {
       "title": "Resume session",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -676,7 +694,8 @@
     "annotations": {
       "title": "Clone repo into sandbox",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": true
     }
   },
   {
@@ -716,7 +735,8 @@
     "annotations": {
       "title": "Run sandbox command",
       "readOnlyHint": false,
-      "destructiveHint": true
+      "destructiveHint": true,
+      "openWorldHint": true
     }
   },
   {
@@ -744,7 +764,8 @@
     "annotations": {
       "title": "Read sandbox file",
       "readOnlyHint": true,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   },
   {
@@ -784,7 +805,8 @@
     "annotations": {
       "title": "Commit sandbox changes",
       "readOnlyHint": false,
-      "destructiveHint": false
+      "destructiveHint": false,
+      "openWorldHint": false
     }
   }
 ]

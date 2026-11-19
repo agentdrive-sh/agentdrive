@@ -1,0 +1,93 @@
+{
+  "name": "agentdrive",
+  "version": "1.0.0",
+  "description": "Resume synced coding sessions and find the files your coding agents wrote.",
+  "author": {
+    "name": "Roushan Inc",
+    "email": "hello@agentdrive.sh",
+    "url": "https://agentdrive.sh"
+  },
+  "homepage": "https://agentdrive.sh",
+  "repository": "https://github.com/agentdrive-sh/agentdrive",
+  "license": "Apache-2.0",
+  "extensions": {
+    "com.openai": {
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "List sessions for a specific project",
+              "prompt": "List recent sessions for github.com__agentdrive-demo__pagination.",
+              "tools_triggered": "drive_sessions",
+              "expected_behavior": "Return the seeded pagination session with its harness and session ID."
+            },
+            {
+              "description": "Recover the handoff for a listed session",
+              "prompt": "Resume the pagination session you just listed and summarize the unfinished work.",
+              "tools_triggered": "drive_resume",
+              "expected_behavior": "Use the listed session ID and describe the goal and next step recorded in the sample handoff."
+            },
+            {
+              "description": "Search for a prior decision",
+              "prompt": "Which workspace note explains why we chose cursor pagination?",
+              "tools_triggered": "drive_search",
+              "expected_behavior": "Identify the sample pagination decision note and its workspace."
+            },
+            {
+              "description": "Save a new review note",
+              "prompt": "In the review workspace whose ID I supplied, create review/handoff.md with the text “Verify the last page.”",
+              "tools_triggered": "drive_write",
+              "expected_behavior": "Create the requested path and report the returned file ID and version."
+            },
+            {
+              "description": "Read the saved handoff",
+              "prompt": "Read back the review/handoff.md file you just saved using its workspace and file IDs.",
+              "tools_triggered": "drive_read",
+              "expected_behavior": "Return the saved text and file version."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Local-only session on an offline machine",
+              "prompt": "Read the unsynced session stored only on my disconnected laptop.",
+              "expected_behavior": "Explain how to resume locally on that machine."
+            },
+            {
+              "description": "Ambiguous recipient for a share",
+              "prompt": "Give them edit access to it.",
+              "expected_behavior": "Ask which file or workspace and which recipient the user means before changing access."
+            },
+            {
+              "description": "Unrelated question",
+              "prompt": "What is the capital of France?",
+              "expected_behavior": "Answer without accessing the workspace."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "interface": {
+    "displayName": "AgentDrive",
+    "shortDescription": "Resume your coding sessions",
+    "longDescription": "Find a synced session from Claude Code, Codex, OpenCode, Cursor or Antigravity and recover its goal and recent work. Search workspace files, inspect their history and save handoff notes for your next agent. Connect your AgentDrive account to access its workspaces. Local-only transcripts are available on the original machine.",
+    "developerName": "Roushan Inc",
+    "category": "Developer Tools",
+    "websiteURL": "https://agentdrive.sh",
+    "supportURL": "https://agentdrive.sh/contact",
+    "privacyPolicyURL": "https://agentdrive.sh/legal/privacy",
+    "termsOfServiceURL": "https://agentdrive.sh/legal/terms",
+    "defaultPrompt": [
+      "Find my last coding session for this project.",
+      "Find the note explaining our pagination decision."
+    ],
+    "logo": "./assets/icon.png",
+    "composerIcon": "./assets/icon.png",
+    "capabilities": [
+      "Resume sessions",
+      "Search artifacts",
+      "Save handoffs"
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

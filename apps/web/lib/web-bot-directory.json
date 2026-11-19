@@ -1,0 +1,9 @@
+{
+  "body": "{\"keys\":[{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"K34UIEkmlAsTupkyLgEDtvNydnSEWMjj6eo4jwJXdP0\",\"kid\":\"n_h-mECDp_-0-TIU-MNQTFfmcoFrXfiF5f6AqbAFyrw\",\"nbf\":1795063144,\"exp\":1810684800}]}",
+  "headers": {
+    "Content-Type": "application/http-message-signatures-directory+json",
+    "Content-Digest": "sha-256=:j3N8zed2dyvi4WvuSmc+i7tJreLSNnFHvEz3KrIlhj4=:",
+    "Signature-Input": "sig1=(\"@authority\";req \"content-digest\");alg=\"ed25519\";keyid=\"n_h-mECDp_-0-TIU-MNQTFfmcoFrXfiF5f6AqbAFyrw\";tag=\"http-message-signatures-directory\";created=1795063144;expires=1810684800",
+    "Signature": "sig1=:zl/0t+Jtjfyk0dy3eQRCFB0KEKrQzqfJGbZuh0mNmoro3a46i7APsQE0kd3HI2rO6WMQKZAH9JnI5zXmNVpEBg==:"
+  }
+}

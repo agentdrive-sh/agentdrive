@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { promises as fs, rmSync, symlinkSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -16,6 +16,20 @@ import { autoWire } from '../src/lib/auto-wire.js';
 import { writeConfig as writeCliConfig } from '../src/lib/config.js';
 import { ensureCaptureConsent } from '../src/lib/consent.js';
 import type { TranscriptSource } from '@adrive/mcp-server/transcripts/types';
+
+// Stands in, in-process, for sync's `git status` when a test sets it. A fake git on PATH would
+// race execFile's 2 s timeout: under load it is killed before it acts, and sync skips the file.
+const gitStatus = vi.hoisted(() => ({ run: undefined as undefined | ((args: readonly string[]) => string) }));
+vi.mock('node:child_process', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:child_process')>();
+  const execFile = (file: string, args: readonly string[], options: object, done: (err: Error | null, stdout: string, stderr: string) => void) => {
+    const run = gitStatus.run;
+    if (file !== 'git' || !args.includes('status') || !run) return real.execFile(file, args, options, done);
+    setImmediate(() => done(null, run(args), ''));
+    return undefined;
+  };
+  return { ...real, execFile };
+});
 
 let root: string;
 let home: string;
@@ -233,10 +247,22 @@ describe('runSync', () => {
     // to ~/.ssh/config. Every other git call (the project key) sees no repository.
     const bin = join(root, 'bin');
     await fs.mkdir(bin);
-    const swap = `rm -f '${x}'; ln -s '${join(home, '.ssh', 'config')}' '${x}'; echo '?? x.md'`;
-    await fs.writeFile(join(bin, 'git'), `#!/bin/sh\ncase "$*" in *status*) ${swap} ;; *) echo 'fatal: not a git repository' >&2; exit 128 ;; esac\n`, { mode: 0o755 });
+    await fs.writeFile(join(bin, 'git'), "#!/bin/sh\necho 'fatal: not a git repository' >&2; exit 128\n", { mode: 0o755 });
     vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
-    await runSync(opts({ harness: 'claude-code', session: 'sw', transcript, cwd, force: true }));
+    const asked: string[] = [];
+    gitStatus.run = (args) => {
+      asked.push(args.at(-1)!);
+      rmSync(x);
+      symlinkSync(join(home, '.ssh', 'config'), x);
+      return '?? x.md\n';
+    };
+    try {
+      await runSync(opts({ harness: 'claude-code', session: 'sw', transcript, cwd, force: true }));
+    } finally {
+      gitStatus.run = undefined;
+    }
+    // The harness, not the property: unless git status ran once, for x.md, no swap landed in the window.
+    expect(asked, 'sync never asked git for x.md, so this test did not exercise the swap').toEqual(['x.md']);
     expect((await fs.lstat(x)).isSymbolicLink()).toBe(true);
     expect(writes.map((w) => w.path).filter((p) => p.includes('/files/'))).toEqual([]);
     expect(JSON.stringify(writes)).not.toContain('hunter2');

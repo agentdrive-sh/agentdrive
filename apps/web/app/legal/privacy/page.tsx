@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         kicker="Legal"
         kickerHref="/legal"
         title="Privacy Policy"
-        lede="Effective 2026-05-17. Updated 2026-11-18."
+        lede="Effective 2026-05-17. Updated 2026-11-19."
       />
       <ProseSection>
         <Contents titles={["Data we collect", "What we do not collect", "How we use it", "Third parties", "Retention", "Your rights (GDPR / CCPA)", "International transfers", "Security", "Children", "Changes", "Contact"]} />
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
         <LegalSection title="Data we collect">
           <p><strong>Account data.</strong> Email address (when you sign in with a magic-link or OAuth provider), name and avatar provided by Google or GitHub during OAuth, organization name.</p>
           <p><strong>Agent data.</strong> Files your agents write to AgentDrive (content + metadata), share tokens you create, comments, run logs (task description, status, artifacts referenced/produced, duration, cost metadata).</p>
-          <p><strong>Session transcripts.</strong> When session sync is on in the AgentDrive CLI or an AgentDrive plugin, we store your coding-agent session transcripts (your prompts, the agent&apos;s replies and its tool calls) and files your agents write that git does not track. Secrets are redacted on your device before upload; everything else, including any personal data in them, is stored as written. Turn session sync off with <code>adrive privacy</code>.</p>
+          <p><strong>Session transcripts.</strong> When session sync is on in the AgentDrive CLI or an AgentDrive plugin, we store your coding-agent session transcripts (your prompts, the agent&apos;s replies and its tool calls) and files your agents write that git does not track. Secrets are redacted on your device before upload; everything else, including any personal data in them, is stored as written. Turn session sync off with <code>adrive privacy</code>. From <code>@adrive/cli</code> 1.5.0, sessions and files from a period when sync was off are never uploaded, even after you turn it back on; with 1.4.0 and earlier, they uploaded once sync was turned back on.</p>
           <p><strong>Operational data.</strong> Request logs (IP, user-agent, request id, timestamp, response status), API key usage timestamps. We do not log request bodies.</p>
           <p><strong>Website analytics.</strong> On the public pages of agentdrive.sh (not the signed-in app), Google Analytics, loaded through Google Tag Manager, counts visits and which pages are read. It sets analytics cookies and receives the page address, your IP address and browser details.</p>
           <p><strong>Billing data.</strong> If you upgrade to a paid plan, Stripe processes your payment. We store a Stripe customer id; Stripe stores the card details. We never see card numbers.</p>

@@ -60,18 +60,22 @@ describe('MCP Streamable HTTP endpoint', () => {
 
   it('tools/list gives every tool a title and read-only/destructive hints', async () => {
     const res = await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' });
-    type Listed = { name: string; title?: string; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean } };
+    type Listed = { name: string; title?: string; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean } };
     const { result } = (await res.json()) as { result: { tools: Listed[] } };
     for (const t of result.tools) {
       expect(t.title, t.name).toBeTruthy();
       expect(t.annotations?.title, t.name).toBe(t.title);
       expect(typeof t.annotations?.readOnlyHint, t.name).toBe('boolean');
+      expect(typeof t.annotations?.openWorldHint, t.name).toBe('boolean');
       expect(typeof t.annotations?.destructiveHint, t.name).toBe('boolean');
     }
     const hints = Object.fromEntries(result.tools.map((t) => [t.name, t.annotations]));
-    expect(hints.drive_read).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(hints.drive_read).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    for (const name of ['drive_share', 'drive_invite', 'drive_roles', 'drive_sandbox_clone', 'drive_sandbox_exec']) {
+      expect(hints[name]?.openWorldHint, name).toBe(true);
+    }
     expect(hints.drive_comment).toMatchObject({ readOnlyHint: false, destructiveHint: false });
-    for (const name of ['drive_write', 'drive_delete', 'drive_roles', 'drive_sandbox_exec']) {
+    for (const name of ['drive_write', 'drive_delete', 'drive_roles', 'drive_invite', 'drive_sandbox_exec']) {
       expect(hints[name], name).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     }
   });

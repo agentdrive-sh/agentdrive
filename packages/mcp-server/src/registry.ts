@@ -38,12 +38,14 @@ export interface ToolAnnotations {
   title: string;
   readOnlyHint: boolean;
   destructiveHint: boolean;
+  openWorldHint: boolean;
 }
 
-const reads = (title: string): ToolAnnotations => ({ title, readOnlyHint: true, destructiveHint: false });
+const reads = (title: string): ToolAnnotations => ({ title, readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 // The spec reserves destructiveHint false for purely additive tools, so an overwrite
 // counts as destructive even though file versions keep the old content.
-const writes = (title: string, destructiveHint = false): ToolAnnotations => ({ title, readOnlyHint: false, destructiveHint });
+const writes = (title: string, hints: Partial<Pick<ToolAnnotations, 'destructiveHint' | 'openWorldHint'>> = {}): ToolAnnotations =>
+  ({ title, readOnlyHint: false, destructiveHint: false, openWorldHint: false, ...hints });
 
 export interface ToolDef {
   name: string;
@@ -100,17 +102,17 @@ function withUsage(handler: ToolDef['handler']): ToolDef['handler'] {
 // (packages/mcp-server/src/index.ts) and the hosted Streamable-HTTP endpoint
 // (apps/worker/src/routes/mcp.ts).
 export const TOOLS: ToolDef[] = [
-  { name: 'drive_write', description: 'Write a markdown file to a workspace. Creates or updates the file with automatic versioning.', schema: driveWriteSchema, annotations: writes('Write file', true), handler: driveWrite },
+  { name: 'drive_write', description: 'Write a markdown file to a workspace. Creates or updates the file with automatic versioning.', schema: driveWriteSchema, annotations: writes('Write file', { destructiveHint: true }), handler: driveWrite },
   { name: 'drive_read', description: "Read a file's content from a workspace.", schema: driveReadSchema, annotations: reads('Read file'), handler: driveRead },
   { name: 'drive_list', description: 'List files in a workspace, optionally filtered by path prefix.', schema: driveListSchema, annotations: reads('List files'), handler: driveList },
-  { name: 'drive_share', description: 'Generate a share link for a workspace or specific file. Optionally email-gate the link so only a specific person can access it. Humans open this link to view, comment, or edit files.', schema: driveShareSchema, annotations: writes('Create share link'), handler: driveShare },
+  { name: 'drive_share', description: 'Generate a share link for a workspace or specific file. Optionally email-gate the link so only a specific person can access it. Humans open this link to view, comment, or edit files.', schema: driveShareSchema, annotations: writes('Create share link', { openWorldHint: true }), handler: driveShare },
   { name: 'drive_comment', description: 'Add a comment to a file.', schema: driveCommentSchema, annotations: writes('Add comment'), handler: driveComment },
   { name: 'drive_feedback', description: 'Read human comments on a file. Use this to check if humans have left feedback.', schema: driveFeedbackSchema, annotations: reads('Read comments'), handler: driveFeedback },
   { name: 'drive_activity', description: 'Get recent activity in a workspace (file writes, comments, shares).', schema: driveActivitySchema, annotations: reads('Workspace activity'), handler: driveActivity },
-  { name: 'drive_invite', description: 'Invite a human to your organization by email. The invite stays pending until they sign in and accept it.', schema: driveInviteSchema, annotations: writes('Invite member'), handler: driveInvite },
-  { name: 'drive_roles', description: 'Manage per-workspace role delegation. Assign, list, or remove access for specific emails (view/comment/edit).', schema: driveRolesSchema, annotations: writes('Manage workspace roles', true), handler: driveRoles },
+  { name: 'drive_invite', description: 'Invite a human to your organization by email. The invite stays pending until they sign in and accept it.', schema: driveInviteSchema, annotations: writes('Invite member', { destructiveHint: true, openWorldHint: true }), handler: driveInvite },
+  { name: 'drive_roles', description: 'Manage per-workspace role delegation. Assign, list, or remove access for specific emails (view/comment/edit).', schema: driveRolesSchema, annotations: writes('Manage workspace roles', { destructiveHint: true, openWorldHint: true }), handler: driveRoles },
   { name: 'drive_org', description: 'View your organization details: agents, members, plan, and usage.', schema: driveOrgSchema, annotations: reads('Organization details'), handler: driveOrg },
-  { name: 'drive_delete', description: 'Delete a file from a workspace.', schema: driveDeleteSchema, annotations: writes('Delete file', true), handler: driveDelete },
+  { name: 'drive_delete', description: 'Delete a file from a workspace.', schema: driveDeleteSchema, annotations: writes('Delete file', { destructiveHint: true }), handler: driveDelete },
   { name: 'drive_versions', description: 'View version history for a file in a workspace.', schema: driveVersionsSchema, annotations: reads('Version history'), handler: driveVersions },
   { name: 'drive_search', description: "Semantic search across your org's artifacts in AgentDrive. Returns the top-N most relevant files. Use this BEFORE writing similar artifacts to avoid duplication and surface prior context.", schema: driveSearchSchema, annotations: reads('Search artifacts'), handler: driveSearch },
   { name: 'drive_recall', description: 'Recall persistent facts and preferences your agents have written. In v1 this returns semantic search results across artifacts; v1.5 will narrow to auto-extracted facts (preferences, decisions, key entities).', schema: driveRecallSchema, annotations: reads('Recall memory'), handler: driveRecall },
@@ -118,8 +120,8 @@ export const TOOLS: ToolDef[] = [
   { name: 'drive_context', description: 'Auto-pull the most relevant artifacts from prior agent sessions for the task you are about to do. Combines semantic relevance with recency. Call this at the START of any non-trivial task to ground the agent in prior context — replaces manual copy-paste of artifacts between sessions.', schema: driveContextSchema, annotations: reads('Load task context'), handler: driveContext },
   { name: 'drive_sessions', description: 'List recent agent sessions for this project across agents (Claude Code, Codex, OpenCode, Cursor, Antigravity), newest first. Use to find prior work to continue.', schema: driveSessionsSchema, annotations: reads('List sessions'), handler: driveSessions },
   { name: 'drive_resume', description: "Load a compact handoff brief (goal, files touched, recent turns) from a prior session, by default the latest one from a different agent, so you can continue that work.", schema: driveResumeSchema, annotations: reads('Resume session'), handler: driveResume },
-  { name: 'drive_sandbox_clone', description: '[EXPERIMENTAL] Clone a git repo into a per-workspace Linux sandbox. Requires Cloudflare Containers on the AgentDrive worker; gracefully degrades to a 503 with "sandbox not configured" otherwise.', schema: driveSandboxCloneSchema, annotations: writes('Clone repo into sandbox'), handler: driveSandboxClone },
-  { name: 'drive_sandbox_exec', description: '[EXPERIMENTAL] Run a shell command inside the per-workspace Linux sandbox. Returns stdout/stderr (64 KB cap), exit code, duration. Requires Cloudflare Containers; degrades to 503 otherwise.', schema: driveSandboxExecSchema, annotations: writes('Run sandbox command', true), handler: driveSandboxExec },
+  { name: 'drive_sandbox_clone', description: '[EXPERIMENTAL] Clone a git repo into a per-workspace Linux sandbox. Requires Cloudflare Containers on the AgentDrive worker; gracefully degrades to a 503 with "sandbox not configured" otherwise.', schema: driveSandboxCloneSchema, annotations: writes('Clone repo into sandbox', { openWorldHint: true }), handler: driveSandboxClone },
+  { name: 'drive_sandbox_exec', description: '[EXPERIMENTAL] Run a shell command inside the per-workspace Linux sandbox. Returns stdout/stderr (64 KB cap), exit code, duration. Requires Cloudflare Containers; degrades to 503 otherwise.', schema: driveSandboxExecSchema, annotations: writes('Run sandbox command', { destructiveHint: true, openWorldHint: true }), handler: driveSandboxExec },
   { name: 'drive_sandbox_read', description: '[EXPERIMENTAL] Read a file from the per-workspace sandbox filesystem (build artifacts, test output, logs). Requires Cloudflare Containers; degrades to 503 otherwise.', schema: driveSandboxReadSchema, annotations: reads('Read sandbox file'), handler: driveSandboxRead },
   { name: 'drive_sandbox_commit', description: '[EXPERIMENTAL] Stage + commit the current sandbox worktree. Surfaces as an AgentDrive artifact at commits/<sha>.json. Requires Cloudflare Containers; degrades to 503 otherwise.', schema: driveSandboxCommitSchema, annotations: writes('Commit sandbox changes'), handler: driveSandboxCommit },
 ].map((tool) => ({ ...tool, handler: withUsage(tool.handler) }));

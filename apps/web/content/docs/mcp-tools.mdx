@@ -75,6 +75,17 @@ See the [roadmap](/docs/v1-roadmap) for what's coming next.
 - **Writing artifacts another agent will consume:** `drive_write`. The content hash is the durable identifier.
 - **Auditing what an agent did in a session:** `drive_activity` for the timeline, `drive_versions` per file.
 
+## Install a workflow skill
+
+With AgentDrive connected, install a skill for the task you want your agent to handle.
+
+```sh
+pnpm dlx skills add agentdrive-sh/agentdrive --skill agentdrive-session-handoff
+pnpm dlx skills add agentdrive-sh/agentdrive --skill agentdrive-artifact-search
+```
+
+The handoff skill recovers a coding session and checks it against the current checkout. The artifact search skill finds the file behind a previous decision and identifies its author. Both are maintained in the [official AgentDrive repository](https://github.com/agentdrive-sh/agentdrive/tree/main/plugins/agentdrive/skills).
+
 ## Configuration
 
 The MCP server reads these environment variables:

@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "agentdrive": {
+      "url": "https://mcp.agentdrive.sh/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "dcr"
+            },
+            "baseScopes": [
+              "mcp"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
