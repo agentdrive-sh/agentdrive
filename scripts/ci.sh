@@ -2,10 +2,10 @@
 # Runs CI for one exact commit in a throwaway worktree and posts each job as a GitHub commit status.
 #   scripts/ci.sh                         the local HEAD commit
 #   scripts/ci.sh --ref <ref>             any commit
-#   scripts/ci.sh --pr <n>                a pull request: tests GitHub's merge of its head into the base, posts on the head
+#   scripts/ci.sh --pr <n>                a pull request: tests its head merged locally into the base tip, posts on the head
 # --repo <owner/name> picks the GitHub repo (default: the one gh resolves from this checkout's remotes).
 # On agentdrive-sh/agentdrive, only --pr runs post statuses, since only they pass the trust and CLA checks.
-# --merge (with --pr) squash-merges the PR once every job passes and its head has not moved.
+# --merge (with --pr) squash-merges the PR once every job passes and neither its head nor the base tip has moved.
 # --reviewed-untrusted runs a PR whose code you did not write; read the diff first, it runs on this machine.
 # --dry-run prints what would run and be posted, without running jobs or posting.
 set -euo pipefail
@@ -85,9 +85,9 @@ post_status() {
 if [ -n "$pr" ]; then
   me=$(gh api user --jq .login)
   me=$(lower "$me")
-  info=$(gh pr view "$pr" --repo "$repo" --json headRefOid,baseRefOid,baseRefName,author,state,isCrossRepository \
-    --jq '"\(.headRefOid) \(.baseRefOid) \(.baseRefName) \(.author.login) \(.state) \(.isCrossRepository)"')
-  read -r head base base_name author state cross <<<"$info"
+  info=$(gh pr view "$pr" --repo "$repo" --json headRefOid,baseRefName,author,state,isCrossRepository \
+    --jq '"\(.headRefOid) \(.baseRefName) \(.author.login) \(.state) \(.isCrossRepository)"')
+  read -r head base_name author state cross <<<"$info"
   # gh names an app author app/<name>; its commits and the allowlist use the <name>[bot] login.
   if [[ $author == app/* ]]; then author="${author#app/}[bot]"; fi
   [ "$state" = OPEN ] || { echo "PR #$pr on $repo is $state." >&2; exit 1; }
@@ -102,34 +102,19 @@ if [ -n "$pr" ]; then
   git fetch -q "$url" "pull/$pr/head"
   sha=$(git rev-parse FETCH_HEAD)
   [ "$sha" = "$head" ] || { echo "PR #$pr head moved while fetching ($head on GitHub, $sha fetched); rerun." >&2; exit 1; }
-  # The merge ref goes stale until GitHub recomputes it, so it counts only while its parents are the current base and head.
-  current_merge_ref() {
-    git fetch -q "$url" "pull/$pr/merge" 2>/dev/null &&
-      [ "$(git rev-parse -q --verify 'FETCH_HEAD^1' || true)" = "$base" ] &&
-      [ "$(git rev-parse -q --verify 'FETCH_HEAD^2' || true)" = "$sha" ]
-  }
-  if ! current_merge_ref; then
-    # Asking for mergeability is what makes GitHub recompute the merge ref after a push.
-    gh pr view "$pr" --repo "$repo" --json mergeable >/dev/null
-    sleep "${CI_MERGE_REF_WAIT:-10}"
+  # GitHub's baseRefOid and pull/<n>/merge can both lag the base branch by days, so the base tip comes from the
+  # branch itself and the merge is made here.
+  git fetch -q "$url" "refs/heads/$base_name"
+  base=$(git rev-parse FETCH_HEAD)
+  if ! tree=$(git merge-tree --write-tree --name-only "$base" "$sha"); then
+    echo "Refusing to run PR #$pr: it conflicts with $base_name at ${base:0:12}. Conflicting files:" >&2
+    tail -n +2 <<<"$tree" | sed '/^$/,$d; s/^/  /' >&2
+    echo "Merge or rebase $base_name into it, push, and rerun." >&2
+    exit 1
   fi
-  if current_merge_ref; then
-    test_sha=$(git rev-parse FETCH_HEAD)
-    echo "Testing GitHub's merge of $sha into the base: $test_sha"
-  else
-    test_sha=$sha
-    echo "note: PR #$pr has no current merge ref (it conflicts, or GitHub has not computed it); testing the head itself."
-    if $merge; then
-      git fetch -q "$url" "refs/heads/$base_name"
-      [ "$(git rev-parse FETCH_HEAD)" = "$base" ] || { echo "$base_name moved while fetching; rerun." >&2; exit 1; }
-      # Only a head that already contains the base squashes to the tree this run tests.
-      git merge-base --is-ancestor "$base" "$sha" || {
-        echo "Not merging PR #$pr: with no current merge ref, CI vouches for the squash only if the head contains $base_name." >&2
-        echo "Rebase it onto $base_name, or wait for GitHub to compute the merge ref, and rerun." >&2
-        exit 1
-      }
-    fi
-  fi
+  test_sha=$(GIT_AUTHOR_NAME=ci.sh GIT_AUTHOR_EMAIL=ci@localhost GIT_COMMITTER_NAME=ci.sh GIT_COMMITTER_EMAIL=ci@localhost \
+    git commit-tree "$(head -1 <<<"$tree")" -p "$base" -p "$sha" -m "Merge PR #$pr into $base_name")
+  echo "Testing PR #$pr merged into $base_name at $base: $test_sha"
   target="PR #$pr on $repo"
 else
   sha=$(git rev-parse --verify "$ref^{commit}")
@@ -238,7 +223,7 @@ for i in "${!JOB_NAMES[@]}"; do
 done
 
 echo
-[ "$test_sha" = "$sha" ] || echo "Tested $test_sha (the merge of $sha into the base); statuses are on $sha."
+[ "$test_sha" = "$sha" ] || echo "Tested $test_sha (the merge of $sha into $base_name at $base); statuses are on $sha."
 printf '%-30s %-8s %6s  %s\n' JOB STATE TIME LOG
 printf '%s\n' "${results[@]}"
 $cla_ok || echo "cla                            failure"
@@ -248,10 +233,10 @@ if [ $failed -gt 0 ] || ! $cla_ok; then
   exit 1
 fi
 if $merge; then
-  now=$(gh pr view "$pr" --repo "$repo" --json headRefOid,baseRefOid --jq '"\(.headRefOid) \(.baseRefOid)"')
-  read -r now_head now_base <<<"$now"
+  now_head=$(gh pr view "$pr" --repo "$repo" --json headRefOid --jq .headRefOid)
+  now_base=$(git ls-remote "$url" "refs/heads/$base_name" | awk -v r="refs/heads/$base_name" '$2 == r { print $1 }')
   [ "$now_head" = "$sha" ] || { echo "Not merging PR #$pr: its head moved to $now_head after CI ran on $sha." >&2; exit 1; }
-  [ "$now_base" = "$base" ] || { echo "Not merging PR #$pr: $base_name moved since CI ran ($base, now $now_base); re-run." >&2; exit 1; }
+  [ "$now_base" = "$base" ] || { echo "Not merging PR #$pr: $base_name moved since CI ran ($base, now ${now_base:-gone}); re-run." >&2; exit 1; }
   gh pr merge "$pr" --repo "$repo" --squash --match-head-commit "$sha"
   echo "Merged PR #$pr."
 fi

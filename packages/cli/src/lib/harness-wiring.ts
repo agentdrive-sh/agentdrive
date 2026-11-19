@@ -150,8 +150,8 @@ export function harnessRoot(harness: HookHarness, home: string, env: NodeJS.Proc
   }
 }
 
-const COMMAND_DIRS: Record<HookHarness, string> = {
-  codex: 'prompts',
+// Codex dropped custom prompts in rust-v0.118.0; its skill covers resume and sessions.
+const COMMAND_DIRS: Partial<Record<HookHarness, string>> = {
   opencode: 'commands',
   'gemini-cli': join('commands', 'agentdrive'),
   cursor: 'commands',
@@ -214,8 +214,9 @@ export async function wireHarness(harness: HookHarness, home: string, env: NodeJ
       break;
   }
 
-  for (const name of HARNESS_COMMANDS) {
-    const path = join(root, COMMAND_DIRS[harness], commandFileName(harness, name));
+  const commandDir = COMMAND_DIRS[harness];
+  for (const name of commandDir ? HARNESS_COMMANDS : []) {
+    const path = join(root, commandDir!, commandFileName(harness, name));
     await track(path, writeFileIfChanged(path, renderCommand(harness, name)));
   }
   if (harness !== 'gemini-cli') {

@@ -7,14 +7,13 @@ t=$(mktemp -d)
 trap 'rm -rf "$t"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 export GIT_AUTHOR_NAME=Owner GIT_AUTHOR_EMAIL=owner@example.invalid GIT_COMMITTER_NAME=Owner GIT_COMMITTER_EMAIL=owner@example.invalid
-export FX="$t/fx" CI_GITHUB_URL="$t/github" CI_LOG_DIR="$t/logs" CI_MERGE_REF_WAIT=0
+export FX="$t/fx" CI_GITHUB_URL="$t/github" CI_LOG_DIR="$t/logs"
 PRIV=example/internal PUB=agentdrive-sh/agentdrive
 mkdir -p "$t/bin" "$FX"
 unset CI TURBO_CACHE_DIR
 
 # gh: answers from fixture files in $FX and appends every call to $FX/gh.log.
-# A second 'pr view' of PR n reads pr-n.later.json when it exists, to move the head or base after CI ran.
-# Asking for PR n's mergeability runs $FX/recompute-n when it exists, as GitHub recomputes the merge ref then.
+# A second 'pr view' of PR n reads pr-n.later.json when it exists, to move the head after CI ran.
 # 'api repos/<name>' reports the public repo's canonical name for any case of it or its old name. While $FX/offline
 # exists it prints that file and exits 1, as gh prints an error body; while $FX/nameless exists it reports no name.
 cat >"$t/bin/gh" <<'EOF'
@@ -31,7 +30,6 @@ case "$1 $2" in
   "api user") echo '{"login":"Rakesh1002"}' >"$FX/user.json"; out "$FX/user.json" ;;
   "repo view") echo '{"nameWithOwner":"example/internal"}' >"$FX/repo-view.json"; out "$FX/repo-view.json" ;;
   "pr view")
-    if [ "${*: -1}" = mergeable ] && [ -f "$FX/recompute-$3" ]; then bash "$FX/recompute-$3"; fi
     echo x >>"$FX/views-$3"
     if [ "$(wc -l <"$FX/views-$3")" -gt 1 ] && [ -f "$FX/pr-$3.later.json" ]; then out "$FX/pr-$3.later.json"; else out "$FX/pr-$3.json"; fi ;;
   "pr merge") ;;
@@ -59,12 +57,13 @@ case "$1 $2" in
 esac
 EOF
 # pnpm: records the commit it ran in, CI, whether turbo's cache is inside the worktree, and its arguments;
-# fails when they equal $PNPM_FAIL.
+# runs $PNPM_ON_TEST on 'pnpm test', and fails when its arguments equal $PNPM_FAIL.
 cat >"$t/bin/pnpm" <<'EOF'
 #!/usr/bin/env bash
 cache=cache-elsewhere
 [ "${TURBO_CACHE_DIR:-}" != "$PWD/.turbo/cache" ] || cache=cache-in-worktree
 echo "$(git rev-parse HEAD) CI=${CI:-} $cache $*" >>"$FX/pnpm.log"
+if [ "$*" = test ] && [ -n "${PNPM_ON_TEST:-}" ]; then eval "$PNPM_ON_TEST"; fi
 [ "$*" != "${PNPM_FAIL:-}" ]
 EOF
 printf '#!/bin/sh\n' >"$t/bin/gitleaks"
@@ -84,42 +83,42 @@ git switch -q -c feature && echo feature >feature.txt && git add -A && git commi
 sha=$(git rev-parse HEAD)
 git switch -q main && echo other >other.txt && git add -A && git commit -qm "main moved"
 main=$(git rev-parse HEAD)
-git merge -q --no-ff -m "merge feature" feature
-merge=$(git rev-parse HEAD)
-git switch -q feature && echo pushed-later >>feature.txt && git commit -qam "pushed after the merge ref"
-later=$(git rev-parse HEAD)
+echo again >>other.txt && git commit -qam "main moved again"
+main_later=$(git rev-parse HEAD)
+git switch -q -c conflicting "$base" && echo different >other.txt && git add -A && git commit -qm "conflicts with main"
+conflicting=$(git rev-parse HEAD)
 git switch -q -c public-only "$base" && git rm -q scripts/deploy.test.sh scripts/public-sync.test.sh && git commit -qm "public export"
 public_only=$(git rev-parse HEAD)
 git switch -q main && git reset -q --hard "$base"
-# Base main is $main. PRs 7, 9 and 15 have a current merge ref; 10 and 13 a stale one (13's is recomputed on request);
-# 12's head already contains main and it has no merge ref; 14's merge ref is of the head before its last push;
-# 16 targets release/1.0 and has no merge ref.
+# The merge ref GitHub would have made when main was still $base; ci.sh must ignore it.
+stale_merge=$(git commit-tree "$sha^{tree}" -p "$base" -p "$sha" -m "stale merge ref")
+# The real main is $main, while every fixture reports the stale baseRefOid $base. PR 16 targets release/1.0 ($base)
+# and PR 17 conflicts with main.
 for r in $PRIV $PUB; do
   git init -q --bare "$t/github/$r.git"
-  for n in 7 8 9 10 11 13 15 16; do git push -q "$t/github/$r.git" "$sha:refs/pull/$n/head"; done
-  git push -q "$t/github/$r.git" "$main:refs/heads/main" "$base:refs/heads/release/1.0" "$merge:refs/pull/12/head" \
-    "$later:refs/pull/14/head" "$merge:refs/pull/7/merge" "$merge:refs/pull/9/merge" "$merge:refs/pull/15/merge" \
-    "$base:refs/pull/10/merge" "$base:refs/pull/13/merge" "$merge:refs/pull/14/merge"
+  for n in 7 8 9 11 15 16; do git push -q "$t/github/$r.git" "$sha:refs/pull/$n/head" "$stale_merge:refs/pull/$n/merge"; done
+  git push -q "$t/github/$r.git" "$main:refs/heads/main" "$base:refs/heads/release/1.0" "$conflicting:refs/pull/17/head"
 done
-echo "git push -q '$t/github/$PRIV.git' '+$merge:refs/pull/13/merge'" >"$FX/recompute-13"
 pr_fixture() {
-  jq -n --arg sha "$2" --arg who "$3" --arg state "${4:-OPEN}" --argjson cross "${5:-false}" --arg base "${6:-$main}" --arg name "${7:-main}" \
+  jq -n --arg sha "$2" --arg who "$3" --arg state "${4:-OPEN}" --argjson cross "${5:-false}" --arg base "$base" --arg name "${6:-main}" \
     '{headRefOid: $sha, baseRefOid: $base, baseRefName: $name, author: {login: $who}, state: $state, isCrossRepository: $cross}' >"$FX/pr-$1.json"
 }
 pr_fixture 7 "$sha" Rakesh1002
 pr_fixture 8 "$sha" someone
 pr_fixture 9 "$sha" alice
-pr_fixture 10 "$sha" Rakesh1002
 pr_fixture 11 "$sha" Rakesh1002 OPEN true
-pr_fixture 12 "$merge" Rakesh1002
-pr_fixture 13 "$sha" Rakesh1002
-pr_fixture 14 "$later" Rakesh1002
 pr_fixture 15 "$sha" app/dependabot
-pr_fixture 16 "$sha" Rakesh1002 OPEN false "$base" release/1.0
+pr_fixture 16 "$sha" Rakesh1002 OPEN false release/1.0
+pr_fixture 17 "$conflicting" Rakesh1002
 reset() { rm -f "$FX"/*.log "$FX"/views-* "$FX/cla-written.json"; }
 ci() { "$t/repo/scripts/ci.sh" "$@" >"$t/out" 2>&1; }
 posted() { grep -c "statuses/$sha -f state=$1" "$FX/gh.log" || true; }
-ran_at() { [ "$(cut -d' ' -f1 "$FX/pnpm.log" | sort -u)" = "$1" ]; }
+# The jobs ran on one commit whose parents are the given base tip and head, in that order.
+ran_on_merge() {
+  local tested
+  tested=$(cut -d' ' -f1 "$FX/pnpm.log" | sort -u)
+  [ "$(git rev-parse "$tested^1" "$tested^2" 2>/dev/null | paste -sd' ' -)" = "$1 $2" ]
+}
 commits() { jq -n --arg sha "$sha" --args '[$ARGS.positional[] | {sha: "older", author: {login: .}}] | .[-1].sha = $sha' "$@" >"$FX/commits.json"; }
 
 reset
@@ -134,7 +133,7 @@ grep -q "statuses/$sha -f state=failure -f context=Test " "$FX/gh.log" || fail "
 [ "$(posted success)" = 5 ] || fail "the other five jobs did not keep going and pass"
 grep -q "pr merge" "$FX/gh.log" && fail "a failing run merged"
 grep -q "Not merging PR #7" "$t/out" || fail "a failing run did not say why it did not merge"
-ran_at "$merge" || fail "jobs did not run on GitHub's merge commit"
+ran_on_merge "$main" "$sha" || fail "jobs did not run on the head merged into the real main tip"
 [ "$(git worktree list | wc -l | tr -d ' ')" = 1 ] || fail "the CI worktree was left behind"
 
 reset
@@ -164,48 +163,35 @@ grep -qF "statuses/$public_only -f state=failure -f context=Test " "$FX/gh.log" 
 [ "$(grep -cv " CI=true cache-in-worktree " "$FX/pnpm.log")" = 0 ] || fail "a job ran without CI=true or with turbo's cache outside the worktree"
 
 reset
-ci --pr 10 || fail "a PR with a stale merge ref failed"
-ran_at "$sha" || fail "a stale merge ref was tested instead of the head"
-grep -q "no current merge ref" "$t/out" || fail "falling back to the head was not noted"
-grep -qx "pr view 10 --repo $PRIV --json mergeable" "$FX/gh.log" || fail "a stale merge ref was not recomputed first"
+ci --pr 7 || fail "a PR whose GitHub base and merge ref are stale failed: $(cat "$t/out")"
+ran_on_merge "$main" "$sha" || fail "a stale baseRefOid or merge ref was tested instead of the real main tip"
+[ "$(cut -d' ' -f1 "$FX/pnpm.log" | sort -u)" != "$stale_merge" ] || fail "GitHub's stale merge ref was tested"
+git cat-file -e "$(cut -d' ' -f1 "$FX/pnpm.log" | sort -u):other.txt" || fail "the tested tree does not hold the real main's changes"
 
 reset
-ci --pr 10 --merge && fail "a fallback run merged a head that does not contain the base"
-grep -q "CI vouches for the squash only if the head contains main" "$t/out" || fail "the fallback merge refusal was not explained"
-[ ! -e "$FX/pnpm.log" ] || fail "a fallback merge that would be refused ran jobs first"
+ci --pr 16 --merge || fail "a PR against release/1.0 failed: $(cat "$t/out")"
+ran_on_merge "$base" "$sha" || fail "a PR against release/1.0 was not merged into that branch's tip"
+grep -qx "pr merge 16 --repo $PRIV --squash --match-head-commit $sha" "$FX/gh.log" || fail "the release/1.0 merge did not pin the head"
 
 reset
-ci --pr 12 --merge || fail "a fallback run whose head contains the base did not merge: $(cat "$t/out")"
-grep -qx "pr merge 12 --repo $PRIV --squash --match-head-commit $merge" "$FX/gh.log" || fail "the fallback merge did not pin the head"
+ci --pr 17 --merge && fail "ran a PR that conflicts with main"
+grep -q "conflicts with main" "$t/out" || fail "a conflicting PR was not refused as conflicting"
+grep -q "other.txt" "$t/out" || fail "the conflicting file was not named"
+[ ! -e "$FX/pnpm.log" ] || fail "a conflicting PR ran a job"
+grep -q "statuses/" "$FX/gh.log" && fail "a conflicting PR posted a status"
 
 reset
-ci --pr 16 --merge || fail "a fallback run against a release/1.0 base did not merge: $(cat "$t/out")"
-grep -qx "pr merge 16 --repo $PRIV --squash --match-head-commit $sha" "$FX/gh.log" || fail "the release/1.0 fallback merge did not pin the head"
-
-reset
-ci --pr 13 || fail "a PR whose merge ref was recomputed failed"
-ran_at "$merge" || fail "the merge ref GitHub recomputed on request was not tested"
-
-reset
-ci --pr 14 || fail "a PR whose merge ref predates its last push failed"
-ran_at "$later" || fail "a merge ref of an older head was tested"
-
-reset
-pr_fixture 7 "$sha" Rakesh1002 OPEN false "$base"
-ci --pr 7 || fail "a PR whose merge ref predates the base failed"
-ran_at "$sha" || fail "a merge ref built on an old base was tested"
-pr_fixture 7 "$sha" Rakesh1002
+PNPM_ON_TEST="git push -q '$t/github/$PRIV.git' '$main_later:refs/heads/main'" ci --pr 7 --merge &&
+  fail "merged after the real main tip moved during the run"
+git push -q "$t/github/$PRIV.git" "+$main:refs/heads/main"
+grep -q "pr merge" "$FX/gh.log" && fail "called merge after the real main tip moved during the run"
+grep -q "main moved since CI ran" "$t/out" || fail "the moved main tip was not reported"
 
 reset
 pr_fixture 7.later 0000000000000000000000000000000000000001 Rakesh1002
 ci --pr 7 --merge && fail "merged after the head moved during the run"
 grep -q "pr merge" "$FX/gh.log" && fail "called merge after the head moved during the run"
 grep -q "head moved to 0000000000000000000000000000000000000001" "$t/out" || fail "the moved head was not reported"
-reset
-pr_fixture 7.later "$sha" Rakesh1002 OPEN false 0000000000000000000000000000000000000002
-ci --pr 7 --merge && fail "merged after the base moved during the run"
-grep -q "pr merge" "$FX/gh.log" && fail "called merge after the base moved during the run"
-grep -q "main moved since CI ran" "$t/out" || fail "the moved base was not reported"
 rm "$FX/pr-7.later.json"
 
 reset

@@ -85,7 +85,7 @@ Worker entry: `apps/worker/src/index.ts` mounts the per-domain route modules:
 
 Custom domain: `app.agentdrive.sh`. The current website, docs and dashboard are served by the separate `apps/web` OpenNext Worker at `agentdrive.sh`, whose `API` service binding targets this API Worker. `apps/frontend` is legacy.
 
-CI gate: `scripts/ci.sh` runs typecheck, test, build, verify-claims, the browser regressions and a production dependency audit on each PR (GitHub's merge of its head into the base), on the maintainer's machine.
+CI gate: `scripts/ci.sh` runs typecheck, test, build, verify-claims, the browser regressions and a production dependency audit on each PR (its head merged into the current base), on the maintainer's machine.
 
 ---
 

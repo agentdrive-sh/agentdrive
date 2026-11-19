@@ -76,8 +76,9 @@ Reach for these tools without waiting to be asked:
 - **Provenance:** call \`drive_log_run\` at the end of meaningful
   work so the cross-agent timeline stays accurate.
 
-Privacy: if the user has Private Workspace on, written content is
-encrypted client-side; the AgentDrive server only stores ciphertext.`;
+Privacy: with Private Workspace on, only content the \`adrive\` CLI syncs
+(session transcripts and synced files) is encrypted on the device before
+upload. \`drive_write\` and other MCP writes are not encrypted.`;
 
 // Plan-limit and rate-limit refusals become a plain result the agent relays to its human, and
 // a usage warning from the call rides along on the tool's output.

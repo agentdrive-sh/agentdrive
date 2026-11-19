@@ -49,7 +49,7 @@ If the \`drive_sessions\` tool is not available, run \`adrive resume --list\` in
 // has already logged in by the time their commands exist.
 export const HARNESS_COMMANDS: CommandName[] = ['resume', 'sessions'];
 
-// Codex prompts, OpenCode, and Cursor commands share a flat namespace with
+// OpenCode and Cursor commands share a flat namespace with
 // built-ins such as /resume and /sessions, so they get a prefix. Antigravity
 // has no command files, only skills.
 export function commandFileName(harness: CommandHarness, name: CommandName): string {

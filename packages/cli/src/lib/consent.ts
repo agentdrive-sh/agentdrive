@@ -7,9 +7,10 @@ function notice(on: boolean): string {
   return `
 ${kleur.bold(`AgentDrive session sync is ${on ? 'on' : 'off'}`)}
   - ${on ? 'Uploads' : 'When on, uploads'} to your AgentDrive workspace: your agent session transcripts, and files your agents write that git doesn't track.
-  - If you run ${kleur.bold('adrive watch')}, it uploads every file under that folder, existing ones included, except .gitignore and .adriveignore matches.
+${on ? `  - The first sync also uploads your sessions from the last 14 days, from every supported agent tool on this machine, except ones that ran while sync was off.\n` : ''}  - Each synced session is also listed as a run with its title (your first prompt, redacted), project, working directory, timing and the paths it touched.
+  - If you run ${kleur.bold('adrive watch')}, it uploads every file under that folder, existing ones included, except links, files with other hard links, the built-in deny list, and matches of the .gitignore and .adriveignore at the folder's top level (nested ones are not read).
   - Secrets are redacted on this device before anything is uploaded.
-  - Turn on Private Workspace to encrypt synced content on your device before upload.
+  - Turn on Private Workspace to encrypt the transcripts and files the CLI syncs on your device before upload, and keep the title, working directory and paths out of runs. What agents write with the MCP tools (drive_write and others) is not encrypted.
   - Agent tools you install later are connected automatically at their next session.
   - ${on ? 'Change or turn it off anytime' : 'Turn it on'}: ${kleur.bold('adrive privacy')}
 `;

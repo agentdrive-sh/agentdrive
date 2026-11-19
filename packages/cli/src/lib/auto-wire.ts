@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { readConfig, writeConfig } from './config.js';
+import { readConfig, updateConfig } from './config.js';
 import { installedToolIds, wireInstalled, type WireDeps } from './wire-all.js';
 
 const NOTICE_FILE = 'autowired.json';
@@ -44,9 +44,7 @@ export async function autoWire(opts: AutoWireOptions): Promise<string[]> {
 
 // Re-reads so wiring never resurrects a config that `adrive auth logout` deleted meanwhile.
 async function recordWired(path: string, ids: string[]): Promise<void> {
-  const latest = await readConfig(path);
-  if (!latest?.api_key) return;
-  await writeConfig({ ...latest, wired: [...new Set([...(latest.wired ?? []), ...ids])] }, path);
+  await updateConfig((latest) => (latest?.api_key ? { ...latest, wired: [...new Set([...(latest.wired ?? []), ...ids])] } : null), { path });
 }
 
 async function appendNotice(dir: string, labels: string[]): Promise<void> {

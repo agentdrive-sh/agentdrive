@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import kleur from 'kleur';
 import prompts from 'prompts';
 import { ApiError, CliApiClient } from '../lib/api-client.js';
-import { DEFAULT_API_URL, DEFAULT_PREFERENCES, hasSavedPreferences, readConfig, writeConfig, type CliConfig } from '../lib/config.js';
+import { DEFAULT_API_URL, DEFAULT_PREFERENCES, changesOnto, hasSavedPreferences, readConfig, updateConfig, type CliConfig } from '../lib/config.js';
 import { ensureCaptureConsent } from '../lib/consent.js';
 import { pollAuth } from '../lib/poll-auth.js';
 import { writeAllInstructions } from '../lib/auto-context.js';
@@ -88,8 +88,11 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const preferences = { ...DEFAULT_PREFERENCES, ...(config.preferences ?? {}) };
   // Unsaved preferences let a later sign-in still turn capture on by default.
   config = { ...config, preferences: local && !preferencesSaved ? undefined : preferences };
-  // Saved before wiring: hooks and the MCP server read the key from this file.
-  await writeConfig(config);
+  // Saved before wiring: hooks and the MCP server read the key from this file. Sign-in and
+  // consent can take minutes, so only what init changed is applied to the config as it is now.
+  const decided = config;
+  const base = existing && !preferencesSaved ? { ...existing, preferences: undefined } : existing;
+  await updateConfig((latest) => (latest ? changesOnto(latest, base, decided) : decided));
 
   process.stdout.write(`\n${kleur.bold('Connecting your agents')}\n`);
   const outcomes = await wireInstalled(home, process.env);
@@ -99,8 +102,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     for (const w of o.warnings) process.stdout.write(`  ${kleur.yellow('!')} ${o.label}: ${w}\n`);
   }
   const wired = outcomes.filter((o) => o.status === 'wired' || o.status === 'manual').map((o) => o.id);
-  config = { ...config, wired: [...new Set([...(config.wired ?? []), ...wired])] };
-  await writeConfig(config);
+  await updateConfig((latest) => latest && { ...latest, wired: [...new Set([...(latest.wired ?? []), ...wired])] });
   const summary: Array<[string, string]> = outcomes.map((o) => [o.label, summaryStatus(o)]);
 
   if (preferences.auto_context) {

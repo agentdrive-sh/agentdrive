@@ -65,5 +65,6 @@ credentials.
 
 ## Privacy
 
-Respect `adrive privacy`. With Private Workspace on, content is encrypted
-on the device and the server stores only ciphertext.
+Respect `adrive privacy`. With Private Workspace on, only content the CLI
+syncs (session transcripts and synced files) is encrypted on the device;
+`drive_write` and other MCP writes are not encrypted.

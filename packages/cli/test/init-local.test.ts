@@ -3,7 +3,8 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cmdInit } from '../src/commands/init.js';
-import { configPath, hasSavedPreferences, readConfig } from '../src/lib/config.js';
+import { ApiError, CliApiClient } from '../src/lib/api-client.js';
+import { DEFAULT_PREFERENCES, configPath, hasSavedPreferences, readConfig, updateConfig, writeConfig } from '../src/lib/config.js';
 import { ensureCaptureConsent } from '../src/lib/consent.js';
 import { pollAuth } from '../src/lib/poll-auth.js';
 import { wireInstalled } from '../src/lib/wire-all.js';
@@ -51,5 +52,23 @@ describe('adrive init --local', () => {
     await cmdInit({ yes: true });
     expect(pollAuth).toHaveBeenCalledOnce();
     expect((await readConfig())?.api_key).toBe('agentdrive_live_synthetic');
+  });
+
+  it('applies only what it changed, so a privacy choice made while it signed in again stands', async () => {
+    const prefs = { ...DEFAULT_PREFERENCES, capture_transcripts: true, capture_artifacts: true };
+    await writeConfig({ api_url: 'https://example.invalid', api_key: 'agentdrive_live_rejected', default_workspace: 'ws_old', capture_notice_at: '2026-01-01T00:00:00.000Z', wired: [], preferences: prefs });
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockRejectedValue(new ApiError('Invalid API key', 401));
+    vi.mocked(ensureCaptureConsent).mockImplementationOnce(async (config) => {
+      // adrive privacy, run in another terminal while the browser sign-in was open.
+      await updateConfig((latest) => ({ ...latest!, preferences: { ...prefs, capture_artifacts: false } }), { effectiveBefore: true });
+      return { ...config, default_workspace: 'ws_new' };
+    });
+    await cmdInit({ yes: true });
+    expect(await readConfig()).toMatchObject({
+      api_key: 'agentdrive_live_synthetic',
+      default_workspace: 'ws_new',
+      wired: ['codex'],
+      preferences: { capture_transcripts: true, capture_artifacts: false },
+    });
   });
 });

@@ -48,6 +48,8 @@ function wrap<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
 }
 
 process.on('SIGINT', () => {
+  // A command with its own handler (adrive watch) shuts down cleanly on its own.
+  if (process.listenerCount('SIGINT') > 1) return;
   process.stderr.write('\nInterrupted.\n');
   process.exit(130);
 });

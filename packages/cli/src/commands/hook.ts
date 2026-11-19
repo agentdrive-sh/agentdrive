@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { projectKeyFor, scopeProjectKey } from '@adrive/mcp-server/project';
 import { sessionActivityAt, sessionRunId, type SessionHarness } from '@adrive/mcp-server/session';
 import { CliApiClient } from '../lib/api-client.js';
-import { configDir, readConfig, type CliConfig } from '../lib/config.js';
+import { configDir, configPath, readConfig, reconcileHistory, type CliConfig } from '../lib/config.js';
 import { HARNESSES } from '@adrive/mcp-server/local';
 import { recordSessionCwd } from '@adrive/mcp-server/transcripts/session-cwd';
 import { takeAutoWireNotice } from '../lib/auto-wire.js';
@@ -115,6 +115,8 @@ export async function runHook(harness: string, raw: string, deps: HookDeps = {})
     const transcript = asStr(h === 'antigravity' ? payload.transcriptPath : payload.transcript_path);
 
     const cfg = await readConfig();
+    // A read, and a write only on change: a toggle an older CLI or a hand edit flipped still gets its off interval.
+    if (cfg?.api_key) await reconcileHistory(configPath()).catch(() => undefined);
     const capturing = !!cfg?.preferences?.capture_transcripts || !!cfg?.preferences?.capture_artifacts;
     // Recorded with or without an account or capture: local resume needs it to place
     // transcripts that carry no cwd, and the map never leaves this machine.

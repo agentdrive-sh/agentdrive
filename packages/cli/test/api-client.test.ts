@@ -141,3 +141,22 @@ describe('CliApiClient', () => {
     expect(err.status).toBe(500);
   });
 });
+
+describe('CliApiClient per-request timeout', () => {
+  it('bounds each request, not the Retry-After wait, so a long Retry-After still retries', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls++;
+      return calls === 1
+        ? new Response(JSON.stringify({ success: false, error: 'slow down' }), { status: 429, headers: { 'retry-after': '1' } })
+        : new Response(JSON.stringify({ success: true, data: { id: 'f1', path: 'a.md', version: 1, updated_at: '' } }), { status: 200 });
+    });
+    try {
+      const client = new CliApiClient({ baseUrl: 'https://example.invalid', apiKey: 'agentdrive_live_test' });
+      await expect(client.writeFile('ws_1', 'a.md', 'x', undefined, undefined, 200)).resolves.toMatchObject({ id: 'f1' });
+      expect(calls).toBe(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

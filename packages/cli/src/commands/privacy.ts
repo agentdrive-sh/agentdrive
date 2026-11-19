@@ -3,7 +3,7 @@ import kleur from 'kleur';
 import {
   DEFAULT_PREFERENCES,
   readConfig,
-  writeConfig,
+  updateConfig,
   type CliPreferences,
 } from '../lib/config.js';
 import { writeAllInstructions, removeAllInstructions } from '../lib/auto-context.js';
@@ -25,7 +25,8 @@ function display(p: CliPreferences): void {
   process.stdout.write(`  Sync transcripts         ${p.capture_transcripts ? kleur.green('on') : kleur.dim('off')}\n`);
   process.stdout.write(`  Private Workspace (E2E)  ${p.private_workspace ? kleur.green('on') : kleur.dim('off')}\n`);
   process.stdout.write(`  Connect new agent tools  ${p.auto_wire ? kleur.green('on') : kleur.dim('off')}\n`);
-  process.stdout.write(`\n${kleur.dim('Change with `adrive privacy --capture-artifacts on` etc., or run it bare to step through.')}\n`);
+  process.stdout.write(`\n${kleur.dim('A session that runs while transcript or artifact sync is off never syncs that part, even after you turn it back on.')}\n`);
+  process.stdout.write(`${kleur.dim('Change with `adrive privacy --capture-artifacts on` etc., or run it bare to step through.')}\n`);
 }
 
 export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
@@ -34,7 +35,8 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
     throw new Error('Not logged in. Run `adrive init` first.');
   }
   const current: CliPreferences = { ...DEFAULT_PREFERENCES, ...(cfg.preferences ?? {}) };
-  let next = { ...current };
+  // Only what the user set: applied to the config as it is when written, so a concurrent writer can't undo it.
+  let changes: Partial<CliPreferences> = {};
 
   const hasFlag =
     opts.autoContext !== undefined ||
@@ -49,11 +51,11 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
   }
 
   if (hasFlag) {
-    if (opts.autoContext !== undefined) next.auto_context = opts.autoContext === 'on';
-    if (opts.captureArtifacts !== undefined) next.capture_artifacts = opts.captureArtifacts === 'on';
-    if (opts.captureTranscripts !== undefined) next.capture_transcripts = opts.captureTranscripts === 'on';
-    if (opts.privateWorkspace !== undefined) next.private_workspace = opts.privateWorkspace === 'on';
-    if (opts.autoWire !== undefined) next.auto_wire = opts.autoWire === 'on';
+    if (opts.autoContext !== undefined) changes.auto_context = opts.autoContext === 'on';
+    if (opts.captureArtifacts !== undefined) changes.capture_artifacts = opts.captureArtifacts === 'on';
+    if (opts.captureTranscripts !== undefined) changes.capture_transcripts = opts.captureTranscripts === 'on';
+    if (opts.privateWorkspace !== undefined) changes.private_workspace = opts.privateWorkspace === 'on';
+    if (opts.autoWire !== undefined) changes.auto_wire = opts.autoWire === 'on';
   } else {
     process.stdout.write(`\n${kleur.bold('Your AI memory')}\n`);
     process.stdout.write(`${kleur.dim('You control what gets shared.')}\n\n`);
@@ -99,21 +101,23 @@ export async function cmdPrivacy(opts: PrivacyOptions = {}): Promise<void> {
         inactive: 'off',
       },
     ])) as Partial<CliPreferences>;
-    next = {
-      auto_context: answers.auto_context ?? current.auto_context,
-      capture_artifacts: answers.capture_artifacts ?? current.capture_artifacts,
-      capture_transcripts: answers.capture_transcripts ?? current.capture_transcripts,
-      private_workspace: answers.private_workspace ?? current.private_workspace,
-      auto_wire: answers.auto_wire ?? current.auto_wire,
-    };
+    changes = Object.fromEntries(Object.entries(answers).filter(([, v]) => typeof v === 'boolean')) as Partial<CliPreferences>;
   }
 
-  await writeConfig({ ...cfg, preferences: next });
+  const { before, after } = await updateConfig(
+    (latest) => {
+      if (!latest?.api_key) throw new Error('Not logged in. Run `adrive init` first.');
+      return { ...latest, preferences: { ...DEFAULT_PREFERENCES, ...latest.preferences, ...changes } };
+    },
+    { effectiveBefore: true },
+  );
+  const was: CliPreferences = { ...DEFAULT_PREFERENCES, ...before?.preferences };
+  const next: CliPreferences = { ...DEFAULT_PREFERENCES, ...after?.preferences };
 
   // Reconcile auto-context instructions with the new preference.
-  if (next.auto_context && !current.auto_context) {
+  if (next.auto_context && !was.auto_context) {
     await writeAllInstructions();
-  } else if (!next.auto_context && current.auto_context) {
+  } else if (!next.auto_context && was.auto_context) {
     await removeAllInstructions();
   } else if (next.auto_context) {
     // Keep the instructions in sync if they've drifted.

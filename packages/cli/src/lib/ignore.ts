@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { join, relative, sep, posix } from 'node:path';
+import { join, parse, relative, sep, posix } from 'node:path';
 
 // .adriveignore parser. Subset of gitignore semantics: blank lines and lines
 // starting with '#' are skipped; '!' negates a previous pattern; '/' anchors
@@ -73,7 +73,7 @@ interface Rule {
   re: RegExp;
 }
 
-function patternToRegex(raw: string): { re: RegExp; negate: boolean } {
+function patternToRegex(raw: string, ignoreCase: boolean): { re: RegExp; negate: boolean } {
   let pat = raw.trim();
   const negate = pat.startsWith('!');
   if (negate) pat = pat.slice(1);
@@ -118,22 +118,22 @@ function patternToRegex(raw: string): { re: RegExp; negate: boolean } {
 
   // anchored = at root only; unanchored = at any depth.
   const final = anchored ? `^${re}$` : `^(?:.*/)?${re}$`;
-  return { re: new RegExp(final), negate };
+  return { re: new RegExp(final, ignoreCase ? 'i' : ''), negate };
 }
 
-export function compileRules(lines: string[]): Rule[] {
+export function compileRules(lines: string[], ignoreCase = false): Rule[] {
   const rules: Rule[] = [];
   for (const raw of lines) {
     const line = raw.replace(/^\s+|\s+$/g, '');
     if (!line || line.startsWith('#')) continue;
-    const { re, negate } = patternToRegex(line);
+    const { re, negate } = patternToRegex(line, ignoreCase);
     rules.push({ pattern: line, negate, re });
   }
   return rules;
 }
 
 export async function loadRules(root: string, files: string[] = ['.adriveignore', '.gitignore']): Promise<Rule[]> {
-  const lines: string[] = [...DEFAULT_DENY];
+  const lines: string[] = [];
   for (const f of files) {
     try {
       const raw = await fs.readFile(join(root, f), 'utf8');
@@ -142,7 +142,8 @@ export async function loadRules(root: string, files: string[] = ['.adriveignore'
       // ignore missing
     }
   }
-  return compileRules(lines);
+  // Last match wins, so DEFAULT_DENY goes last: a project's `!.env` must never re-include a denied file.
+  return [...compileRules(lines), ...DENY_RULES];
 }
 
 function normalizeRelative(root: string, path: string): string {
@@ -160,4 +161,14 @@ export function shouldIgnore(root: string, path: string, rules: Rule[]): boolean
     }
   }
   return ignored;
+}
+
+// Case-insensitive, since `.ENV` or `ID_RSA` on a case-insensitive disk is the
+// same file; a project's own ignore files keep git's case rules.
+export const DENY_RULES = compileRules(DEFAULT_DENY, true);
+
+// Matched from the filesystem root, so every segment and the basename count,
+// whatever folder a file was reached from (`adrive watch ~/.ssh`, or a link).
+export function isDenied(realPath: string): boolean {
+  return shouldIgnore(parse(realPath).root, realPath, DENY_RULES);
 }

@@ -32,6 +32,13 @@ describe('ensureCaptureConsent', () => {
     expect(out.default_workspace).toBe('ws_1');
     expect(printed()).toMatch(/adrive privacy/);
     expect(printed()).toMatch(/redacted on this device/);
+    expect(printed()).toMatch(/first sync also uploads your sessions from the last 14 days, from every supported agent tool/);
+    expect(printed()).toMatch(/Private Workspace to encrypt the transcripts and files the CLI syncs/);
+    expect(printed()).toMatch(/MCP tools \(drive_write and others\) is not encrypted/);
+    expect(printed()).not.toMatch(/encrypt everything/i);
+    expect(printed()).toMatch(/top level \(nested ones are not read\)/);
+    expect(printed()).toMatch(/except links, files with other hard links, the built-in deny list/);
+    expect(printed()).toMatch(/listed as a run with its title \(your first prompt, redacted\), project, working directory, timing and the paths it touched/);
   });
 
   it('never flips capture back on after the notice was shown', async () => {
@@ -59,6 +66,7 @@ describe('ensureCaptureConsent', () => {
     expect(out.capture_notice_at).toBe('2026-10-21T12:00:00.000Z');
     expect(printed()).toMatch(/session sync is off/);
     expect(printed()).toMatch(/Turn it on: .*adrive privacy/);
+    expect(printed()).not.toMatch(/14 days/);
   });
 
   it('creates a Personal workspace when there are none', async () => {

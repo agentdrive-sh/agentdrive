@@ -20,7 +20,9 @@ export async function cmdSync(opts: SyncCommandOptions = {}): Promise<void> {
     throw new Error(`Unknown harness: ${opts.harness}. Supported: ${HARNESSES.join(', ')}.`);
   }
   const result = await runSync({ ...opts, harness: opts.harness as SessionHarness | undefined });
+  // Hooks spawn it --quiet and detached, and never read its exit code.
   if (opts.quiet) return;
+  if (result.stopped) process.exitCode = 1;
 
   if (result.skipped) {
     const hint: Record<NonNullable<typeof result.skipped>, string> = {
@@ -28,6 +30,7 @@ export async function cmdSync(opts: SyncCommandOptions = {}): Promise<void> {
       'capture-off': 'sync is off; enable with `adrive privacy --capture-transcripts on` or `--capture-artifacts on`',
       locked: 'another sync is running',
       'no-workspace': 'several workspaces and no default_workspace in your config',
+      'history-unreadable': 'privacy-history.json in your AgentDrive config folder is missing, damaged or can\'t be written; nothing syncs until it is restored',
     };
     process.stdout.write(`${kleur.yellow('[skip]')} ${hint[result.skipped]}\n`);
     return;

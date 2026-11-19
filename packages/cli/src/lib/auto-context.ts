@@ -31,8 +31,9 @@ asked:
   other agents, call \`drive_write\`.
 
 Privacy: the user controls session sync and encryption with \`adrive privacy\`.
-With Private Workspace on, synced content is end-to-end encrypted on their
-device; the AgentDrive server stores only ciphertext.
+With Private Workspace on, only content the CLI syncs (session transcripts and
+synced files) is encrypted on their device; \`drive_write\` and other MCP writes
+are not encrypted.
 ${END}`;
 
 interface InstructionsTarget {

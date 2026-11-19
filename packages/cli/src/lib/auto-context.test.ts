@@ -53,6 +53,9 @@ describe('auto-context', () => {
       expect(content).toMatch(/agentdrive:auto-context:begin/);
       expect(content).toMatch(/drive_resume/);
       expect(content).toMatch(/drive_sessions/);
+      expect(content).toMatch(/only content the CLI syncs/);
+      expect(content).toMatch(/MCP writes\s+are not encrypted/);
+      expect(content).not.toMatch(/stores only ciphertext/);
     }
   });
 

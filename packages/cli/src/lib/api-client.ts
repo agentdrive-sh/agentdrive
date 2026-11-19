@@ -181,27 +181,30 @@ export class CliApiClient {
   }
 
   // A request with a timeout only waits out a 429 when the wait fits inside it, so short hooks never stall.
-  private async send(method: string, path: string, body: unknown, authRequired: boolean, timeoutMs?: number): Promise<Response> {
+  // `perRequestMs` instead bounds each attempt on its own, so a long Retry-After still gets its retry.
+  // `beforeRetry` false: the request is not worth repeating any more, so the 429 stands.
+  private async send(method: string, path: string, body: unknown, authRequired: boolean, timeoutMs?: number, beforeRetry?: () => Promise<boolean>, perRequestMs?: number): Promise<Response> {
     const url = `${this.baseUrl}/v1${path}`;
     const deadline = timeoutMs === undefined ? Infinity : Date.now() + timeoutMs;
-    const init: RequestInit = {
+    const overall = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
+    const init = (): RequestInit => ({
       method,
       headers: this.headers(authRequired),
       body: body ? JSON.stringify(body) : undefined,
-      signal: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs),
-    };
-    let res = await fetch(url, init);
+      signal: overall ?? (perRequestMs === undefined ? undefined : AbortSignal.timeout(perRequestMs)),
+    });
+    let res = await fetch(url, init());
     if (res.status === 429 && Date.now() + retryAfterMs(res) < deadline) {
-      await sleep(retryAfterMs(res), init.signal ?? undefined);
-      res = await fetch(url, init);
+      await sleep(retryAfterMs(res), overall);
+      if (!beforeRetry || (await beforeRetry())) res = await fetch(url, init());
     }
     if (res.status !== 429) return res;
     const seconds = retryAfterMs(res) / 1000;
     throw new ApiError(`AgentDrive is rate limiting this key; try again in ${seconds} seconds.`, 429, 'rate_limited');
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, authRequired = true, timeoutMs?: number): Promise<T> {
-    const res = await this.send(method, path, body, authRequired, timeoutMs);
+  private async request<T>(method: string, path: string, body?: unknown, authRequired = true, timeoutMs?: number, beforeRetry?: () => Promise<boolean>, perRequestMs?: number): Promise<T> {
+    const res = await this.send(method, path, body, authRequired, timeoutMs, beforeRetry, perRequestMs);
     let json: ApiEnvelope<T>;
     try {
       json = await res.json() as ApiEnvelope<T>;
@@ -264,11 +267,15 @@ export class CliApiClient {
     return this.request<WorkspaceSummary>('POST', '/workspaces', { name });
   }
 
-  async writeFile(workspaceId: string, path: string, content: string, message?: string) {
+  async writeFile(workspaceId: string, path: string, content: string, message?: string, beforeRetry?: () => Promise<boolean>, perRequestMs?: number) {
     return this.request<{ id: string; path: string; version: number; updated_at: string; usage_warning?: UsageWarning }>(
       'POST',
       `/workspaces/${workspaceId}/files`,
       { path, content, message },
+      true,
+      undefined,
+      beforeRetry,
+      perRequestMs,
     );
   }
 
@@ -299,8 +306,8 @@ export class CliApiClient {
     artifacts_produced?: string[];
     duration_ms?: number;
     metadata?: Record<string, unknown>;
-  }) {
-    return this.request<{ run_id: string; created_at: number; usage_warning?: UsageWarning }>('POST', '/runs', body);
+  }, beforeRetry?: () => Promise<boolean>) {
+    return this.request<{ run_id: string; created_at: number; usage_warning?: UsageWarning }>('POST', '/runs', body, true, undefined, beforeRetry);
   }
 
   async listRuns(query: { project: string; platform?: string; limit?: number; timeoutMs?: number }): Promise<RunRecord[]> {

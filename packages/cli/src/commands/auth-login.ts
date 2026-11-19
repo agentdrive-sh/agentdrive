@@ -1,6 +1,6 @@
 import kleur from 'kleur';
 import { CliApiClient } from '../lib/api-client.js';
-import { DEFAULT_API_URL, hasSavedPreferences, readConfig, writeConfig, type CliConfig } from '../lib/config.js';
+import { DEFAULT_API_URL, changesOnto, hasSavedPreferences, readConfig, updateConfig } from '../lib/config.js';
 import { ensureCaptureConsent } from '../lib/consent.js';
 import { pollAuth, type PollAuthResult } from '../lib/poll-auth.js';
 import { preserveKeychain } from '../lib/keychain.js';
@@ -30,8 +30,8 @@ export async function cmdAuthLogin(opts: AuthLoginOptions = {}): Promise<void> {
     ? await keyFromStdin(apiUrl)
     : await pollAuth(new CliApiClient({ baseUrl: apiUrl, agentPlatform: 'cli' }));
 
-  const saved: CliConfig = {
-    ...existing,
+  const { after } = await updateConfig((latest) => ({
+    ...latest,
     api_url: apiUrl,
     api_key: result.api_key,
     agent_id: result.agent_id,
@@ -39,14 +39,16 @@ export async function cmdAuthLogin(opts: AuthLoginOptions = {}): Promise<void> {
     agent_platform: 'cli',
     // An explicit list, even empty, tells auto-wire this login should wire the tools already installed;
     // only a config from before auto-wire (no list at all) is treated as a baseline.
-    wired: existing?.wired ?? [],
-  };
-  await writeConfig(saved);
+    wired: latest?.wired ?? [],
+  }));
+  const saved = after!;
 
   process.stdout.write(`${kleur.green('[ok]')} API key saved.\n`);
   if (result.agent_id) process.stdout.write(`     agent_id: ${result.agent_id}\n`);
   if (result.org_id) process.stdout.write(`     org_id:   ${result.org_id}\n`);
 
   const authed = new CliApiClient({ baseUrl: apiUrl, apiKey: result.api_key, agentPlatform: 'cli' });
-  await writeConfig(await ensureCaptureConsent(saved, authed, { interactive: !!process.stdin.isTTY, preferencesSaved }));
+  // Asked outside the lock (it may prompt); only what consent changed is applied to the config as it is then.
+  const consent = await ensureCaptureConsent(saved, authed, { interactive: !!process.stdin.isTTY, preferencesSaved });
+  await updateConfig((latest) => latest && changesOnto(latest, saved, consent));
 }

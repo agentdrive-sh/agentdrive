@@ -71,7 +71,7 @@ If the browser does not auto-launch (e.g. headless server, SSH session), open th
 | Tool | What init writes |
 |---|---|
 | Claude Code | Installs the `agentdrive` plugin (`claude plugin marketplace add agentdrive-sh/agentdrive-mcp` + `claude plugin install agentdrive@agentdrive`) |
-| Codex CLI | `~/.codex/hooks.json`, `[mcp_servers.agentdrive]` in `~/.codex/config.toml`, `~/.codex/prompts/agentdrive-*.md`, `~/.codex/skills/agentdrive/` |
+| Codex CLI | `~/.codex/hooks.json`, `[mcp_servers.agentdrive]` in `~/.codex/config.toml`, `~/.codex/skills/agentdrive/` |
 | OpenCode | `~/.config/opencode/plugins/agentdrive.ts`, `mcp.agentdrive` in `opencode.json`, `commands/agentdrive-*.md`, `skills/agentdrive/` |
 | Cursor | `~/.cursor/hooks.json`, `~/.cursor/mcp.json`, `~/.cursor/commands/agentdrive-*.md`, `~/.cursor/skills/agentdrive/` |
 | Antigravity (CLI, app, IDE) | `agentdrive` hook in `~/.gemini/config/hooks.json`, `~/.gemini/config/mcp_config.json`, `~/.gemini/config/skills/agentdrive*/`; also creates or updates `hooks` + `mcpServers` in `~/.gemini/settings.json` and adds `~/.gemini/commands/agentdrive/*.toml` |

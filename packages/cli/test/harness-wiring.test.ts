@@ -49,14 +49,14 @@ async function expectNoOpRerun(harness: HookHarness): Promise<void> {
 }
 
 describe('wireHarness codex', () => {
-  it('appends hooks after foreign ones, writes MCP/prompts/skill, backs up once, and re-runs as a no-op', async () => {
+  it('appends hooks after foreign ones, writes MCP/skill without prompt files, backs up once, and re-runs as a no-op', async () => {
     const hooksPath = join(home, '.codex', 'hooks.json');
     const originalHooks = await writeJson(hooksPath, groupedFixture);
     const tomlPath = join(home, '.codex', 'config.toml');
     await fs.writeFile(tomlPath, 'model = "gpt-5"\nnotify = ["/x/notify.sh"]\n', 'utf8');
 
     const first = await wireHarness('codex', home);
-    expect(first.changed).toHaveLength(5);
+    expect(first.changed).toHaveLength(3);
 
     const hooks = (await readJson(hooksPath)).hooks;
     expect(hooks.SessionStart).toEqual([
@@ -75,8 +75,7 @@ describe('wireHarness codex', () => {
     expect(toml).toContain('[mcp_servers.agentdrive.tools.drive_resume]\napproval_mode = "approve"');
     expect(toml).not.toContain('API_KEY');
 
-    expect(await fs.readFile(join(home, '.codex', 'prompts', 'agentdrive-resume.md'), 'utf8')).toBe(renderCommand('codex', 'resume'));
-    expect(await fs.readFile(join(home, '.codex', 'prompts', 'agentdrive-sessions.md'), 'utf8')).toBe(renderCommand('codex', 'sessions'));
+    await expect(fs.stat(join(home, '.codex', 'prompts'))).rejects.toThrow();
     expect(await fs.readFile(join(home, '.codex', 'skills', 'agentdrive', 'SKILL.md'), 'utf8')).toBe(SKILL_MARKDOWN);
 
     await expectNoOpRerun('codex');

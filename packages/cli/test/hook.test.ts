@@ -223,4 +223,21 @@ describe('runHook', () => {
     expect(spawned).toEqual([]);
     expect(JSON.parse(await fs.readFile(join(root, 'agentdrive', 'session-cwd.json'), 'utf8'))).toEqual({ 'claude-code:s': root });
   });
+
+  it('records sync left off by an older CLI as off since 0, and closes that interval once sync is on', async () => {
+    const off = { auto_context: false, capture_transcripts: false, capture_artifacts: false, private_workspace: false, auto_wire: false };
+    await writeConfig({ capture_notice_at: '2026-01-01T00:00:00.000Z', preferences: off });
+    const stop = JSON.stringify({ hook_event_name: 'Stop', session_id: 's', cwd: root });
+    await runHook('claude-code', stop, { spawnSync });
+    const history = () => fs.readFile(join(root, 'agentdrive', 'privacy-history.json'), 'utf8').then(JSON.parse);
+    expect(await history()).toEqual({ transcripts_off: [{ at: 0, until: null }], artifacts_off: [{ at: 0, until: null }] });
+    expect(spawned).toEqual([]);
+
+    await writeConfig({ capture_notice_at: '2026-01-01T00:00:00.000Z', preferences: { ...off, capture_transcripts: true } });
+    const before = Date.now();
+    await runHook('claude-code', stop, { spawnSync });
+    const after = await history();
+    expect(after.transcripts_off[0].until).toBeGreaterThanOrEqual(before);
+    expect(after.artifacts_off).toEqual([{ at: 0, until: null }]);
+  });
 });

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compileRules, loadRules, shouldIgnore, DEFAULT_DENY } from './ignore.js';
+import { compileRules, isDenied, loadRules, shouldIgnore, DEFAULT_DENY } from './ignore.js';
 
 describe('ignore', () => {
   it('default-denies common credential filenames', () => {
@@ -50,5 +50,24 @@ describe('ignore', () => {
     expect(shouldIgnore(dir, join(dir, 'public', 'index.html'), rules)).toBe(false);
     // DEFAULT_DENY still in effect
     expect(shouldIgnore(dir, join(dir, '.env'), rules)).toBe(true);
+  });
+
+  it('never lets a project ignore file negate DEFAULT_DENY', async () => {
+    await fs.writeFile(join(dir, '.adriveignore'), '!.env\n!id_rsa\n!.ssh/\n');
+    await fs.writeFile(join(dir, '.gitignore'), '!*.pem\n');
+    const rules = await loadRules(dir);
+    for (const f of ['.env', 'id_rsa', '.ssh/config', 'cert.pem']) expect(shouldIgnore(dir, join(dir, f), rules)).toBe(true);
+    expect(shouldIgnore(dir, join(dir, 'notes.md'), rules)).toBe(false);
+  });
+
+  it('matches the deny list in any letter case, and project ignore rules as written', async () => {
+    await fs.writeFile(join(dir, '.adriveignore'), 'drafts/\n');
+    const rules = await loadRules(dir);
+    for (const f of ['.ENV', '.DEV.VARS', 'ID_RSA', '.SSH/known', 'Credentials.JSON', 'prod.PEM']) {
+      expect(shouldIgnore(dir, join(dir, f), rules)).toBe(true);
+      expect(isDenied(join(dir, f))).toBe(true);
+    }
+    expect(isDenied('/home/me/.AWS')).toBe(true);
+    expect(shouldIgnore(dir, join(dir, 'DRAFTS', 'a.md'), rules)).toBe(false);
   });
 });

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cmdAuthLogin } from '../src/commands/auth-login.js';
 import { CliApiClient } from '../src/lib/api-client.js';
-import { readConfig } from '../src/lib/config.js';
+import { DEFAULT_PREFERENCES, deleteConfig, readConfig, updateConfig } from '../src/lib/config.js';
+import { ensureCaptureConsent } from '../src/lib/consent.js';
 import { pollAuth } from '../src/lib/poll-auth.js';
 
 vi.mock('../src/lib/poll-auth.js', () => ({ pollAuth: vi.fn() }));
@@ -44,6 +45,34 @@ describe('auth login --with-key', () => {
   it('refuses stdin that is not an API key and saves nothing', async () => {
     stdin('not-a-key\n');
     await expect(cmdAuthLogin({ apiUrl: URL, withKey: true })).rejects.toThrow(/agentdrive_live_/);
+    expect(await readConfig()).toBeNull();
+  });
+
+  it('applies only what consent changed, so a privacy choice made while it waited stands', async () => {
+    stdin(KEY);
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockResolvedValue({ type: 'agent', agent_id: 'ag_synthetic', org_id: 'org_synthetic' });
+    vi.mocked(ensureCaptureConsent).mockImplementationOnce(async (config) => {
+      // adrive privacy, run in another terminal while the notice and workspace prompt were up.
+      await updateConfig((latest) => ({ ...latest!, preferences: { ...DEFAULT_PREFERENCES, capture_artifacts: false }, default_workspace: 'ws_private' }), { effectiveBefore: true });
+      return { ...config, preferences: { ...DEFAULT_PREFERENCES, capture_transcripts: true, capture_artifacts: true }, capture_notice_at: '2026-11-19T00:00:00.000Z', default_workspace: 'ws_team' };
+    });
+    await cmdAuthLogin({ apiUrl: URL, withKey: true });
+    expect(await readConfig()).toMatchObject({
+      api_key: KEY,
+      capture_notice_at: '2026-11-19T00:00:00.000Z',
+      default_workspace: 'ws_private',
+      preferences: { capture_transcripts: false, capture_artifacts: false },
+    });
+  });
+
+  it('writes no consent into a config logged out while it waited', async () => {
+    stdin(KEY);
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockResolvedValue({ type: 'agent', agent_id: 'ag_synthetic', org_id: 'org_synthetic' });
+    vi.mocked(ensureCaptureConsent).mockImplementationOnce(async (config) => {
+      await deleteConfig();
+      return { ...config, preferences: { ...DEFAULT_PREFERENCES, capture_transcripts: true, capture_artifacts: true }, capture_notice_at: '2026-11-19T00:00:00.000Z' };
+    });
+    await cmdAuthLogin({ apiUrl: URL, withKey: true });
     expect(await readConfig()).toBeNull();
   });
 

@@ -46,11 +46,11 @@ Cline, Zed and Continue get the workspace tools as plain MCP clients. They don't
 Syncing transcripts means uploading what you and your agents said, so you control all of it with `adrive privacy`:
 
 - **Auto-context:** at session start, list recent sessions from your other agents in this project.
-- **Artifact sync:** upload files your agents wrote that git doesn't track, and allow `adrive watch`, which is meant to upload a whole folder. In CLI 1.4.0 watch uploads nothing, because of a bug fixed in the next release, so use hook sync or `adrive push` meanwhile.
+- **Artifact sync:** upload files your agents wrote that git doesn't track, and allow `adrive watch`, which is meant to upload a whole folder. In CLI 1.4.0 watch uploads nothing, because of a bug fixed in the next release, so use hook sync or `adrive push` meanwhile. From `@adrive/cli` 1.5.0, watch works and skips links, files with other hard links, the built-in deny list and matches of the folder's top-level `.gitignore` and `.adriveignore`.
 - **Transcript sync:** upload session transcripts.
 - **Private Workspace:** encrypt transcripts and files on your machine before upload. Synced project and file storage paths are hashed too. Account and session metadata remain managed; direct MCP writes are not encrypted by this CLI setting.
 
-Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when synced content must not leave your machine in readable form. If it must not be uploaded at all, turn transcript sync off with `adrive privacy --capture-transcripts off` before you start that session.
+Before anything is uploaded, a redactor scrubs common secret shapes such as cloud keys, API tokens, JWTs and private keys. A built-in deny list skips `.env` files, SSH and cloud credentials, and key files, and you can add your own rules in `.adriveignore`. Redaction is best-effort, though. It is not a security boundary. Use Private Workspace when synced content must not leave your machine in readable form. If it must not be uploaded at all, turn transcript sync off with `adrive privacy --capture-transcripts off` before you start that session. From `@adrive/cli` 1.5.0, a session that runs while transcript sync is off stays on your machine even after you turn sync back on, and the CLI's sync sends no run for it. In 1.4.0, turning sync back on uploads the sessions that changed while it was off.
 
 ## Pricing
 

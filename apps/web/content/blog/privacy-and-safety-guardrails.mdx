@@ -32,12 +32,12 @@ Once signed in, `adrive privacy` controls five settings. `adrive privacy --show`
 
 Signing in on a fresh install turns both sync settings on without asking, and prints a notice saying so. The first sync then looks back 14 days and uploads the recent sessions of every supported agent on this machine, whether or not you wired it, not just the one you're in. For OpenCode it sees only the current project. If an earlier config already had preferences, init keeps them.
 
-Turning sync off is not a way to keep a session off the server. In CLI 1.4.0, two things to know:
+In CLI 1.4.0, turning sync off is not a way to keep a session off the server. Two things to know:
 
 - **With both sync settings off**, nothing new is uploaded, but the sweep doesn't move forward either. When you turn sync back on, the next sync uploads the sessions from the period it was off.
 - **With only transcript sync off**, the transcript isn't uploaded, but each session's run record still is: its title (often the first message, redacted), its working directory and the paths it touched.
 
-A fix for both is in progress. Until it ships, keep secrets out of the conversation, and use Private Workspace when a session's content needs to be encrypted before it leaves your machine.
+Both are fixed in `@adrive/cli` 1.5.0: a session that runs while sync is off stays local after you turn sync back on, and with transcript sync off no run record is sent. Until you upgrade, keep secrets out of the conversation, and use Private Workspace when a session's content needs to be encrypted before it leaves your machine.
 
 ## Which files never get uploaded?
 
@@ -120,8 +120,8 @@ Plainly:
 
 - **Secrets that don't look like secrets.** The redactor matches patterns. Anything it doesn't recognize is uploaded as written.
 - **Text you paste into chat.** Path rules exclude files, not conversation text. If you paste a `.env` into a session, it's in the transcript. Keep secrets out of the conversation, and use Private Workspace so synced content is encrypted before upload.
-- **Sessions from while sync was off.** With both sync settings off, the sweep doesn't advance in CLI 1.4.0, so turning sync back on uploads the sessions from that period.
-- **Run metadata with transcript sync off.** The run record for each session, with its title, working directory and touched paths, is still uploaded when only transcript sync is off.
+- **Sessions from while sync was off.** With both sync settings off, the sweep doesn't advance in CLI 1.4.0, so turning sync back on uploads the sessions from that period. Fixed in `@adrive/cli` 1.5.0.
+- **Run metadata with transcript sync off.** In CLI 1.4.0, the run record for each session, with its title, working directory and touched paths, is still uploaded when only transcript sync is off. Fixed in `@adrive/cli` 1.5.0.
 - **Metadata under Private Workspace.** Your account, the agent platform, session ids, timing and counts stay readable to the service.
 - **Earlier uploads.** Turning on Private Workspace doesn't encrypt or delete what was uploaded before.
 - **Direct tool writes.** Content an agent writes with `drive_write` isn't encrypted by the CLI's Private Workspace setting.
@@ -139,7 +139,7 @@ On a fresh install, signing in turns transcript and artifact sync on without a p
 
 ### Can a repo's .adriveignore make AgentDrive upload my .env?
 
-Not in hook sync, which checks the deny list separately. In `adrive watch` the rules are merged, so a `!.env` line can re-include it.
+Not in hook sync, which checks the deny list separately. In CLI 1.4.0's `adrive watch` the rules are merged, so a `!.env` line can re-include it. From `@adrive/cli` 1.5.0, watch can't be overridden either.
 
 ### Does AgentDrive upload my source code?
 
