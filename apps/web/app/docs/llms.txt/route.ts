@@ -1,4 +1,5 @@
-import { docLinks, link } from '@/lib/llms';
+import { docLinks } from '@/lib/docs-markdown';
+import { link } from '@/lib/llms';
 
 export const dynamic = 'force-static';
 

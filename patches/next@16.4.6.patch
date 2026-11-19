@@ -1,0 +1,40 @@
+diff --git a/dist/build/templates/app-page-runtime.js b/dist/build/templates/app-page-runtime.js
+index 393c9ef1e93e87628f25ba89c765804283a88214..140df7c48bc6a2da9dd7ee52a6263b4672327544 100644
+--- a/dist/build/templates/app-page-runtime.js
++++ b/dist/build/templates/app-page-runtime.js
+@@ -480,7 +480,14 @@ function createAppPageEntrypoint({ tree, page, pathname, require: __next_app_req
+         };
+         try {
+             const varyHeader = routeModule.getVaryHeader(resolvedPathname, interceptionRoutePatterns);
+-            res.setHeader('Vary', varyHeader);
++            // Keep content negotiation fields supplied by next.config alongside Next's RSC fields.
++            const vary = [res.getHeader('Vary'), varyHeader]
++                .join(',')
++                .toLowerCase()
++                .split(',')
++                .map((field)=>field.trim())
++                .filter(Boolean);
++            res.setHeader('Vary', vary.includes('*') ? '*' : [...new Set(vary)].join(', '));
+             const invokeRouteModule = async (span, context, renderOperation)=>{
+                 const nextReq = new _node.NodeNextRequest(req);
+                 const nextRes = new _node.NodeNextResponse(res);
+diff --git a/dist/esm/build/templates/app-page-runtime.js b/dist/esm/build/templates/app-page-runtime.js
+index b28d926ad23b76fcf34963f3862ad9b76e42235f..7e270eac3490ae7e8bc89c5ccc60f9b50c24564a 100644
+--- a/dist/esm/build/templates/app-page-runtime.js
++++ b/dist/esm/build/templates/app-page-runtime.js
+@@ -503,7 +503,14 @@ export function createAppPageEntrypoint({ tree, page, pathname, require: __next_
+         };
+         try {
+             const varyHeader = routeModule.getVaryHeader(resolvedPathname, interceptionRoutePatterns);
+-            res.setHeader('Vary', varyHeader);
++            // Keep content negotiation fields supplied by next.config alongside Next's RSC fields.
++            const vary = [res.getHeader('Vary'), varyHeader]
++                .join(',')
++                .toLowerCase()
++                .split(',')
++                .map((field)=>field.trim())
++                .filter(Boolean);
++            res.setHeader('Vary', vary.includes('*') ? '*' : [...new Set(vary)].join(', '));
+             const invokeRouteModule = async (span, context, renderOperation)=>{
+                 const nextReq = new NodeNextRequest(req);
+                 const nextRes = new NodeNextResponse(res);

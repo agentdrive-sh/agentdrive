@@ -3,7 +3,7 @@ import { AGENTDRIVE_ROW, ROWS, type Competitor } from './data';
 export function ComparisonTable({ competitor }: { competitor: Competitor }) {
   return (
     <>
-    <div className="m-compare-mobile">
+    <div className="m-compare-mobile" data-markdown-ignore>
       <dl className="m-compare-pairs">
         {ROWS.map((row) => <div key={row}>
           <dt>{row}</dt>

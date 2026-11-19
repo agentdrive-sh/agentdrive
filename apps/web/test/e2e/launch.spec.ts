@@ -177,8 +177,14 @@ test('public privacy, status navigation and sitemap reflect the real page contra
     await expect(page.getByText('Responding', { exact: true })).toHaveCount(3);
     await expect(page.getByText('Unavailable', { exact: true })).toHaveCount(0);
 
+    const healthyMd = await request.get('/status.md');
+    expect(healthyMd.headers()['cache-control']).toContain('no-store');
+    expect(await healthyMd.text()).toContain('The API is responding.');
+
     await setHealth('unavailable');
     expect((await request.get('http://127.0.0.1:8791/v1/health')).status()).toBe(503);
+    const failedMd = await request.get('/status', { headers: { accept: 'text/markdown' } });
+    expect(await failedMd.text()).toContain('We could not confirm that all core services are responding.');
     await page.reload();
     await expect(page.getByText('Unavailable', { exact: true })).toHaveCount(2);
     await expect(page.getByText('Responding', { exact: true })).toHaveCount(1);

@@ -17,6 +17,8 @@ ENVIRONMENT = "production"
 APP_URL = "https://app.agentdrive.sh"
 SITE_URL = "https://agentdrive.sh"
 MCP_URL = "https://mcp.agentdrive.sh/mcp"
+# Public proof of MCP domain ownership for the Roushan Inc ChatGPT app.
+OPENAI_APPS_CHALLENGE = "75xNc4swzEOlIGuqQJrH2ijYeE1wYLuBXZ0aAmt5PAI"
 # CORS allows the web app on workers.dev (https://agentdrive-web.comfyfw.workers.dev and its version/alias previews) and no other workers.dev origin.
 WORKERS_DEV_SUBDOMAIN = "comfyfw"
 # "true" refuses a Free org's 11th cross-agent resume of the month; otherwise it only warns. See RUNBOOK.

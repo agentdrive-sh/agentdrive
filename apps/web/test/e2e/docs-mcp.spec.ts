@@ -2,8 +2,8 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 
 const HEADERS = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
 
-async function rpc(request: APIRequestContext, method: string, params?: unknown) {
-  const res = await request.post('/docs/mcp', { headers: HEADERS, data: { jsonrpc: '2.0', id: 1, method, params } });
+async function rpc(request: APIRequestContext, method: string, params?: unknown, endpoint = '/docs/mcp') {
+  const res = await request.post(endpoint, { headers: HEADERS, data: { jsonrpc: '2.0', id: 1, method, params } });
   expect(res.status()).toBe(200);
   return res.json();
 }
@@ -85,4 +85,22 @@ test('server card describes the docs server at its exact address', async ({ requ
   expect(card.icons[0].src).toMatch(/^https:\/\/agentdrive\.sh\//);
   expect(card.remotes).toEqual([expect.objectContaining({ type: 'streamable-http', url: 'https://agentdrive.sh/docs/mcp' })]);
   expect(card.tools).toBeUndefined();
+});
+
+test('well-known discovery leads to a working anonymous docs server', async ({ request }) => {
+  const res = await request.get('/.well-known/mcp');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/json');
+  const manifest = await res.json();
+  expect(manifest).toEqual({
+    version: '1.0.0', transport: 'http', url: 'https://agentdrive.sh/docs/mcp',
+    servers: [{ name: 'public', url: 'https://agentdrive.sh/docs/mcp', transport: 'http', authentication: 'none' }],
+  });
+  const endpoint = new URL(manifest.url).pathname;
+  const init = await rpc(request, 'initialize', {
+    protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '0' },
+  }, endpoint);
+  expect(init.result.serverInfo.name).toBe('agentdrive-docs');
+  const list = await rpc(request, 'tools/list', {}, endpoint);
+  expect(list.result.tools.map((tool: { name: string }) => tool.name)).toEqual(['search_docs', 'read_doc']);
 });

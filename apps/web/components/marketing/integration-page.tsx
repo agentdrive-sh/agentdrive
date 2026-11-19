@@ -49,7 +49,7 @@ export function IntegrationLayout({ platform, label, children }: IntegrationLayo
         <div className="m-actions">
           <Link href="#install" className="btn lg primary">
             Install AgentDrive
-          </Link>
+          </Link>{' '}
           <Link href="/docs/quick-start" className="btn lg secondary">
             Quick start
           </Link>

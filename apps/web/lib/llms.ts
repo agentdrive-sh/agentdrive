@@ -1,10 +1,6 @@
-import type { InferPageType } from 'fumadocs-core/source';
 import { SITE_URL as SITE } from '@/components/seo/site';
-import { source } from '@/lib/source';
 
 export const LLMS_DIRECTIVE = `> For the complete documentation index, see [llms.txt](${SITE}/llms.txt). Every docs page is also served as markdown at its URL plus \`.md\`, and the full docs are in one file at [llms-full.txt](${SITE}/llms-full.txt).`;
-
-type DocPage = InferPageType<typeof source>;
 
 export function link(title: string, path: string, description?: string): string {
   return `- [${title}](${SITE}${path})${description ? `: ${description}` : ''}`;
@@ -12,10 +8,6 @@ export function link(title: string, path: string, description?: string): string 
 
 export function markdownPath(url: string): string {
   return url === '/docs' ? '/docs.md' : `${url}.md`;
-}
-
-export function docLinks(): string[] {
-  return source.getPages().map((p) => link(p.data.title, markdownPath(p.url), p.data.description));
 }
 
 // Agents look for the llms.txt pointer near the top, so it goes right under the page title.
@@ -31,21 +23,6 @@ export function absoluteLinks(markdown: string): string {
 export function frontmatter(fields: Record<string, string | undefined>): string {
   const lines = Object.entries(fields).flatMap(([k, v]) => (v ? [`${k}: ${JSON.stringify(v)}`] : []));
   return ['---', ...lines, '---', ''].join('\n');
-}
-
-export async function docMarkdown(page: DocPage): Promise<string> {
-  const body = absoluteLinks(await page.data.getText('processed'));
-  return `${frontmatter({
-    title: page.data.title,
-    description: page.data.description,
-    canonical: `${SITE}${page.url}`,
-    'last-updated': page.data.lastModified?.toISOString(),
-  })}
-# ${page.data.title}
-
-${LLMS_DIRECTIVE}
-
-${body}`;
 }
 
 export function markdownResponse(body: string, status = 200): Response {

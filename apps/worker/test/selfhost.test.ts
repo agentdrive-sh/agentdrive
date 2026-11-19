@@ -22,6 +22,7 @@ describe('selfhostConfig', () => {
     const prodIds = blocks(prod).filter((b) => b.header === '[[kv_namespaces]]').map((b) => value(b, 'id')!);
     expect(prodIds).toHaveLength(2);
     for (const id of prodIds) expect(out).not.toContain(id);
+    expect(out).not.toContain('OPENAI_APPS_CHALLENGE');
     expect(out).not.toMatch(/agentdrive-worker|agentdrive-content|agentdrive\.sh|routes?\s*=|\[assets\]/);
   });
 

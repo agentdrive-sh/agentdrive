@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { generateArticles } from './scripts/generate-articles';
 import { createMDX } from 'fumadocs-mdx/next';
 
 // shortcut: ignores q-values, upgrade to a negotiator if a client sends text/markdown;q=0
@@ -17,6 +18,31 @@ const DOCS_PAGE = '/docs/:path((?!mcp(?:/|$))[^.]+)';
 const toMarkdown = (source: string, destination: string) =>
   [acceptsMarkdown, aiAgent].map((has) => ({ source, has, destination }));
 
+// OpenNext applies configured headers last, so include the App Router's cache dimensions too.
+const negotiatedVary = 'Accept, User-Agent, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch';
+
+const negotiatedRoutes = [
+  ['/', '/index.md'],
+  ['/docs', '/llms.mdx/docs'],
+  [DOCS_PAGE, '/llms.mdx/docs/:path'],
+  ['/pricing', '/pricing.md'],
+  ['/status', '/status.md'],
+  ['/blog', '/blog.md'],
+  ['/blog/:slug([^./]+)', '/blog/:slug/index.md'],
+  ['/glossary', '/glossary.md'],
+  ['/glossary/:term([^./]+)', '/glossary/:term/index.md'],
+  ['/compare', '/compare.md'],
+  ['/compare/:slug([^./]+)', '/compare/:slug/index.md'],
+  ['/facts', '/facts/index.md'],
+];
+
+const articleRoutes = [
+  ...['about', 'contact', 'security', 'manifesto', 'legal', 'integrations', 'resume'].map((page) =>
+    [`/${page}`, `/llms.mdx/articles/${page}`]),
+  ['/legal/:policy(privacy|terms|dpa)', '/llms.mdx/articles/legal/:policy'],
+  ['/integrations/:slug([^./]+)', '/llms.mdx/articles/integrations/:slug'],
+  ['/resume/:pair([^./]+)', '/llms.mdx/articles/resume/:pair'],
+];
 // Next marks prerendered pages s-maxage=31536000; agents and caches should see a redeploy within minutes.
 const FRESH_PATHS = [
   '/',
@@ -72,6 +98,10 @@ const config: NextConfig = {
   typedRoutes: false,
   async headers() {
     return [
+      ...[...negotiatedRoutes, ...articleRoutes].map(([source]) => ({
+        source,
+        headers: [{ key: 'Vary', value: negotiatedVary }],
+      })),
       ...FRESH_PATHS.map((source) => ({
         source,
         headers: [{ key: 'Cache-Control', value: 'public, max-age=300, must-revalidate' }],
@@ -128,22 +158,12 @@ const config: NextConfig = {
         { source: '/docs.md', destination: '/llms.mdx/docs' },
         { source: '/docs/index.md', destination: '/llms.mdx/docs' },
         { source: '/docs/:path+.md', destination: '/llms.mdx/docs/:path+' },
-        ...toMarkdown('/', '/index.md'),
-        // Under OpenNext a single /docs/:path* rule rewrote bare /docs to a 404, so it gets its own rule.
-        ...toMarkdown('/docs', '/llms.mdx/docs'),
-        ...toMarkdown(DOCS_PAGE, '/llms.mdx/docs/:path'),
-        ...toMarkdown('/pricing', '/pricing.md'),
         { source: '/blog/:slug.md', destination: '/blog/:slug/index.md' },
         { source: '/glossary/:term.md', destination: '/glossary/:term/index.md' },
         { source: '/compare/:slug.md', destination: '/compare/:slug/index.md' },
         { source: '/facts.md', destination: '/facts/index.md' },
-        ...toMarkdown('/blog', '/blog.md'),
-        ...toMarkdown('/blog/:slug([^./]+)', '/blog/:slug/index.md'),
-        ...toMarkdown('/glossary', '/glossary.md'),
-        ...toMarkdown('/glossary/:term([^./]+)', '/glossary/:term/index.md'),
-        ...toMarkdown('/compare', '/compare.md'),
-        ...toMarkdown('/compare/:slug([^./]+)', '/compare/:slug/index.md'),
-        ...toMarkdown('/facts', '/facts/index.md'),
+        ...articleRoutes.map(([source, destination]) => ({ source: `${source}.md`, destination })),
+        ...[...negotiatedRoutes, ...articleRoutes].flatMap(([source, destination]) => toMarkdown(source, destination)),
       ],
       afterFiles: [],
       fallback: [{ source: '/:path*', has: acceptsMarkdown, destination: '/llms.mdx/not-found' }],
@@ -153,4 +173,9 @@ const config: NextConfig = {
 
 const withMDX = createMDX();
 
-export default withMDX(config);
+export default async function nextConfig(phase: string) {
+  if (phase === 'phase-production-build' || phase === 'phase-development-server') {
+    await generateArticles(phase === 'phase-development-server');
+  }
+  return withMDX(config);
+}

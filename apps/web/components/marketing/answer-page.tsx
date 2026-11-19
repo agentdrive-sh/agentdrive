@@ -63,7 +63,7 @@ export function pageMetadata(title: string, description: string, path: string, i
   return {
     title,
     description,
-    alternates: { canonical: path },
+    alternates: { canonical: path, types: { 'text/markdown': `${path}.md` } },
     openGraph: { title, description, url: path, siteName: 'AgentDrive', type: 'website', locale: 'en_US', images },
     twitter: { card: 'summary_large_image', title, description, images },
   };

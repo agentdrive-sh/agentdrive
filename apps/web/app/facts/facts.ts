@@ -1,4 +1,5 @@
 import { ALL_PLANS_INCLUDE, PLAN_CATALOG } from '@agentdrive/shared';
+import { formatPostDate } from '@/lib/date';
 import { faqMarkdown, type FaqItem } from '@/components/marketing/faq';
 import cli from '../../../../packages/cli/package.json';
 import mcp from '../../../../packages/mcp-server/package.json';
@@ -7,6 +8,8 @@ import { CAPTURE_HARNESSES, INSTALL_COMMAND, MCP_CLIENTS } from '../integrations
 
 // Bump when a fact below changes; it is shown on the page and in every mirror.
 export const FACTS_AS_OF = '2026-11-18';
+
+export const FACTS_LEDE = 'The canonical facts about AgentDrive, for people and for the tools that answer questions about it.';
 
 export const FACTS_DESCRIPTION =
   'Canonical AgentDrive facts: what it is, who makes it, supported agents, resume, local mode, pricing, license, self-hosting, privacy and official links.';
@@ -109,8 +112,9 @@ export const FACTS: FaqItem[] = [
 export function factsMarkdown(): string {
   return [
     '# AgentDrive facts',
-    `> ${FACTS_DESCRIPTION}`,
-    `Source: https://agentdrive.sh/facts. As of ${FACTS_AS_OF}.`,
+    `> ${FACTS_LEDE}`,
+    `As of ${formatPostDate(FACTS_AS_OF)}.`,
+    'Source: https://agentdrive.sh/facts.',
     faqMarkdown(FACTS),
   ].join('\n\n');
 }

@@ -32,7 +32,8 @@
       }
     },
     "patchedDependencies": {
-      "@cloudflare/vitest-pool-workers@0.6.16": "patches/@cloudflare__vitest-pool-workers@0.6.16.patch"
+      "@cloudflare/vitest-pool-workers@0.6.16": "patches/@cloudflare__vitest-pool-workers@0.6.16.patch",
+      "next@16.4.6": "patches/next@16.4.6.patch"
     }
   }
 }

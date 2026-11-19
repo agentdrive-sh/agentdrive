@@ -2,6 +2,8 @@ import { SITE_URL } from '@/components/seo/site';
 
 export const LAST_CHECKED = '2026-11-18';
 
+export const MATRIX_NOTE = `Last checked ${LAST_CHECKED}. Details for other tools come from their own docs and announcements, linked on each comparison page.`;
+
 export const ROWS = ['Unit of storage', 'Where it runs', 'Coding-agent sessions', 'Storage location', 'Availability'] as const;
 type Row = (typeof ROWS)[number];
 
@@ -463,9 +465,10 @@ export function compareIndexMarkdown(): string {
     `> ${COMPARE_LEDE}`,
     `Source: ${SITE_URL}/compare. Last checked ${LAST_CHECKED}.`,
     `| ${head.join(' | ')} |\n| ${head.map(() => '---').join(' | ')} |\n${rows.map((r) => `| ${r.map(cell).join(' | ')} |`).join('\n')}`,
-    '## Comparisons',
-    COMPETITORS.map((c) => `- [AgentDrive vs ${c.name}](${SITE_URL}/compare/${c.slug}.md): ${c.tagline}`).join('\n'),
-    '## Questions',
+    MATRIX_NOTE,
+    '## Detailed comparisons',
+    COMPETITORS.map((c) => `- [AgentDrive vs ${c.name}](${SITE_URL}/compare/${c.slug}.md) ${c.tagline}`).join('\n'),
+    '## Frequently asked questions',
     faqSection(COMPARE_FAQ),
     '',
   ].join('\n\n');
@@ -489,7 +492,7 @@ export function compareMarkdown(c: Competitor): string {
     c.goodAt.map((g) => `- ${g}`).join('\n'),
     '## What AgentDrive does differently',
     c.different.map((x) => `- ${x}`).join('\n'),
-    '## Questions',
+    '## Frequently asked questions',
     faqSection(competitorFaq(c)),
     '## Sources',
     sources.map((s) => `- ${s}`).join('\n'),

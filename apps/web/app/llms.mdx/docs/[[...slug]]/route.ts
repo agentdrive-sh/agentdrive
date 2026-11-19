@@ -1,5 +1,6 @@
 import { source } from '@/lib/source';
-import { docMarkdown, markdownNotFound, markdownResponse } from '@/lib/llms';
+import { docMarkdown } from '@/lib/docs-markdown';
+import { markdownNotFound, markdownResponse } from '@/lib/llms';
 
 export const dynamic = 'force-static';
 export const revalidate = false;

@@ -92,7 +92,7 @@ export function selfhostConfig(prod: string, o: SelfhostOptions): string {
       // calls to a self-hosted instance. Without it CORS allows only SITE_URL and APP_URL.
       lines = b.lines.flatMap((line) => {
         const key = line.split('=')[0]!.trim();
-        if (key === 'WORKERS_DEV_SUBDOMAIN') return [];
+        if (key === 'WORKERS_DEV_SUBDOMAIN' || key === 'OPENAI_APPS_CHALLENGE') return [];
         return [key in urls ? `${key} = ${JSON.stringify(urls[key])}` : line];
       });
       lines.push('SELF_HOSTED = "true"');

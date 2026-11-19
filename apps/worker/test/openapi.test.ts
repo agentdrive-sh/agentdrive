@@ -15,6 +15,7 @@ const EXCLUDED: Record<string, string> = {
   'GET /auth/oauth/github/callback': 'GitHub OAuth redirect target',
   'GET /install': 'Shell installer script',
   'GET /install.sh': 'Shell installer script',
+  'GET /.well-known/openai-apps-challenge': 'Plaintext domain ownership proof served only on the MCP origin',
   'GET /*': 'Redirects stray paths to the marketing site, which serves the /cli-auth page',
 };
 

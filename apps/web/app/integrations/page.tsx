@@ -37,9 +37,9 @@ export default function IntegrationsIndex() {
                 <Link href={`/integrations/${i.platform}`} className="m-tile">
                   <span className="m-tile-head">
                     <PlatformGlyph platform={i.platform} size={20} />
-                    <span className="m-tile-title">{i.label}</span>
+                    <span className="m-tile-title">{i.label}</span>{' '}
                     <span className="pill success">Sync + resume</span>
-                  </span>
+                  </span>{' '}
                   <span className="m-tile-body">{i.body}</span>
                 </Link>
               </li>
@@ -69,7 +69,7 @@ export default function IntegrationsIndex() {
               <li key={i.platform} className="m-tile">
                 <span className="m-tile-head">
                   <PlatformGlyph platform={i.platform} size={20} />
-                  <span className="m-tile-title">{i.label}</span>
+                  <span className="m-tile-title">{i.label}</span>{' '}
                   <span className="pill">MCP only</span>
                 </span>
                 <p className="m-tile-body">{i.body}</p>

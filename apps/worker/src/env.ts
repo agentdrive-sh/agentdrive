@@ -29,6 +29,7 @@ export interface Env {
   SITE_URL: string;
   // Canonical hosted MCP resource (RFC 8707/9728); SITE_URL is the OAuth issuer.
   MCP_URL: string;
+  OPENAI_APPS_CHALLENGE?: string;
   // This account's workers.dev subdomain; CORS trusts only the agentdrive-web worker on it. Unset trusts none.
   WORKERS_DEV_SUBDOMAIN?: string;
   // Self service binding — the hosted /mcp tools dispatch REST calls in-process

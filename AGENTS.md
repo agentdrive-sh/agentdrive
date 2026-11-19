@@ -39,6 +39,7 @@ pnpm --filter @agentdrive/worker test
 - No backwards-compatibility shims or half-finished stubs; delete dead code.
 - Never commit secrets. `.dev.vars` is gitignored; production secrets are set with `wrangler secret put`.
 - Never skip git hooks with `--no-verify`.
+- Omit AI co-author trailers and AI attribution lines from commits, merge messages and pull request descriptions. Preserve credit for human contributors.
 - Every change reaches `main` through a pull request with passing CI. External contributions need a signed CLA (`CLA.md`); see `CONTRIBUTING.md`.
 
 ## Tests

@@ -3,9 +3,9 @@ import { faqPageJsonLd, Inline } from '@/components/marketing/faq';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OPEN_GRAPH_BASE, SOFTWARE_ID } from '@/components/seo/site';
-import { formatPostDate } from '@/lib/source';
+import { formatPostDate } from '@/lib/date';
 import { alt, size } from '../opengraph-image';
-import { FACTS, FACTS_AS_OF, FACTS_DESCRIPTION } from './facts';
+import { FACTS, FACTS_AS_OF, FACTS_DESCRIPTION, FACTS_LEDE } from './facts';
 
 const PAGE_URL = 'https://agentdrive.sh/facts';
 
@@ -37,14 +37,11 @@ export default function FactsPage() {
     <MarketingPageShell screenLabel="marketing/facts">
       <PageHero
         title="AgentDrive facts"
-        lede="The canonical facts about AgentDrive, for people and for the tools that answer questions about it."
+        lede={FACTS_LEDE}
         meta={
           <>
-            As of <time dateTime={FACTS_AS_OF}>{formatPostDate(FACTS_AS_OF)}</time>. Also as{' '}
-            <a className="m-link" href="/facts/index.md">
-              markdown
-            </a>
-            .
+            As of <time dateTime={FACTS_AS_OF}>{formatPostDate(FACTS_AS_OF)}</time>.
+            <span data-markdown-ignore> Also as <a className="m-link" href="/facts/index.md">markdown</a>.</span>
           </>
         }
       />

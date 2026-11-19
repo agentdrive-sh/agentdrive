@@ -2,6 +2,8 @@ import { loader } from 'fumadocs-core/source';
 import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
 import { blog, docs } from '@/.source/server';
 
+export { formatPostDate } from './date';
+
 export const source = loader({
   baseUrl: '/docs',
   source: docs.toFumadocsSource(),
@@ -22,15 +24,6 @@ const showDrafts = process.env.NODE_ENV !== 'production';
 export function getPost(slug: string): BlogPost | undefined {
   const post = blogSource.getPage([slug]);
   return post && (showDrafts || !post.data.draft) ? post : undefined;
-}
-
-export function formatPostDate(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
 }
 
 export function listPosts(): BlogPost[] {

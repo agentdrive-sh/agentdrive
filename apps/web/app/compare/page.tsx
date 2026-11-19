@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { FaqSection, breadcrumbLd, faqLd, pageMetadata } from '@/components/marketing/answer-page';
 import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketing/page-shell';
 import { JsonLd } from '@/components/seo/json-ld';
-import { AGENTDRIVE_MATRIX, COMPARE_FAQ, COMPARE_LEDE, COMPETITORS, LAST_CHECKED, MATRIX_COLS } from './data';
+import { AGENTDRIVE_MATRIX, COMPARE_FAQ, COMPARE_LEDE, COMPETITORS, LAST_CHECKED, MATRIX_COLS, MATRIX_NOTE } from './data';
 
 export const metadata = pageMetadata(
   'AgentDrive vs the alternatives',
@@ -30,7 +30,7 @@ export default function CompareIndex() {
         meta={`Last checked ${LAST_CHECKED}.`}
       />
       <section className="m-wrap" aria-label="Comparison matrix">
-        <div className="m-compare-mobile">
+        <div className="m-compare-mobile" data-markdown-ignore>
           <dl className="m-compare-pairs">
             <div>
               <dt>AgentDrive</dt>
@@ -92,10 +92,7 @@ export default function CompareIndex() {
             </tbody>
           </table>
         </div>
-        <p className="m-meta m-table-note">
-          Last checked {LAST_CHECKED}. Details for other tools come from their own docs and announcements, linked on each
-          comparison page.
-        </p>
+        <p className="m-meta m-table-note">{MATRIX_NOTE}</p>
       </section>
       <section className="m-section tight">
         <div className="m-wrap">
@@ -104,7 +101,7 @@ export default function CompareIndex() {
             {COMPETITORS.map((c) => (
               <li key={c.slug}>
                 <Link href={`/compare/${c.slug}`} className="m-row">
-                  <span className="m-row-title">AgentDrive vs {c.name}</span>
+                  <span className="m-row-title">AgentDrive vs {c.name}</span>{' '}
                   <span className="m-row-body">{c.tagline}</span>
                 </Link>
               </li>

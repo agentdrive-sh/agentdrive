@@ -75,6 +75,13 @@ See the [roadmap](/docs/v1-roadmap) for what's coming next.
 - **Writing artifacts another agent will consume:** `drive_write`. The content hash is the durable identifier.
 - **Auditing what an agent did in a session:** `drive_activity` for the timeline, `drive_versions` per file.
 
+## Agent protocol endpoints
+
+- The [public docs MCP discovery document](https://agentdrive.sh/.well-known/mcp) points to the anonymous server for `search_docs` and `read_doc`. The [workspace MCP server card](https://agentdrive.sh/.well-known/mcp/server-card.json) describes the hosted service that requires OAuth or an API key.
+- The [A2A agent card](https://agentdrive.sh/.well-known/agent-card.json) describes how to search the public documentation using A2A.
+- The [agent skills index](https://agentdrive.sh/.well-known/agent-skills/index.json) lists installable skills. The [Web Bot Auth key directory](https://agentdrive.sh/.well-known/http-message-signatures-directory) publishes AgentDrive’s signing keys.
+- The [API catalog](https://agentdrive.sh/.well-known/api-catalog) lists the REST API and MCP servers. The [AI catalog](https://agentdrive.sh/.well-known/ai-catalog.json) lists agent-facing services.
+
 ## Install a workflow skill
 
 With AgentDrive connected, install a skill for the task you want your agent to handle.

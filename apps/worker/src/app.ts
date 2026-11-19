@@ -171,6 +171,12 @@ app.get('/v1/workspaces/:wid/files/:fid/collaborate', async (c) => {
 // 404 for API routes only
 app.all('/v1/*', (c) => c.json({ success: false, error: 'Not found' }, 404));
 
+app.get('/.well-known/openai-apps-challenge', (c) => {
+  const challenge = c.env.OPENAI_APPS_CHALLENGE;
+  if (!challenge || new URL(c.req.url).origin !== new URL(c.env.MCP_URL).origin) return c.notFound();
+  return c.text(challenge, 200, { 'Cache-Control': 'no-store' });
+});
+
 // Anything else that lands on the API worker (e.g. api.agentdrive.sh/something)
 // bounces to the marketing site. The Next.js worker at agentdrive.sh serves the
 // real frontend; this worker is API-only.

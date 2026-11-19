@@ -25,7 +25,7 @@ export function pageMetadata(title: string, description: string, path: string): 
   return {
     title,
     description,
-    alternates: { canonical: path },
+    alternates: { canonical: path, types: { 'text/markdown': `${path}.md` } },
     openGraph: { ...OPEN_GRAPH_BASE, title, description, url: path, images: '/opengraph-image' },
   };
 }

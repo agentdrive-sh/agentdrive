@@ -46,6 +46,7 @@ export default defineWorkersConfig({
             APP_URL: 'http://localhost:8787',
             SITE_URL: 'http://localhost:3001',
             MCP_URL: 'http://localhost/mcp',
+            OPENAI_APPS_CHALLENGE: 'test-public-domain-proof',
             TOKEN_SIGNING_SECRET: 'test-signing-secret-do-not-use-in-prod',
             STRIPE_SECRET_KEY: 'sk_test_do-not-use',
             STRIPE_WEBHOOK_SECRET: 'whsec_test_do-not-use',

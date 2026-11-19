@@ -115,7 +115,7 @@ export default async function ComparePage(props: { params: Promise<{ slug: strin
               </li>
             ))}
           </ul>
-          <div className="m-actions m-actions-end">
+          <div className="m-actions m-actions-end" data-markdown-ignore>
             <Link href="/docs/quick-start" className="btn lg primary">
               Quick start
             </Link>

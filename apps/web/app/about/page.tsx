@@ -5,7 +5,7 @@ import { SITE_DESCRIPTION as DESCRIPTION } from '@/components/seo/site';
 export const metadata: Metadata = {
   title: 'About',
   description: 'What AgentDrive is, how it works, how it is licensed and who operates it.',
-  alternates: { canonical: '/about' },
+  alternates: { canonical: '/about', types: { 'text/markdown': '/about.md' } },
 };
 
 export default function AboutPage() {

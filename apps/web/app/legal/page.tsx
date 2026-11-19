@@ -36,7 +36,7 @@ export default function LegalIndex() {
           {docs.map((d) => (
             <li key={d.href}>
               <Link href={d.href} className="m-row">
-                <span className="m-row-title">{d.title}</span>
+                <span className="m-row-title">{d.title}</span>{' '}
                 <span className="m-row-body">{d.body}</span>
               </Link>
             </li>

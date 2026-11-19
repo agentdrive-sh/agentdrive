@@ -34,7 +34,7 @@ test('markdown clients and AI fetchers get markdown, browsers keep HTML', async 
 });
 
 test('unknown paths answer markdown clients with a markdown 404', async ({ request }) => {
-  for (const path of ['/__agent-404-probe', '/docs/no-such-page.md', '/docs/no-such-page']) {
+  for (const path of ['/__agent-404-probe', '/docs/no-such-page.md', '/docs/no-such-page', '/integrations/no-such-page.md', '/resume/no-such-pair.md']) {
     const md = await markdown(request, path, { accept: 'text/markdown' });
     expect(md.status, path).toBe(404);
     expect(md.type, path).toMatch(MARKDOWN);
@@ -48,10 +48,8 @@ test('unknown paths answer markdown clients with a markdown 404', async ({ reque
 test('llms.txt links markdown twins and covers every sitemap page', async ({ request }) => {
   const llms = await (await request.get('/llms.txt')).text();
   const linked = new Set([...llms.matchAll(/\]\((https:\/\/agentdrive\.sh[^)]*)\)/g)].map((m) => m[1]!.replace(/(\/index)?\.md$/, '')));
-  const docsLinks = [...llms.matchAll(/\]\((https:\/\/agentdrive\.sh\/docs[^)]*)\)/g)].map((m) => m[1]!).filter((u) => !u.endsWith('.txt') && !u.includes('/docs/mcp'));
-  expect(docsLinks.length).toBeGreaterThan(5);
-  for (const url of docsLinks) expect(url).toMatch(/\.md$/);
-  linked.add(SITE).add(`${SITE}/pricing`);
+  const links = [...llms.matchAll(/\]\((https:\/\/agentdrive\.sh[^)]*)\)/g)].map((m) => new URL(m[1]!).pathname);
+  for (const path of links) expect(path).toMatch(/\.md$|\/llms(?:-full)?\.txt$/);
   const sitemap = await (await request.get('/sitemap.xml')).text();
   const missing = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]!).filter((u) => !linked.has(u));
   expect(missing).toEqual([]);
@@ -154,9 +152,59 @@ test('blog, glossary, compare and facts pages have .md twins, and the blog has i
     expect(md.body, path).not.toContain('](/');
   }
   expect((await markdown(request, compare, { accept: 'text/markdown' })).body).toMatch(/\n# AgentDrive vs /);
-  expect((await markdown(request, '/compare.md')).body).toMatch(/\| Tool \| Works across agents \|/);
+  const matrix = (await markdown(request, '/compare.md')).body;
+  expect(matrix).toMatch(/\| Tool \| Works across agents \|/);
+  expect(matrix).toContain('## Detailed comparisons');
+  expect(matrix).toContain('Details for other tools come from their own docs and announcements');
+  const facts = (await markdown(request, '/facts.md')).body;
+  expect(facts).toContain('The canonical facts about AgentDrive');
+  expect(facts).toMatch(/As of [A-Z][a-z]+ \d{1,2}, \d{4}\./);
   const blogIndex = await request.get('/blog/llms.txt');
   expect(blogIndex.status()).toBe(200);
   expect(await blogIndex.text()).toMatch(/^# AgentDrive blog\n\n> .+\n\n## Posts\n\n- \[/);
   expect(llms).toContain('(https://agentdrive.sh/blog/llms.txt)');
+});
+
+test('public article representations share their content, links and negotiation headers', async ({ request }) => {
+  for (const [path, excerpt] of [
+    ['/integrations/codex', 'adrive resume --list'],
+    ['/resume/claude-code-to-codex', 'What carries over'],
+    ['/resume/cursor-to-claude-code', 'Frequently asked questions'],
+    ['/legal/dpa', 'International transfers'],
+    ['/resume', 'Resume across agents'],
+  ]) {
+    const html = await request.get(path, { headers: { accept: 'text/html' } });
+    const negotiated = await request.get(path, { headers: { accept: 'text/markdown' } });
+    const md = await markdown(request, path + '.md');
+    expect(md.status, path).toBe(200);
+    expect(md.type, path).toMatch(MARKDOWN);
+    expect(md.body, path).toContain(excerpt);
+    expect(md.body, path).toContain(`canonical: "${SITE}${path}"`);
+    expect(md.body, path).toContain(`[llms.txt](${SITE}/llms.txt)`);
+    expect(md.body, path).not.toContain('](/');
+    expect(await negotiated.text(), path).toBe(md.body);
+    expect(negotiated.headers()['content-type']).toMatch(MARKDOWN);
+    expect(html.headers()['content-type']).toContain('text/html');
+    expect(html.headers().vary.toLowerCase().split(/,\s*/)).toEqual(expect.arrayContaining([
+      'rsc', 'next-router-state-tree', 'next-router-prefetch', 'next-router-segment-prefetch',
+    ]));
+    expect(await html.text()).toContain(`type="text/markdown" href="${SITE}${path}.md"`);
+    for (const res of [html, negotiated]) {
+      expect(res.headers().vary.toLowerCase().split(/,\s*/)).toEqual(expect.arrayContaining(['accept', 'user-agent']));
+    }
+  }
+});
+
+test('Filesystem MCP compares the same rows in its accessible table and Markdown', async ({ request }) => {
+  const html = await (await request.get('/compare/filesystem-mcp')).text();
+  expect(html).toMatch(/class="m-compare-mobile" data-markdown-ignore/);
+  expect(html).toMatch(/class="m-actions m-actions-end" data-markdown-ignore/);
+  const md = await markdown(request, '/compare/filesystem-mcp.md');
+  expect(md.body).toContain('| Unit of storage | Sessions and files, versioned, with provenance | Files on your local disk |');
+  expect(md.body).toContain('## Frequently asked questions');
+});
+
+test('REST reference introduces the downloadable schema before its first section', async ({ request }) => {
+  const md = await markdown(request, '/docs/rest-api.md');
+  expect(md.body.split('## Authentication')[0]).toContain(`[OpenAPI 3.1 specification](${SITE}/openapi.json)`);
 });

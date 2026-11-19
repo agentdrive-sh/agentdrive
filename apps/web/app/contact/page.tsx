@@ -4,7 +4,7 @@ import { MarketingPageShell, PageHero, ProseSection } from '@/components/marketi
 export const metadata: Metadata = {
   title: 'Contact',
   description: 'How to reach AgentDrive for questions, support, security reports, privacy requests and legal matters.',
-  alternates: { canonical: '/contact' },
+  alternates: { canonical: '/contact', types: { 'text/markdown': '/contact.md' } },
 };
 
 const ISSUES = 'https://github.com/agentdrive-sh/agentdrive-mcp/issues';

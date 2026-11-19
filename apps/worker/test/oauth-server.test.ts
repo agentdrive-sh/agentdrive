@@ -164,6 +164,15 @@ const fillAgentSlots = async (orgId: string) => {
 };
 
 describe('discovery', () => {
+  it('serves the ChatGPT domain proof as plaintext at the MCP origin only', async () => {
+    const path = '/.well-known/openai-apps-challenge';
+    const response = await SELF.fetch(new URL(path, MCP), { redirect: 'manual' });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toMatch(/^text\/plain/);
+    expect(await response.text()).toBe('test-public-domain-proof');
+    expect((await SELF.fetch(new URL(path, SITE), { redirect: 'manual' })).status).toBe(404);
+  });
+
   it('serves authorization server metadata on the issuer', async () => {
     const res = await SELF.fetch(`${SITE}/.well-known/oauth-authorization-server`);
     expect(res.status).toBe(200);
