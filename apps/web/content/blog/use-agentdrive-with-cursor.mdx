@@ -77,7 +77,7 @@ AgentDrive reads Agent chat transcripts only. Tab completions and inline edits a
 
 First, confirm the chat has a project. If it started before you installed the hooks, find it with `adrive resume --list` from another agent's terminal and resume it by id instead.
 
-Second, flush the latest turn. Because `stop` can be skipped inside its two-minute window, run `adrive sync --force` in the project, which uploads every changed session without waiting.
+Second, flush the latest turn. Because `stop` can be skipped inside its two-minute window, run `adrive sync --force` in the project, which uploads every changed session without waiting. From `@adrive/cli` 1.5.1, plain `adrive sync` doesn't wait either.
 
 Then open the next agent in the same folder: [Cursor to Claude Code](/resume/cursor-to-claude-code), [Cursor to Codex](/resume/cursor-to-codex), [Cursor to OpenCode](/resume/cursor-to-opencode) or [Cursor to Antigravity](/resume/cursor-to-antigravity).
 

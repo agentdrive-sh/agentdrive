@@ -198,20 +198,21 @@ program
   .option('--session <id>', 'Sync this harness session (with --harness)')
   .option('--transcript <path>', 'Transcript file of that session')
   .option('--cwd <dir>', 'Session working directory, used when the transcript has none')
-  .option('--force', 'Ignore the debounce and mark the named session finished')
+  .option('--force', 'Sync sessions synced in the last 2 minutes too, and mark the named session finished')
   .option('--start', 'Session-start sync: always sweep for recent sessions')
   .option('--all', 'Sweep full history instead of changes since the last sweep')
-  .option('--quiet', 'Log to sync.log in the config dir instead of stdout')
+  .option('--quiet', 'Log to sync.log in the config dir instead of stdout, and skip sessions synced in the last 2 minutes (for hooks)')
   .option('--dry-run', 'Parse and report; never upload')
   .action(wrap((opts) => cmdSync(opts)));
 
 program
   .command('resume [id]')
-  .description('Print a handoff for a prior session of this project (latest if no id), or for a share link. Without a login, reads this machine\'s agent transcripts')
+  .description('Print a handoff for a prior session of this project (if no id, the latest from another agent), or for a share link. Without a login, reads this machine\'s agent transcripts')
   .option('--list', 'List recent sessions for this project')
   .option('--local', 'Read sessions from this machine\'s agent transcripts, even when logged in')
   .option('--max-chars <n>', 'Handoff size budget in characters', (v) => Number(v))
-  .action(wrap((id, opts) => cmdResume(id, { list: opts.list, local: opts.local, maxChars: opts.maxChars })));
+  .option('--as <agent>', 'The agent you are running this from, left out of the latest-session pick (for one adrive cannot detect, such as antigravity)')
+  .action(wrap((id, opts) => cmdResume(id, { list: opts.list, local: opts.local, maxChars: opts.maxChars, as: opts.as })));
 
 program
   .command('privacy')

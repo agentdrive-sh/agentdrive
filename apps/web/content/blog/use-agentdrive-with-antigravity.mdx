@@ -49,7 +49,7 @@ Either way the skill calls `drive_resume`. Because the MCP server runs as `antig
 
 Listing works the same way. `/agentdrive-sessions`, or "list my AgentDrive sessions from Codex", calls `drive_sessions` with that agent as the filter and shows ids. Resume one by giving its id: "resume AgentDrive session `<session-id>`".
 
-`adrive resume --list` and `adrive resume <session-id>` work from a terminal too, with one catch. AgentDrive tells which agent it's running in from an environment variable each agent sets on its commands, and there's no Antigravity variable it relies on. So in local mode, `adrive resume` run from Antigravity can hand you Antigravity's own latest session. The skill doesn't have this problem, and neither does passing an id.
+`adrive resume --list` and `adrive resume <session-id>` work from a terminal too, with one catch. AgentDrive tells which agent it's running in from an environment variable each agent sets on its commands, and there's no Antigravity variable it relies on. So in local mode, `adrive resume` run from Antigravity can hand you Antigravity's own latest session. From `@adrive/cli` 1.5.1, `adrive resume --as antigravity` leaves Antigravity's sessions out, signed in or not. The skill doesn't have this problem, and neither does passing an id.
 
 From each agent into Antigravity: [Claude Code](/resume/claude-code-to-antigravity), [Codex](/resume/codex-to-antigravity), [Cursor](/resume/cursor-to-antigravity), [OpenCode](/resume/opencode-to-antigravity).
 
@@ -75,7 +75,7 @@ The global switch isn't a privacy guarantee either. In CLI 1.4.0, `adrive privac
 
 ## Antigravity hit its limit. How do I move the conversation?
 
-[What to do when Antigravity hits its usage limit](/blog/antigravity-usage-limit) covers when to wait and when to move. If you move, there's no end event to flush the last turn, so run `adrive sync --force` in the project first; it drops the two-minute wait. If the conversation started before setup, find it with `adrive resume --list` in the next agent and resume it by id.
+[What to do when Antigravity hits its usage limit](/blog/antigravity-usage-limit) covers when to wait and when to move. If you move, there's no end event to flush the last turn, so run `adrive sync` in the project first. From `@adrive/cli` 1.5.1 it skips the two-minute wait on its own; in 1.5.0 and earlier, add `--force` to drop it. If the conversation started before setup, find it with `adrive resume --list` in the next agent and resume it by id.
 
 Then: [Antigravity to Claude Code](/resume/antigravity-to-claude-code), [to Codex](/resume/antigravity-to-codex), [to Cursor](/resume/antigravity-to-cursor) or [to OpenCode](/resume/antigravity-to-opencode).
 

@@ -70,7 +70,7 @@ Yes, and that's what the two `approval_mode = "approve"` lines are for. `codex e
 
 [What to do when Codex hits its usage limit](/blog/codex-usage-limit) goes through waiting, paying and switching.
 
-Before you switch, make sure the final turn is in your workspace. A `Stop` may have been skipped inside the two-minute window, so run `adrive sync --force` from the project; `--force` ignores that window for every session the sweep finds. Then go [Codex to Claude Code](/resume/codex-to-claude-code), [Codex to Cursor](/resume/codex-to-cursor), [Codex to OpenCode](/resume/codex-to-opencode) or [Codex to Antigravity](/resume/codex-to-antigravity). The [Codex to Claude Code walkthrough](/blog/codex-to-claude-code-walkthrough) shows that move step by step.
+Before you switch, make sure the final turn is in your workspace. A `Stop` may have been skipped inside the two-minute window, so run `adrive sync --force` from the project; `--force` ignores that window for every session the sweep finds. From `@adrive/cli` 1.5.1, plain `adrive sync` ignores it too. Then go [Codex to Claude Code](/resume/codex-to-claude-code), [Codex to Cursor](/resume/codex-to-cursor), [Codex to OpenCode](/resume/codex-to-opencode) or [Codex to Antigravity](/resume/codex-to-antigravity). The [Codex to Claude Code walkthrough](/blog/codex-to-claude-code-walkthrough) shows that move step by step.
 
 Codex sessions are easy to leave from: the rollouts carry their own directory, so even sessions from before you installed AgentDrive match the project. Signed in, the first sweep looks back 14 days. In local mode, `adrive resume` in another agent reads the rollouts directly.
 

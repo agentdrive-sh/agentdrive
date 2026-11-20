@@ -139,3 +139,62 @@ describe('adrive resume --local', () => {
     expect(stdout).toBe('');
   });
 });
+
+describe('adrive resume when logged in', () => {
+  const run = (agent: string, id: string) => ({ run_id: `${agent}:${id}`, workspace_id: 'ws_1', agent_platform: agent, task: id, metadata: { transcript_path: `sessions/${id}.md` }, artifacts_produced: [] });
+
+  function stubServer(runs: Array<ReturnType<typeof run>>) {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const { pathname, searchParams } = new URL(url);
+      const prefix = searchParams.get('prefix');
+      const id = prefix?.slice('sessions/'.length, -'.md'.length) ?? decodeURIComponent(pathname.split('/').pop()!);
+      const data = pathname === '/v1/runs'
+        ? runs
+        : pathname.startsWith('/v1/runs/')
+          ? runs.find((r) => r.run_id === id)
+          : prefix
+            ? [{ id, path: prefix }]
+            : { id, path: `sessions/${id}.md`, content: `# Session\n\n## user\n\nwork from ${id}\n`, version: 1, updated_at: '' };
+      return new Response(JSON.stringify({ success: true, data }));
+    });
+  }
+
+  beforeEach(login);
+
+  it('resumes the newest session from another agent, not the one it runs in', async () => {
+    stubServer([run('claude-code', 'mine'), run('codex', 'theirs')]);
+    vi.stubEnv('CLAUDE_CODE_CHILD_SESSION', '1');
+    await cmdResume(undefined, {});
+    expect(stdout).toContain('work from theirs');
+    expect(stderr).toBe('');
+  });
+
+  it('falls back to the newest session, and says so, when no other agent has one', async () => {
+    stubServer([run('claude-code', 'mine')]);
+    vi.stubEnv('CLAUDE_CODE_CHILD_SESSION', '1');
+    await cmdResume(undefined, {});
+    expect(stdout).toContain('work from mine');
+    expect(stderr).toContain('No session from an agent other than claude-code');
+  });
+
+  it('leaves out the agent named by --as, for one it cannot detect', async () => {
+    stubServer([run('antigravity', 'mine'), run('codex', 'theirs')]);
+    await cmdResume(undefined, { as: 'antigravity' });
+    expect(stdout).toContain('work from theirs');
+    await expect(cmdResume(undefined, { as: 'antigravityy' })).rejects.toThrow('Unknown agent: antigravityy.');
+  });
+
+  it('resumes an explicit id even from the agent it runs in', async () => {
+    stubServer([run('claude-code', 'mine'), run('codex', 'theirs')]);
+    vi.stubEnv('CLAUDE_CODE_CHILD_SESSION', '1');
+    await cmdResume('claude-code:mine', {});
+    expect(stdout).toContain('work from mine');
+  });
+});
+
+describe('adrive resume --as without a login', () => {
+  it('leaves out the named agent from local transcripts', async () => {
+    await cmdResume(undefined, { as: 'claude-code' });
+    expect(stdout).toContain(`Handoff from a codex session (${CODEX_ID}).`);
+  });
+});

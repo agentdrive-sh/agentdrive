@@ -1,6 +1,7 @@
 // Each marker is set by the harness itself on the commands its agent runs. A
 // harness without a documented marker is left out: a wrong guess would count
-// a same-harness or human resume as a cross-harness one.
+// a same-harness or human resume as a cross-harness one. Antigravity documents
+// none (https://antigravity.google/docs/hooks), so `adrive resume --as antigravity` names it.
 const HARNESS_MARKERS: ReadonlyArray<{ platform: string; name: string; value?: string }> = [
   // https://code.claude.com/docs/en/env-vars (unlike CLAUDECODE, not set in IDE-integrated terminals)
   { platform: 'claude-code', name: 'CLAUDE_CODE_CHILD_SESSION', value: '1' },

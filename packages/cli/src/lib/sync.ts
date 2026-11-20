@@ -328,7 +328,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncResult> {
       for (const [runId, rec] of Object.entries(manifest.sessions)) {
         // Synced only for its files while transcript sync was off: its transcript may still be owed.
         const owed = (captureTranscripts && ((rec.hash === undefined && !rec.local) || !!rec.pending_transcript)) || (captureArtifacts && !!rec.pending_files);
-        if ((rec.status !== 'in_progress' && !owed) || !rec.harness || !rec.path || now - rec.synced_at < DEBOUNCE_MS) continue;
+        if ((rec.status !== 'in_progress' && !owed) || !rec.harness || !rec.path || (opts.quiet && now - rec.synced_at < DEBOUNCE_MS)) continue;
         if (opts.harness && !named && rec.harness !== opts.harness) continue;
         const sessionId = runId.slice(rec.harness.length + 1);
         const seen = (c: Candidate) => c.harness === rec.harness && c.entry.sessionId === sessionId;
@@ -462,7 +462,8 @@ async function gate(ctx: SessionContext, kind: 'transcripts' | 'artifacts', bloc
 
 async function syncSession(ctx: SessionContext, c: Candidate, result: SyncResult): Promise<'synced' | 'unchanged' | 'debounced' | 'empty' | 'local'> {
   const { opts, manifest, now } = ctx;
-  if (!opts.force && now - (manifest.sessions[sessionRunId(c.harness, c.entry.sessionId)]?.synced_at ?? 0) < DEBOUNCE_MS) {
+  // Only hooks run quiet, and they fire every turn; a person running `adrive sync` wants it now.
+  if (!opts.force && opts.quiet && now - (manifest.sessions[sessionRunId(c.harness, c.entry.sessionId)]?.synced_at ?? 0) < DEBOUNCE_MS) {
     return 'debounced';
   }
   const doc = await ctx.sources[c.harness].parseSession(c.entry);

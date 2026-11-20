@@ -83,7 +83,7 @@ One more Cursor detail: with no timestamps in the transcript, a Cursor session's
 
 3. **Run `/agentdrive-resume`.** Cursor follows the command file: call `drive_resume`, summarize the goal, what's done, what's left and open questions in three to five bullets, check the files on disk, then continue. To resume a specific session, put its id after the command. `/agentdrive-sessions` lists them first.
 
-4. **Fall back to the shell if the tool isn't there.** If Cursor's MCP server didn't load, the command tells the agent to run `adrive resume` instead. Signed in, `adrive resume` with no id prints the newest session in the project from any agent, so if that's a Cursor one, run `adrive resume --list` and pass the Claude Code session's id. In local mode the CLI recognizes Cursor's agent from the environment and skips Cursor's own sessions.
+4. **Fall back to the shell if the tool isn't there.** If Cursor's MCP server didn't load, the command tells the agent to run `adrive resume` instead. Signed in, `adrive resume` with no id prints the newest session in the project from any agent, so if that's a Cursor one, run `adrive resume --list` and pass the Claude Code session's id. In local mode the CLI recognizes Cursor's agent from the environment and skips Cursor's own sessions. From `@adrive/cli` 1.5.1 it does that signed in too.
 
 ## What does the brief look like going each way?
 

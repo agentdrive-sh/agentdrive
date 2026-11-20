@@ -1,6 +1,6 @@
 {
   "name": "@adrive/cli",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "AgentDrive CLI: sync coding-agent sessions and resume them across Claude Code, Codex, OpenCode, Cursor and Antigravity.",
   "license": "Apache-2.0",
   "type": "module",

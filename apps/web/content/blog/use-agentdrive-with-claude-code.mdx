@@ -60,7 +60,7 @@ With no id, signed in, `drive_resume` takes the newest session in this project f
 
 The sessions command treats a harness name (`codex`, `cursor`, `opencode`, `antigravity`) as an agent filter and anything else as a project. You can also skip the commands and say "pick up my last Cursor session": the skill steers Claude to `drive_resume`, which accepts a platform.
 
-In a terminal, `adrive resume --list` and `adrive resume <session-id>` print the same brief. Signed in, a bare `adrive resume` takes the newest session from any agent, Claude Code's own included.
+In a terminal, `adrive resume --list` and `adrive resume <session-id>` print the same brief. Signed in, a bare `adrive resume` takes the newest session from any agent, Claude Code's own included. From `@adrive/cli` 1.5.1, run from Claude Code's shell it prefers another agent's newest session and takes Claude Code's own only when no other agent has one.
 
 Each direction has its own page: [Codex](/resume/codex-to-claude-code), [Cursor](/resume/cursor-to-claude-code), [OpenCode](/resume/opencode-to-claude-code) and [Antigravity](/resume/antigravity-to-claude-code) into Claude Code. For the Codex direction there's also [a full walkthrough](/blog/codex-to-claude-code-walkthrough).
 

@@ -4,7 +4,7 @@
 
 export const MCP_SERVER_VERSION = "1.4.0";
 export const SDK_VERSION: string | null = "1.0.1";
-export const CLI_VERSION = "1.5.0";
+export const CLI_VERSION = "1.5.1";
 
 // The /v1/health version reports the MCP server version because that's the
 // surface external readers most often pin against.

@@ -18,7 +18,16 @@ const AI_CRAWLERS = [
   'Bingbot',
 ];
 
-const group = (agents: string[]) => [...agents.map((a) => `User-Agent: ${a}`), 'Allow: /', ...APP_ROUTES.map((path) => `Disallow: ${path}`), ''];
+// Content Signals (contentsignals.org): the public pages may be indexed, used to answer, and used for training.
+const CONTENT_SIGNAL = 'Content-Signal: search=yes, ai-input=yes, ai-train=yes';
+
+const group = (agents: string[]) => [
+  ...agents.map((a) => `User-Agent: ${a}`),
+  CONTENT_SIGNAL,
+  'Allow: /',
+  ...APP_ROUTES.map((path) => `Disallow: ${path}`),
+  '',
+];
 
 // A route handler, not app/robots.ts, because MetadataRoute.Robots cannot emit the schemamap directive.
 export function GET() {

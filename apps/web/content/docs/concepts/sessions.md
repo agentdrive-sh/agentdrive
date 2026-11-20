@@ -26,7 +26,7 @@ Sessions from Claude Code worktrees file under their parent repo.
 
 ## Resume, three ways
 
-All three load the same handoff format. MCP resume prefers a recent session in this project from a **different** agent, falling back to the latest session if none exists. Shell `adrive resume` selects the latest session regardless of agent; pass an explicit session id to choose another.
+All three load the same handoff format. MCP resume prefers a recent session in this project from a **different** agent, falling back to the latest session if none exists. From `@adrive/cli` 1.5.1, signed-in shell `adrive resume` does the same when it can tell which agent's shell it runs in, and says so when it falls back; from a plain terminal, or in 1.5.0 and earlier, it selects the latest session regardless of agent. Pass an explicit session id to choose another.
 
 - **MCP tools**, from any connected agent: `drive_sessions` lists recent sessions across agents, and `drive_resume` loads one. Pass a `session_id` from `drive_sessions`, or nothing for the default.
 - **Slash commands:** `/agentdrive:resume` and `/agentdrive:sessions` in Claude Code, and `/agentdrive-resume` and `/agentdrive-sessions` in OpenCode and Cursor. Codex has no AgentDrive command: ask it in plain words, or start the request with `$agentdrive` to call the AgentDrive skill. (Init still writes `agentdrive-resume` and `agentdrive-sessions` custom prompts, which only older Codex versions load.) Antigravity has no custom commands, so it gets `agentdrive-resume` and `agentdrive-sessions` skills instead: ask it to resume or list your AgentDrive sessions.

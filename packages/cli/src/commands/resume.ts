@@ -1,6 +1,6 @@
-import { LOCAL_NOTE, findLocalSession, listLocalSessions, localHandoff, type LocalToolContext } from '@adrive/mcp-server/local';
+import { HARNESSES, LOCAL_NOTE, findLocalSession, listLocalSessions, localHandoff, type LocalToolContext } from '@adrive/mcp-server/local';
 import { projectKeyFor, scopeProjectKey } from '@adrive/mcp-server/project';
-import { buildHandoff, isEncrypted, sessionActivityAt } from '@adrive/mcp-server/session';
+import { buildHandoff, isEncrypted, sessionActivityAt, type SessionHarness } from '@adrive/mcp-server/session';
 import { CliApiClient, type RunRecord } from '../lib/api-client.js';
 import { configDir, readConfig, type CliConfig } from '../lib/config.js';
 import { decryptContentAsync } from '../lib/crypto.js';
@@ -12,6 +12,8 @@ export interface ResumeOptions {
   maxChars?: number;
   // Read this machine's harness transcripts even when logged in.
   local?: boolean;
+  // The agent this runs in, for one whose shell has no marker to detect (Antigravity).
+  as?: string;
 }
 
 function title(run: RunRecord): string {
@@ -22,7 +24,7 @@ function title(run: RunRecord): string {
 async function cmdResumeLocal(id: string | undefined, opts: ResumeOptions, cfg: CliConfig | null): Promise<void> {
   const ctx: LocalToolContext = {
     cwd: process.cwd(),
-    exclude: resumeAgentPlatform(process.env, cfg?.agent_platform),
+    exclude: opts.as || resumeAgentPlatform(process.env, cfg?.agent_platform),
     env: process.env,
     configDir: configDir(),
   };
@@ -55,11 +57,15 @@ export async function cmdResume(id: string | undefined, opts: ResumeOptions = {}
   const shareToken = id ? parseShareToken(id) : null;
   if (shareToken) return cmdResumeShare(shareToken, { ...opts, fromLink: id!.includes('/') });
   const cfg = await readConfig();
+  if (opts.as && !HARNESSES.includes(opts.as as SessionHarness)) {
+    throw new Error(`Unknown agent: ${opts.as}. Supported: ${HARNESSES.join(', ')}.`);
+  }
   if (opts.local || !cfg?.api_key) return cmdResumeLocal(id, opts, cfg);
+  const self = opts.as || resumeAgentPlatform(process.env, cfg.agent_platform);
   const client = new CliApiClient({
     baseUrl: cfg.api_url,
     apiKey: cfg.api_key,
-    agentPlatform: resumeAgentPlatform(process.env, cfg.agent_platform),
+    agentPlatform: self,
     agentRole: cfg.agent_role,
   });
   const project = scopeProjectKey(projectKeyFor(process.cwd()), !!cfg.preferences?.private_workspace);
@@ -77,7 +83,16 @@ export async function cmdResume(id: string | undefined, opts: ResumeOptions = {}
     return;
   }
 
-  const run = id ? await client.getRun(id) : (await client.listRuns({ project, limit: 1 }))[0];
+  let run: RunRecord | undefined;
+  if (id) run = await client.getRun(id);
+  else {
+    const runs = await client.listRuns({ project, limit: 20 });
+    run = runs.find((r) => r.agent_platform !== self);
+    if (!run && runs[0]) {
+      run = runs[0];
+      process.stderr.write(`No session from an agent other than ${self} for project ${project}; resuming the newest one, from ${run.agent_platform}.\n`);
+    }
+  }
   if (!run) throw new Error(`No sessions for project ${project}.`);
   const transcriptPath = run.metadata?.transcript_path;
   if (typeof transcriptPath !== 'string' || !run.workspace_id) {

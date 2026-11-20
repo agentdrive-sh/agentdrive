@@ -175,6 +175,31 @@ describe('runSync', () => {
     expect(writes).toHaveLength(2);
   });
 
+  it('syncs a session synced under two minutes ago from a manual adrive sync, but not from a quiet hook one', async () => {
+    const cwd = join(home, 'app');
+    await fs.mkdir(cwd);
+    const transcript = await claudeSession('s3', line('user', 'first', { cwd }));
+    await runSync(opts({ all: true }));
+    expect(writes).toHaveLength(1);
+
+    await fs.appendFile(transcript, line('assistant', 'second'));
+    const grownAt = new Date(1_800_000_005_000);
+    await fs.utimes(transcript, grownAt, grownAt);
+    const hook = await runSync(opts({ all: true, now: 1_800_000_010_000 }));
+    expect(hook.debounced).toBe(1);
+    expect(writes).toHaveLength(1);
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await cmdSync({ ...opts({ all: true, now: 1_800_000_020_000 }), quiet: false } as SyncCommandOptions);
+    } finally {
+      vi.mocked(process.stdout.write).mockRestore();
+    }
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.content).toContain('second');
+    expect(runs[1]).toMatchObject({ run_id: 'claude-code:s3', status: 'in_progress' });
+  });
+
   it('records tracked files by path, uploads untracked ones, and skips denied, binary and out-of-home files', async () => {
     const repo = join(home, 'repo');
     await fs.mkdir(repo);

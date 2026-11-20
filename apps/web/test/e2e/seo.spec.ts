@@ -38,4 +38,7 @@ test('robots.txt lets AI crawlers read the public site but not the signed-in app
   expect(group).toContain('User-Agent: GPTBot');
   expect(group).toContain('Allow: /');
   expect(group).toContain('Disallow: /dashboard');
+  for (const g of robots.split('\n\n').filter((g) => g.includes('User-Agent:'))) {
+    expect(g).toContain('Content-Signal: search=yes, ai-input=yes, ai-train=yes');
+  }
 });
