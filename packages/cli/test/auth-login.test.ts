@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cmdAuthLogin } from '../src/commands/auth-login.js';
 import { CliApiClient } from '../src/lib/api-client.js';
-import { DEFAULT_PREFERENCES, deleteConfig, readConfig, updateConfig } from '../src/lib/config.js';
+import { DEFAULT_PREFERENCES, deleteConfig, readConfig, updateConfig, writeConfig } from '../src/lib/config.js';
 import { ensureCaptureConsent } from '../src/lib/consent.js';
 import { pollAuth } from '../src/lib/poll-auth.js';
 
@@ -81,5 +81,53 @@ describe('auth login --with-key', () => {
     vi.spyOn(CliApiClient.prototype, 'whoami').mockRejectedValue(new Error('Invalid API key'));
     await expect(cmdAuthLogin({ apiUrl: URL, withKey: true })).rejects.toThrow(/Invalid API key/);
     expect(await readConfig()).toBeNull();
+  });
+});
+
+describe('auth login onto an existing config', () => {
+  async function realConsent(workspaces: string[]) {
+    const actual = await vi.importActual<typeof import('../src/lib/consent.js')>('../src/lib/consent.js');
+    vi.mocked(ensureCaptureConsent).mockImplementationOnce(actual.ensureCaptureConsent);
+    return vi.spyOn(CliApiClient.prototype, 'listWorkspaces').mockResolvedValue(workspaces.map((id) => ({ id, name: id, created_at: '' })));
+  }
+
+  it('keeps sync off when adrive privacy saved preferences while sign-in waited', async () => {
+    // Signed in, but consent never finished, so no preferences were saved yet.
+    await writeConfig({ api_url: URL, api_key: 'agentdrive_live_earlier' });
+    vi.mocked(pollAuth).mockImplementationOnce(async () => {
+      await updateConfig((latest) => ({ ...latest!, preferences: { ...DEFAULT_PREFERENCES, ...latest!.preferences, capture_transcripts: false, capture_artifacts: false } }), { effectiveBefore: true });
+      return { api_key: KEY, agent_id: 'ag_synthetic', org_id: 'org_synthetic' };
+    });
+    await realConsent(['ws_1']);
+    await cmdAuthLogin({ apiUrl: URL });
+    expect(await readConfig()).toMatchObject({
+      api_key: KEY,
+      capture_notice_at: expect.any(String),
+      preferences: { capture_transcripts: false, capture_artifacts: false },
+    });
+  });
+
+  it.each([
+    ['another org', { org_id: 'org_previous' }, 'org_synthetic'],
+    ['an unknown new org', { org_id: 'org_synthetic' }, undefined],
+    ['an unknown stored org', {}, 'org_synthetic'],
+    ['another instance', { org_id: 'org_synthetic', api_url: 'https://other.synthetic.invalid' }, 'org_synthetic'],
+  ])('picks a workspace of the new account when signing in to %s', async (_, stored, orgId) => {
+    await writeConfig({ api_url: URL, api_key: 'agentdrive_live_earlier', default_workspace: 'ws_previous', ...stored });
+    stdin(KEY);
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockResolvedValue({ type: 'agent', agent_id: 'ag_synthetic', org_id: orgId });
+    await realConsent(['ws_new_account']);
+    await cmdAuthLogin({ apiUrl: URL, withKey: true });
+    expect(await readConfig()).toMatchObject({ api_key: KEY, default_workspace: 'ws_new_account' });
+  });
+
+  it('keeps the default workspace when signing in to the same org again', async () => {
+    await writeConfig({ api_url: URL, api_key: 'agentdrive_live_earlier', org_id: 'org_synthetic', default_workspace: 'ws_previous' });
+    stdin(KEY);
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockResolvedValue({ type: 'agent', agent_id: 'ag_synthetic', org_id: 'org_synthetic' });
+    const list = await realConsent(['ws_other']);
+    await cmdAuthLogin({ apiUrl: URL, withKey: true });
+    expect(await readConfig()).toMatchObject({ api_key: KEY, default_workspace: 'ws_previous' });
+    expect(list).not.toHaveBeenCalled();
   });
 });

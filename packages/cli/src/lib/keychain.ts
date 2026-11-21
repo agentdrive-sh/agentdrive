@@ -7,8 +7,10 @@ import { configDir } from './config.js';
 // Software keychain, not an OS/hardware-backed keychain. The random local
 // protector and this wrapped keyring must both be backed up; recovery still
 // requires the original hostname/user identity. Login credentials are not
-// encryption key material in v2. An attacker
-// with this user's files and machine identity can still recover local keys.
+// encryption key material in v2: the top-level v1 envelope is a decoy that wraps
+// no key, and the copy under the API key that earlier releases kept there is
+// replaced by one once keyring_v2 opens. An attacker with this user's files and
+// machine identity can still recover local keys.
 // Existing v1 keyrings migrate only after successfully unwrapping with the old
 // API key, before logout or credential replacement can discard that credential.
 const KEY_LENGTH = 32;
@@ -24,6 +26,7 @@ interface StoredBlob {
   tag: string;
   ct: string;
   keyring_v2?: StoredBlob;
+  decoy?: true;
 }
 interface Keyring {
   dek: string;
@@ -139,6 +142,14 @@ function wrapBytes(plaintext: Buffer, secret: string, version: 1 | 2): StoredBlo
   return { v: version, salt: salt.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ct: ct.toString('base64') };
 }
 
+// CLI 0.3.0 to 1.3.3 read only the top-level v1 envelope and write a new key over
+// the file when it is missing, unparsable or not v1. Random bytes authenticate
+// under no key, so those releases fail closed on it instead.
+function decoy(): StoredBlob {
+  const random = (length: number) => randomBytes(length).toString('base64');
+  return { v: 1, salt: random(SALT_LENGTH), iv: random(IV_LENGTH), tag: random(TAG_LENGTH), ct: random(KEY_LENGTH), decoy: true };
+}
+
 function parseKeyring(raw: Buffer): Keyring {
   const ring = JSON.parse(raw.toString('utf8')) as Keyring;
   decode(ring.dek, KEY_LENGTH);
@@ -152,18 +163,17 @@ async function loadKeyring(apiKey: string, path: string): Promise<Keyring> {
   const localRing = blob?.v === 2 ? blob : blob?.keyring_v2;
   if (localRing) {
     const protector = await localProtector(path, false);
-    return parseKeyring(unwrap(localRing, protector));
+    const ring = parseKeyring(unwrap(localRing, protector));
+    // Only once keyring_v2 opens is the API-key copy redundant, never before.
+    if (blob?.v === 1 && !blob.decoy) await publish(path, JSON.stringify({ ...decoy(), keyring_v2: localRing }), true);
+    return ring;
   }
   // Never create a replacement key when v1 authentication fails.
   const dek = blob ? unwrap(blob, apiKey) : randomBytes(KEY_LENGTH);
   if (dek.length !== KEY_LENGTH) throw new Error('Invalid AgentDrive keychain DEK');
   const ring = { dek: dek.toString('base64'), legacy: [deriveLegacyWorkspaceKey(apiKey).toString('base64')] };
   const protector = await localProtector(path, true);
-  // Old releases overwrite unknown versions. Keep a v1-readable envelope so
-  // cached old clients retain this DEK or reject a changed credential safely;
-  // new clients use the independent encrypted v2 keyring alongside it.
-  const compatible = blob ?? wrapBytes(dek, apiKey, 1);
-  const stored = { ...compatible, keyring_v2: wrapBytes(Buffer.from(JSON.stringify(ring), 'utf8'), protector, 2) };
+  const stored = { ...decoy(), keyring_v2: wrapBytes(Buffer.from(JSON.stringify(ring), 'utf8'), protector, 2) };
   if (!(await publish(path, JSON.stringify(stored), !!blob))) return loadKeyring(apiKey, path);
   return ring;
 }

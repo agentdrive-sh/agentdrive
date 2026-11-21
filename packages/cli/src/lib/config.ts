@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { promises as fs, statSync, unlinkSync, type BigIntStats } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -130,37 +131,75 @@ function owns(lock: string, id: LockId): boolean {
   }
 }
 
-// SIGINT's process.exit skips finally blocks: the lock held and the temp files written now
-// are removed on exit, the lock only while it is still this process's.
+// SIGINT's process.exit skips finally blocks, and SIGTERM or SIGHUP (a harness killing a
+// hook on timeout) skip the exit hook too: the lock held and the temp files written now are
+// removed on exit or on those signals, the lock only while it is still this process's.
 const atExit = new Map<string, LockId | null>();
 let exitHook = false;
+const KILL_SIGNALS = ['SIGTERM', 'SIGHUP'] as const;
+
+function removeNow(): void {
+  for (const [p, lockId] of atExit) {
+    try {
+      if (!lockId || owns(p, lockId)) unlinkSync(p);
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+function onKillSignal(signal: NodeJS.Signals): void {
+  // A command with its own handler (adrive watch) shuts down itself; its exit runs the hook.
+  if (process.listenerCount(signal) > 1) return;
+  removeNow();
+  for (const s of KILL_SIGNALS) process.off(s, onKillSignal);
+  process.kill(process.pid, signal);
+}
+
 function removeAtExit(path: string, id: LockId | null = null): void {
   if (!exitHook) {
     exitHook = true;
-    process.on('exit', () => {
-      for (const [p, lockId] of atExit) {
-        try {
-          if (!lockId || owns(p, lockId)) unlinkSync(p);
-        } catch {
-          // Already gone.
-        }
-      }
-    });
+    process.on('exit', removeNow);
   }
+  // Listening disables the signal's default exit, so only while there is something to remove.
+  if (atExit.size === 0) for (const s of KILL_SIGNALS) process.on(s, onKillSignal);
   atExit.set(path, id);
 }
 
-function holderAlive(owner: string): boolean {
+function forgetAtExit(path: string): void {
+  if (atExit.delete(path) && atExit.size === 0) for (const s of KILL_SIGNALS) process.off(s, onKillSignal);
+}
+
+// When the process now at `pid` started, from ps's elapsed time ([[dd-]hh:]mm:ss), or null
+// where ps can't tell (Windows, no ps).
+function startedAt(pid: number): number | null {
+  try {
+    const etime = execFileSync('ps', ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = /^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/.exec(etime.trim());
+    if (!m) return null;
+    const [d, h, min, s] = m.slice(1).map((v) => Number(v ?? 0));
+    return Date.now() - (((d! * 24 + h!) * 60 + min!) * 60 + s!) * 1000;
+  } catch {
+    return null;
+  }
+}
+
+// etime counts whole seconds, and ps takes a moment to run.
+const START_SLACK_MS = 2_000;
+
+function holderAlive(owner: string, lockedAt: number): boolean {
   const at = owner.indexOf('@');
   const pid = Number(owner.slice(0, at));
   // On another machine, or written by an older CLI: its age alone decides.
   if (at < 1 || !Number.isInteger(pid) || owner.slice(at + 1) !== hostname()) return false;
   try {
     process.kill(pid, 0);
-    return true;
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
+    if ((err as NodeJS.ErrnoException).code !== 'EPERM') return false;
   }
+  // A process that started after the lock was taken is not its holder: the holder died and its pid was reused.
+  const started = startedAt(pid);
+  return started === null || started <= lockedAt + START_SLACK_MS;
 }
 
 // A crashed holder's lock goes stale rather than blocking writes for good. Waiters break it
@@ -169,9 +208,10 @@ function holderAlive(owner: string): boolean {
 // it aside and back leaves a gap in which a third takes the path).
 async function breakIfStale(lock: string): Promise<boolean> {
   const st = await fs.stat(lock, { bigint: true }).catch(() => null);
-  const age = st ? Date.now() - Number(st.mtimeNs / 1_000_000n) : 0;
+  const lockedAt = st ? Number(st.mtimeNs / 1_000_000n) : 0;
+  const age = Date.now() - lockedAt;
   if (!st || age <= LOCK_STALE_MS) return false;
-  if (age <= LOCK_DEAD_MS && holderAlive(await fs.readFile(lock, 'utf8').catch(() => ''))) return false;
+  if (age <= LOCK_DEAD_MS && holderAlive(await fs.readFile(lock, 'utf8').catch(() => ''), lockedAt)) return false;
   const breaking = `${lock}.break`;
   try {
     await (await fs.open(breaking, 'wx', 0o600)).close();
@@ -188,7 +228,7 @@ async function breakIfStale(lock: string): Promise<boolean> {
     await fs.rm(lock, { force: true });
     return true;
   } finally {
-    atExit.delete(breaking);
+    forgetAtExit(breaking);
     await fs.rm(breaking, { force: true });
   }
 }
@@ -240,8 +280,8 @@ export async function withConfigLock<T>(path: string, fn: (held: () => void) => 
     } catch (err) {
       if (!(err instanceof LockLostError) || attempt === LOCK_ATTEMPTS) throw err;
     } finally {
-      atExit.delete(lock);
-      atExit.delete(historyTmp);
+      forgetAtExit(lock);
+      forgetAtExit(historyTmp);
       try {
         if (owns(lock, id)) unlinkSync(lock);
       } catch {
@@ -337,7 +377,7 @@ async function write(config: CliConfig, path: string, held: () => void, before?:
     await fs.rm(tmp, { force: true }).catch(() => undefined);
     throw err;
   } finally {
-    atExit.delete(tmp);
+    forgetAtExit(tmp);
   }
 }
 

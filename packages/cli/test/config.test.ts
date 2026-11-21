@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { hostname, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,15 @@ import {
   writeConfig,
   type CliConfig,
 } from '../src/lib/config.js';
+
+// Stands in for `ps -o etime=` when a test sets it: how long the process at a pid has run.
+const ps = vi.hoisted(() => ({ etime: undefined as undefined | (() => string) }));
+vi.mock('node:child_process', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:child_process')>();
+  const execFileSync = ((file: string, ...rest: unknown[]) =>
+    file === 'ps' && ps.etime ? ps.etime() : (real.execFileSync as (...a: unknown[]) => unknown)(file, ...rest)) as typeof real.execFileSync;
+  return { ...real, execFileSync };
+});
 
 describe('config XDG resolution', () => {
   it('uses XDG_CONFIG_HOME when set', () => {
@@ -248,14 +257,59 @@ describe('updateConfig and the config lock', () => {
   });
 
   it('leaves an old lock alone while its holder runs on this machine, and breaks it once that holder is gone', async () => {
-    await fs.writeFile(lockOf(), `${process.pid}@${hostname()}`);
-    await ago(lockOf(), 60_000);
-    await expect(withConfigLock(path, async () => undefined, 200)).rejects.toBeInstanceOf(ConfigLockedError);
-    expect(await fs.readFile(lockOf(), 'utf8')).toBe(`${process.pid}@${hostname()}`);
+    ps.etime = () => '1-00:00:00\n';
+    try {
+      await fs.writeFile(lockOf(), `${process.pid}@${hostname()}`);
+      await ago(lockOf(), 60_000);
+      await expect(withConfigLock(path, async () => undefined, 200)).rejects.toBeInstanceOf(ConfigLockedError);
+      expect(await fs.readFile(lockOf(), 'utf8')).toBe(`${process.pid}@${hostname()}`);
+    } finally {
+      ps.etime = undefined;
+    }
     const gone = spawnSync(process.execPath, ['-e', '0']).pid;
     await fs.writeFile(lockOf(), `${gone}@${hostname()}`);
     await ago(lockOf(), 60_000);
     expect(await withConfigLock(path, async () => 'held', 200)).toBe('held');
+  });
+
+  it.skipIf(process.platform === 'win32')('breaks an old lock whose pid now belongs to a process started after it was taken', async () => {
+    const reused = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)'], { stdio: 'ignore' });
+    try {
+      await fs.writeFile(lockOf(), `${reused.pid}@${hostname()}`);
+      await ago(lockOf(), 60_000);
+      expect(await withConfigLock(path, async () => 'held', 200)).toBe('held');
+    } finally {
+      reused.kill();
+    }
+  });
+
+  // The lock was taken 60 s ago by this (live) pid; ps says how long the process at that pid has run.
+  it.each([
+    ['1-00:00:00', 'left'],
+    ['02:00:00', 'left'],
+    ['01:30', 'left'],
+    // etime counts whole seconds, so a start a second after the lock may still be its holder.
+    ['00:59', 'left'],
+    ['00:05', 'broken'],
+    ['0:00:05', 'broken'],
+    ['0-00:00:05', 'broken'],
+    ['not a time', 'left'],
+    ['', 'left'],
+    [new Error('spawn ps ENOENT'), 'left'],
+  ] as const)('with the live pid running for %s, an old lock is %s', async (etime, outcome) => {
+    ps.etime = () => {
+      if (etime instanceof Error) throw etime;
+      return `${etime}\n`;
+    };
+    try {
+      await fs.writeFile(lockOf(), `${process.pid}@${hostname()}`);
+      await ago(lockOf(), 60_000);
+      const taken = withConfigLock(path, async () => 'held', 200);
+      if (outcome === 'broken') expect(await taken).toBe('held');
+      else await expect(taken).rejects.toBeInstanceOf(ConfigLockedError);
+    } finally {
+      ps.etime = undefined;
+    }
   });
 
   it('waits on EPERM from the lock, which Windows returns while the last one is being deleted', async () => {
@@ -328,6 +382,49 @@ describe('updateConfig and the config lock', () => {
     // The lock, the config temp file and the history temp file.
     expect(seen).toHaveLength(3);
     expect(afterExit).toEqual([]);
+  });
+
+  // A child process that holds the lock until it is signalled. Node strips the types; the hook
+  // maps the source's .js imports onto the .ts files.
+  const holdInChild = (ownHandler: boolean) => {
+    const script = `
+      import { registerHooks } from 'node:module';
+      registerHooks({ resolve: (s, c, next) => { try { return next(s, c); } catch (e) { if (s.startsWith('.') && s.endsWith('.js')) return next(s.slice(0, -3) + '.ts', c); throw e; } } });
+      if (${ownHandler}) process.on('SIGTERM', () => process.exit(0));
+      const { withConfigLock } = await import(${JSON.stringify(new URL('../src/lib/config.ts', import.meta.url).href)});
+      await withConfigLock(${JSON.stringify(path)}, async () => { process.stdout.write('held\\n'); await new Promise((r) => setTimeout(r, 60_000)); });
+    `;
+    const child = spawn(process.execPath, ['--no-warnings', '--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((r) => child.on('exit', (code, signal) => r({ code, signal })));
+    const held = new Promise<void>((r) => child.stdout.on('data', (d: Buffer) => d.toString().includes('held') && r()));
+    return { child, exited, held };
+  };
+
+  it.skipIf(process.platform === 'win32').each(['SIGTERM', 'SIGHUP'] as const)('removes its lock when killed by %s, and still dies of that signal', async (signal) => {
+    const { child, exited, held } = holdInChild(false);
+    await held;
+    expect(await leftovers()).toEqual(['config.json.lock']);
+    child.kill(signal);
+    expect(await exited).toEqual({ code: null, signal });
+    expect(await leftovers()).toEqual([]);
+  });
+
+  it.skipIf(process.platform === 'win32')('leaves SIGTERM to a command with its own handler, whose exit still removes the lock', async () => {
+    const { child, exited, held } = holdInChild(true);
+    await held;
+    child.kill('SIGTERM');
+    expect(await exited).toEqual({ code: 0, signal: null });
+    expect(await leftovers()).toEqual([]);
+  });
+
+  it('listens for SIGTERM and SIGHUP only while it holds the lock', async () => {
+    const before = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
+    let during: number[] = [];
+    await withConfigLock(path, async () => {
+      during = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
+    });
+    expect(during).toEqual(before.map((n) => n + 1));
+    expect([process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')]).toEqual(before);
   });
 
   it('keeps a symlinked config.json a link, and writes the file it points at', async () => {

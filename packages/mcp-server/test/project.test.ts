@@ -1,9 +1,9 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { normalizeRemote, projectKeyFor, scopeProjectKey } from '../src/project.js';
+import { normalizeRemote, projectKeyFor, projectKeyIfKnown, scopeProjectKey } from '../src/project.js';
 
 describe('normalizeRemote', () => {
   it.each([
@@ -60,6 +60,25 @@ describe('projectKeyFor', () => {
     mkdirSync(plain);
     expect(projectKeyFor(plain)).toMatch(/^local__plain-[0-9a-f]{8}$/);
     expect(projectKeyFor(join(root, 'does-not-exist'))).toMatch(/^local__does-not-exist-[0-9a-f]{8}$/);
+  });
+
+  it.skipIf(process.platform === 'win32')('projectKeyIfKnown gives the same key, or null where projectKeyFor falls back because git timed out', () => {
+    const repo = join(root, 'slow');
+    mkdirSync(repo);
+    git(repo, 'init', '-q');
+    git(repo, 'remote', 'add', 'origin', 'git@github.com:Owner/Slow.git');
+    expect(projectKeyIfKnown(repo)).toBe('github.com__owner__slow');
+    expect(projectKeyIfKnown(join(root, 'plain'))).toBe(projectKeyFor(join(root, 'plain')));
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'git'), '#!/bin/sh\nexec sleep 5\n', { mode: 0o755 });
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+    try {
+      expect(projectKeyIfKnown(repo)).toBeNull();
+      expect(projectKeyFor(repo)).toMatch(/^local__slow-[0-9a-f]{8}$/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

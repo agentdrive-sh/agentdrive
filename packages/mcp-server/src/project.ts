@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 
-function git(cwd: string, args: string[]): string | null {
+class GitTimeout extends Error {}
+
+function git(cwd: string, args: string[], strict = false): string | null {
   try {
     const out = execFileSync('git', ['-C', cwd, ...args], {
       encoding: 'utf8',
@@ -10,7 +12,8 @@ function git(cwd: string, args: string[]): string | null {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
     return out || null;
-  } catch {
+  } catch (err) {
+    if (strict && (err as NodeJS.ErrnoException).code === 'ETIMEDOUT') throw new GitTimeout();
     return null;
   }
 }
@@ -60,19 +63,34 @@ export function normalizeRemote(url: string): string | null {
 // clients re-file sessions they already synced under the old key.
 export const PROJECT_KEY_VERSION = 2;
 
-export function projectKeyFor(cwd: string): string {
-  const remote = git(cwd, ['config', '--get', 'remote.origin.url']);
+function keyFor(cwd: string, strict: boolean): string {
+  const remote = git(cwd, ['config', '--get', 'remote.origin.url'], strict);
   const normalized = remote ? normalizeRemote(remote) : null;
   if (normalized) return normalized.slice(0, 200);
 
-  const toplevel = gitToplevel(cwd);
+  const toplevel = git(cwd, ['rev-parse', '--show-toplevel'], strict);
   if (toplevel) return `${slug(basename(toplevel)).slice(0, 150)}-${sha8(toplevel)}`;
 
   // Claude Code deletes a worktree once its work lands; its sessions still belong to the parent repo.
   const parent = /^(.+?)\/\.claude\/worktrees\/[^/]+/.exec(cwd)?.[1];
-  if (parent) return projectKeyFor(parent);
+  if (parent) return keyFor(parent, strict);
 
   return `local__${slug(basename(cwd)).slice(0, 150)}-${sha8(cwd)}`;
+}
+
+export function projectKeyFor(cwd: string): string {
+  return keyFor(cwd, false);
+}
+
+// null when git timed out (a loaded machine), where projectKeyFor would fall back to a
+// local__ key and file a repo's session under it: the caller can try again later instead.
+export function projectKeyIfKnown(cwd: string): string | null {
+  try {
+    return keyFor(cwd, true);
+  } catch (err) {
+    if (err instanceof GitTimeout) return null;
+    throw err;
+  }
 }
 
 // A private workspace must not leak repo names through storage paths or the

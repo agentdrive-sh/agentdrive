@@ -71,4 +71,19 @@ describe('adrive init --local', () => {
       preferences: { capture_transcripts: true, capture_artifacts: false },
     });
   });
+
+  it('keeps sync off when adrive privacy saved preferences while it signed in again', async () => {
+    await writeConfig({ api_url: 'https://example.invalid', api_key: 'agentdrive_live_rejected' });
+    vi.spyOn(CliApiClient.prototype, 'whoami').mockRejectedValue(new ApiError('Invalid API key', 401));
+    vi.mocked(pollAuth).mockImplementationOnce(async () => {
+      await updateConfig((latest) => ({ ...latest!, preferences: { ...DEFAULT_PREFERENCES, ...latest!.preferences, capture_transcripts: false, capture_artifacts: false } }), { effectiveBefore: true });
+      return { api_key: 'agentdrive_live_synthetic', agent_id: 'ag_1', org_id: 'org_1' };
+    });
+    const actual = await vi.importActual<typeof import('../src/lib/consent.js')>('../src/lib/consent.js');
+    vi.mocked(ensureCaptureConsent).mockImplementationOnce(actual.ensureCaptureConsent);
+    vi.spyOn(CliApiClient.prototype, 'listWorkspaces').mockResolvedValue([{ id: 'ws_1', name: 'Only', created_at: '' }]);
+    await cmdInit({ yes: true });
+    expect(await readConfig()).toMatchObject({ api_key: 'agentdrive_live_synthetic', preferences: { capture_transcripts: false, capture_artifacts: false } });
+    expect(out).toMatch(/transcripts off, artifacts off/);
+  });
 });

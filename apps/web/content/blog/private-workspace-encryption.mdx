@@ -46,7 +46,9 @@ What that is and isn't:
 - **It's a software keychain, not the macOS Keychain or a hardware key store.** Someone with your user's files and your machine identity can recover the key. It protects against the server and against a copied workspace, not against your own account being compromised.
 - **The hostname and username are part of the key.** The CLI on a machine with a different hostname or username can't open the keychain, and if you rename your machine or your user account, it can't open it until the old names are back. That's a portability limit, not a protection: a hostname and a username aren't secrets.
 - **Your login isn't part of the current key.** Logging out never deletes the keychain, and logging in as a different account keeps the same data key.
-- **There's a second copy for older clients.** For compatibility with older CLI versions, `keychain.bin` also keeps the data key wrapped under a key derived from your hostname, your username and the API key that was current when the keychain was created. That copy doesn't need the protector. The API key normally sits in `config.json` in the same folder, and revoking it on the server doesn't change anything here, because the wrap uses the key string itself. Ciphertext written by much older versions, whose key came straight from the API key, stays readable because those derived keys are kept in the keyring too.
+- **From `@adrive/cli` 1.5.2, there's no second copy.** The outer envelope in `keychain.bin` that older CLIs read wraps random bytes, not the data key. The first time 1.5.2 opens a keychain an earlier version wrote, it replaces that envelope, after the protector has opened the real keyring. CLI 0.3.0 to 1.3.3 read only the outer envelope, so on a keychain 1.5.2 has created or opened they stop with an error and don't create a new key. 1.3.4 to 1.5.1 use the keyring beside it.
+- **In 1.5.1 and earlier, there's a second copy for older clients.** For compatibility with older CLI versions, `keychain.bin` also keeps the data key wrapped under a key derived from your hostname, your username and the API key that was current when the keychain was created. That copy doesn't need the protector. The API key normally sits in `config.json` in the same folder, and revoking it on the server doesn't change anything here, because the wrap uses the key string itself.
+- **Much older ciphertext stays readable.** Ciphertext written by versions whose key came straight from the API key can still be decrypted, because those derived keys are kept in the keyring too.
 
 ## What does the server store?
 
@@ -87,7 +89,7 @@ That's the trade: the server can't help you with content it can't read. If you n
 
 ## How do I back up `keychain.bin` and `keychain.bin.protector`?
 
-The CLI needs both files, from the same backup, to open your keychain. The bytes are less strict than the CLI, though. Because of the compatibility copy above, anyone who has `keychain.bin` and the original API key can recover your data key without the protector. The current CLI refuses to do that, but nothing in the file format prevents it, and the API key usually lives right next to `keychain.bin` in `config.json`.
+The CLI needs both files, from the same backup, to open your keychain. From `@adrive/cli` 1.5.2, the file format agrees: `keychain.bin` and the API key recover nothing without the protector. With 1.5.1 and earlier, the bytes are less strict than the CLI. Because of the compatibility copy above, anyone who has `keychain.bin` and the original API key can recover your data key without the protector. Those versions refuse to do that, but nothing in the file format prevents it, and the API key usually lives right next to `keychain.bin` in `config.json`. A backup of `keychain.bin` taken before 1.5.2 opened it still holds that copy, so replace those backups with fresh ones.
 
 So treat `config.json`, `keychain.bin` and `keychain.bin.protector` as one secret set:
 

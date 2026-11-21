@@ -1,7 +1,7 @@
 {
   "name": "@adrive/mcp-server",
   "mcpName": "sh.agentdrive/agentdrive",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "MCP server for AgentDrive: sync coding-agent sessions and resume them in any other agent, in any direction.",
   "license": "Apache-2.0",
   "type": "module",

@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import kleur from 'kleur';
 import prompts from 'prompts';
 import { ApiError, CliApiClient } from '../lib/api-client.js';
-import { DEFAULT_API_URL, DEFAULT_PREFERENCES, changesOnto, hasSavedPreferences, readConfig, updateConfig, type CliConfig } from '../lib/config.js';
+import { DEFAULT_API_URL, DEFAULT_PREFERENCES, changesOnto, updateConfig, type CliConfig } from '../lib/config.js';
 import { ensureCaptureConsent } from '../lib/consent.js';
 import { pollAuth } from '../lib/poll-auth.js';
 import { writeAllInstructions } from '../lib/auto-context.js';
@@ -56,9 +56,9 @@ async function keyStillValid(apiUrl: string, apiKey: string): Promise<boolean> {
 
 export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const home = homedir();
-  const existing = await readConfig();
+  // Read under the lock, as changesOnto needs its base: preferences unset unless saved.
+  const { before: existing } = await updateConfig(() => null);
   await preserveKeychain(existing?.api_key);
-  const preferencesSaved = await hasSavedPreferences();
   const apiUrl = opts.apiUrl ?? existing?.api_url ?? DEFAULT_API_URL;
   let config: CliConfig = { ...existing, api_url: apiUrl, agent_platform: 'cli' };
 
@@ -78,6 +78,11 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     config = { ...config, api_key: auth.api_key, agent_id: auth.agent_id, org_id: auth.org_id };
   }
 
+  // Sign-in can take minutes: consent decides from the config as it is now, preferences
+  // adrive privacy saved meanwhile included, with what init changed so far applied to it.
+  const { before: current } = await updateConfig(() => null);
+  if (current) config = changesOnto(current, existing, config);
+  const preferencesSaved = !!config.preferences;
   if (!local) {
     config = await ensureCaptureConsent(
       config,
@@ -88,11 +93,10 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const preferences = { ...DEFAULT_PREFERENCES, ...(config.preferences ?? {}) };
   // Unsaved preferences let a later sign-in still turn capture on by default.
   config = { ...config, preferences: local && !preferencesSaved ? undefined : preferences };
-  // Saved before wiring: hooks and the MCP server read the key from this file. Sign-in and
-  // consent can take minutes, so only what init changed is applied to the config as it is now.
+  // Saved before wiring: hooks and the MCP server read the key from this file. Consent can
+  // prompt, so only what init changed is applied to the config as it is now.
   const decided = config;
-  const base = existing && !preferencesSaved ? { ...existing, preferences: undefined } : existing;
-  await updateConfig((latest) => (latest ? changesOnto(latest, base, decided) : decided));
+  await updateConfig((latest) => (latest ? changesOnto(latest, current, decided) : decided));
 
   process.stdout.write(`\n${kleur.bold('Connecting your agents')}\n`);
   const outcomes = await wireInstalled(home, process.env);

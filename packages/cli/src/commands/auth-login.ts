@@ -1,6 +1,6 @@
 import kleur from 'kleur';
 import { CliApiClient } from '../lib/api-client.js';
-import { DEFAULT_API_URL, changesOnto, hasSavedPreferences, readConfig, updateConfig } from '../lib/config.js';
+import { DEFAULT_API_URL, changesOnto, readConfig, updateConfig } from '../lib/config.js';
 import { ensureCaptureConsent } from '../lib/consent.js';
 import { pollAuth, type PollAuthResult } from '../lib/poll-auth.js';
 import { preserveKeychain } from '../lib/keychain.js';
@@ -23,7 +23,6 @@ async function keyFromStdin(apiUrl: string): Promise<PollAuthResult> {
 export async function cmdAuthLogin(opts: AuthLoginOptions = {}): Promise<void> {
   const existing = await readConfig();
   await preserveKeychain(existing?.api_key);
-  const preferencesSaved = await hasSavedPreferences();
   const apiUrl = opts.apiUrl ?? existing?.api_url ?? DEFAULT_API_URL;
 
   const result = opts.withKey
@@ -40,6 +39,8 @@ export async function cmdAuthLogin(opts: AuthLoginOptions = {}): Promise<void> {
     // An explicit list, even empty, tells auto-wire this login should wire the tools already installed;
     // only a config from before auto-wire (no list at all) is treated as a baseline.
     wired: latest?.wired ?? [],
+    // A workspace of another account would keep sync pointed at it; consent picks one of this account's.
+    default_workspace: latest?.org_id && latest.org_id === result.org_id && latest.api_url === apiUrl ? latest.default_workspace : undefined,
   }));
   const saved = after!;
 
@@ -49,6 +50,7 @@ export async function cmdAuthLogin(opts: AuthLoginOptions = {}): Promise<void> {
 
   const authed = new CliApiClient({ baseUrl: apiUrl, apiKey: result.api_key, agentPlatform: 'cli' });
   // Asked outside the lock (it may prompt); only what consent changed is applied to the config as it is then.
-  const consent = await ensureCaptureConsent(saved, authed, { interactive: !!process.stdin.isTTY, preferencesSaved });
+  // `saved` has preferences only if they were saved when it was read, even by adrive privacy run during sign-in.
+  const consent = await ensureCaptureConsent(saved, authed, { interactive: !!process.stdin.isTTY, preferencesSaved: !!saved.preferences });
   await updateConfig((latest) => latest && changesOnto(latest, saved, consent));
 }

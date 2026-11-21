@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs, type Stats } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { PROJECT_KEY_VERSION, projectKeyFor, scopeProjectKey } from '@adrive/mcp-server/project';
+import { PROJECT_KEY_VERSION, projectKeyIfKnown, scopeProjectKey } from '@adrive/mcp-server/project';
 import { renderSession, sessionPath, sessionRunId, type SessionHarness } from '@adrive/mcp-server/session';
 import { ApiError, CliApiClient, type UsageWarning } from './api-client.js';
 import { ConfigLockedError, changedSince, configDir as defaultConfigDir, readConfig, reconcileHistory, type CliConfig } from './config.js';
@@ -146,12 +146,13 @@ async function realpathSafe(p: string): Promise<string | null> {
   }
 }
 
-type GitState = 'untracked' | 'no-repo' | 'skip';
+type GitState = 'untracked' | 'no-repo' | 'skip' | 'unknown';
 
 // Only untracked, non-ignored files (or files outside any repo) may upload:
 // tracked files are already in git, and gitignored ones are where secrets live.
 // Fails closed: git also exits 128 for "dubious ownership" (WSL, bind mounts),
 // so only an explicit "not a git repository" counts as outside a repo.
+// 'unknown' when git was killed at its timeout (a loaded machine): ask again later.
 function gitState(file: string): Promise<GitState> {
   return new Promise((done) => {
     execFile(
@@ -159,6 +160,7 @@ function gitState(file: string): Promise<GitState> {
       ['-C', dirname(file), 'status', '--porcelain', '--ignored', '--untracked-files=all', '--', basename(file)],
       { timeout: 2000, env: { ...process.env, LC_ALL: 'C' } },
       (err, stdout, stderr) => {
+        if (err?.killed) return done('unknown');
         if (err) return done(/not a git repository/i.test(String(stderr)) ? 'no-repo' : 'skip');
         done(stdout.startsWith('??') ? 'untracked' : 'skip');
       },
@@ -364,6 +366,8 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncResult> {
         if (outcome === 'debounced') {
           result.debounced++;
           defer(c.entry);
+        } else if (outcome === 'held') {
+          defer(c.entry);
         } else if (outcome === 'unchanged') {
           result.unchanged++;
         }
@@ -430,6 +434,8 @@ interface SessionContext {
   configDir: string;
   realHome: string;
   cwdRules: Map<string, Awaited<ReturnType<typeof loadRules>>>;
+  // Set at the first git timeout: the rest of this sync holds its files instead of waiting 2 s on each.
+  gitSlow?: boolean;
   sessionCwds: Record<string, string>;
   log: (msg: string) => Promise<void>;
   // The usage warning from the last run logged: null when it had none, unset when nothing was written.
@@ -460,7 +466,7 @@ async function gate(ctx: SessionContext, kind: 'transcripts' | 'artifacts', bloc
   return blocked(history) ? 'never' : 'go';
 }
 
-async function syncSession(ctx: SessionContext, c: Candidate, result: SyncResult): Promise<'synced' | 'unchanged' | 'debounced' | 'empty' | 'local'> {
+async function syncSession(ctx: SessionContext, c: Candidate, result: SyncResult): Promise<'synced' | 'unchanged' | 'debounced' | 'empty' | 'local' | 'held'> {
   const { opts, manifest, now } = ctx;
   // Only hooks run quiet, and they fire every turn; a person running `adrive sync` wants it now.
   if (!opts.force && opts.quiet && now - (manifest.sessions[sessionRunId(c.harness, c.entry.sessionId)]?.synced_at ?? 0) < DEBOUNCE_MS) {
@@ -476,7 +482,13 @@ async function syncSession(ctx: SessionContext, c: Candidate, result: SyncResult
   const prev = manifest.sessions[runId];
   const cwd = doc.cwd ?? prev?.cwd ?? ctx.sessionCwds[runId];
   const privateWorkspace = !!ctx.cfg?.preferences?.private_workspace;
-  const project = cwd ? scopeProjectKey(projectKeyFor(cwd), privateWorkspace) : prev?.project ?? scopeProjectKey('local__unknown', privateWorkspace);
+  const key = cwd ? projectKeyIfKnown(cwd) : undefined;
+  // git timed out: the fallback key would file a repo's session under local__, so a later sync does it.
+  if (key === null) {
+    await ctx.log(`${runId}: git too slow to name its project; held for a later sync`);
+    return 'held';
+  }
+  const project = key ? scopeProjectKey(key, privateWorkspace) : prev?.project ?? scopeProjectKey('local__unknown', privateWorkspace);
   const status = c.explicit
     ? opts.force ? 'success' : 'in_progress'
     : now - doc.entry.mtime.getTime() > IDLE_MS ? 'success' : 'in_progress';
@@ -591,7 +603,15 @@ async function syncSession(ctx: SessionContext, c: Candidate, result: SyncResult
       // A file gone since the session touched it is skipped; the rest of the session still syncs.
       const pre = await fs.lstat(real).catch(() => null);
       if (!pre?.isFile() || pre.size > MAX_FILE_BYTES || pre.nlink > 1) continue;
-      if ((await gitState(real)) === 'skip') continue;
+      const state = ctx.gitSlow ? 'unknown' : await gitState(real);
+      if (state === 'skip') continue;
+      // Held for a later sync; a version synced earlier stays linked.
+      if (state === 'unknown') {
+        ctx.gitSlow = true;
+        heldFiles = true;
+        if (manifest.files[real]) artifactIds.push(manifest.files[real].id);
+        continue;
+      }
       const read = await readVetted(real, MAX_FILE_BYTES);
       if (!read) continue;
       const { buf, st } = read;

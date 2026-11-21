@@ -17,18 +17,34 @@ import { writeConfig as writeCliConfig } from '../src/lib/config.js';
 import { ensureCaptureConsent } from '../src/lib/consent.js';
 import type { TranscriptSource } from '@adrive/mcp-server/transcripts/types';
 
-// Stands in, in-process, for sync's `git status` when a test sets it. A fake git on PATH would
-// race execFile's 2 s timeout: under load it is killed before it acts, and sync skips the file.
+// Stands in, in-process, for sync's `git status` when a test sets it; a throw is git's failure.
+// A fake git on PATH would race execFile's 2 s timeout: under load it is killed before it acts,
+// and sync holds the file back.
 const gitStatus = vi.hoisted(() => ({ run: undefined as undefined | ((args: readonly string[]) => string) }));
 vi.mock('node:child_process', async (importOriginal) => {
   const real = await importOriginal<typeof import('node:child_process')>();
   const execFile = (file: string, args: readonly string[], options: object, done: (err: Error | null, stdout: string, stderr: string) => void) => {
     const run = gitStatus.run;
     if (file !== 'git' || !args.includes('status') || !run) return real.execFile(file, args, options, done);
-    setImmediate(() => done(null, run(args), ''));
+    setImmediate(() => {
+      let out: string;
+      try {
+        out = run(args);
+      } catch (err) {
+        return done(err as Error, '', '');
+      }
+      done(null, out, '');
+    });
     return undefined;
   };
   return { ...real, execFile };
+});
+// The same for the project key, which a fake git on PATH would race against its 1 s timeout:
+// under load the session is held for a later sync and the test never reaches what it checks.
+const projectKey = vi.hoisted(() => ({ run: undefined as undefined | ((cwd: string) => string | null) }));
+vi.mock('@adrive/mcp-server/project', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@adrive/mcp-server/project')>();
+  return { ...real, projectKeyIfKnown: (cwd: string) => (projectKey.run ?? real.projectKeyIfKnown)(cwd) };
 });
 
 let root: string;
@@ -269,11 +285,8 @@ describe('runSync', () => {
     await fs.writeFile(x, 'plain notes\n');
     const transcript = await claudeSession('sw', line('user', 'write x', { cwd }) + line('assistant', '', { content: [{ type: 'tool_use', name: 'Write', input: { file_path: 'x.md' } }] }));
     // Sync asks git for x.md's status after its deny check; right then, x.md becomes a link
-    // to ~/.ssh/config. Every other git call (the project key) sees no repository.
-    const bin = join(root, 'bin');
-    await fs.mkdir(bin);
-    await fs.writeFile(join(bin, 'git'), "#!/bin/sh\necho 'fatal: not a git repository' >&2; exit 128\n", { mode: 0o755 });
-    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+    // to ~/.ssh/config. The project key is outside any repository.
+    projectKey.run = () => 'local__app';
     const asked: string[] = [];
     gitStatus.run = (args) => {
       asked.push(args.at(-1)!);
@@ -285,12 +298,88 @@ describe('runSync', () => {
       await runSync(opts({ harness: 'claude-code', session: 'sw', transcript, cwd, force: true }));
     } finally {
       gitStatus.run = undefined;
+      projectKey.run = undefined;
     }
     // The harness, not the property: unless git status ran once, for x.md, no swap landed in the window.
     expect(asked, 'sync never asked git for x.md, so this test did not exercise the swap').toEqual(['x.md']);
     expect((await fs.lstat(x)).isSymbolicLink()).toBe(true);
     expect(writes.map((w) => w.path).filter((p) => p.includes('/files/'))).toEqual([]);
     expect(JSON.stringify(writes)).not.toContain('hunter2');
+  });
+
+  it('holds back a file whose git status timed out, and uploads it on a later sync', async () => {
+    const cwd = join(home, 'app');
+    await fs.mkdir(cwd);
+    await fs.writeFile(join(cwd, 'notes.md'), 'the notes\n');
+    const transcript = await claudeSession(
+      'gt',
+      line('user', 'write notes', { cwd, ts: '2026-10-01T00:00:00Z' }) + line('assistant', '', { content: [{ type: 'tool_use', name: 'Write', input: { file_path: 'notes.md' } }] }),
+    );
+    // What execFile reports when it kills git at its timeout.
+    gitStatus.run = () => {
+      throw Object.assign(new Error('Command failed: git status'), { killed: true, signal: 'SIGTERM', code: null });
+    };
+    try {
+      await runSync(opts({ harness: 'claude-code', session: 'gt', transcript, cwd, force: true }));
+    } finally {
+      gitStatus.run = undefined;
+    }
+    expect(writes.map((w) => w.path)).toEqual([expect.stringMatching(/\/claude-code\/gt\.md$/)]);
+    expect(runs).toHaveLength(1);
+
+    await runSync(opts({ now: 1_800_000_000_000 + 3 * 60_000 }));
+    expect(writes.map((w) => w.path).filter((p) => p.includes('/files/'))).toEqual([expect.stringMatching(/\/files\/notes\.md$/)]);
+  });
+
+  it('runs git status once per sync after it times out, holding the other files without waiting on git', async () => {
+    const cwd = join(home, 'app');
+    await fs.mkdir(cwd);
+    await fs.writeFile(join(cwd, 'a.md'), 'a\n');
+    await fs.writeFile(join(cwd, 'b.md'), 'b\n');
+    const write = (file: string) => ({ type: 'tool_use', name: 'Write', input: { file_path: file } });
+    const transcript = await claudeSession(
+      'gs',
+      line('user', 'write two', { cwd, ts: '2026-10-01T00:00:00Z' }) + line('assistant', '', { content: [write('a.md'), write('b.md')] }),
+    );
+    let calls = 0;
+    gitStatus.run = () => {
+      calls++;
+      throw Object.assign(new Error('Command failed: git status'), { killed: true, signal: 'SIGTERM', code: null });
+    };
+    try {
+      await runSync(opts({ harness: 'claude-code', session: 'gs', transcript, cwd, force: true }));
+    } finally {
+      gitStatus.run = undefined;
+    }
+    expect(calls).toBe(1);
+    expect(writes.map((w) => w.path).filter((p) => p.includes('/files/'))).toEqual([]);
+
+    await runSync(opts({ now: 1_800_000_000_000 + 3 * 60_000 }));
+    expect(writes.map((w) => w.path).filter((p) => p.includes('/files/')).sort()).toEqual([expect.stringMatching(/\/files\/a\.md$/), expect.stringMatching(/\/files\/b\.md$/)]);
+  });
+
+  it.skipIf(process.platform === 'win32')("holds a session while git is too slow to name its project, then files it under the repo's key", async () => {
+    const repo = join(home, 'repo');
+    await fs.mkdir(repo);
+    git(repo, 'init', '-q');
+    git(repo, 'remote', 'add', 'origin', 'git@github.com:Owner/Repo.git');
+    const transcript = await claudeSession('pk', line('user', 'hi', { cwd: repo, ts: '2026-10-01T00:00:00Z' }));
+    const bin = join(root, 'bin');
+    await fs.mkdir(bin);
+    await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nexec sleep 5\n', { mode: 0o755 });
+    const path = process.env.PATH;
+    vi.stubEnv('PATH', `${bin}:${path}`);
+    let first;
+    try {
+      first = await runSync(opts({ harness: 'claude-code', session: 'pk', transcript, cwd: repo, force: true }));
+    } finally {
+      vi.stubEnv('PATH', path);
+    }
+    expect(first.synced).toEqual([]);
+    expect(writes).toEqual([]);
+
+    await runSync(opts({ now: 1_800_000_000_000 + 3 * 60_000 }));
+    expect(writes.map((w) => w.path)).toEqual(['sessions/github.com__owner__repo/claude-code/pk.md']);
   });
 
   it('uploads untracked files of a project outside home, still applying the deny list', async () => {

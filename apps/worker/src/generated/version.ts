@@ -2,9 +2,9 @@
 // DO NOT EDIT BY HAND. Re-run `node apps/installer/build-version.mjs` (or any
 // worker build/test/typecheck script) to regenerate.
 
-export const MCP_SERVER_VERSION = "1.4.0";
+export const MCP_SERVER_VERSION = "1.4.1";
 export const SDK_VERSION: string | null = "1.0.1";
-export const CLI_VERSION = "1.5.1";
+export const CLI_VERSION = "1.5.2";
 
 // The /v1/health version reports the MCP server version because that's the
 // surface external readers most often pin against.
